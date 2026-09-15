@@ -1,0 +1,28 @@
+{
+  "meta": {
+    "name": "CON",
+    "version": "1.0.0",
+    "author": "tester",
+    "game": "skyrimspecialedition",
+    "gameVersion": "1.6.1170"
+  },
+  "instance": {
+    "path": "Bad Name Pack"
+  },
+  "mo2": {
+    "version": "2.5.2",
+    "profile": "Default",
+    "archive": "Mod.Organizer-2.5.2.7z",
+    "source": {
+      "type": "github",
+      "repo": "ModOrganizer2/modorganizer",
+      "tag": "v2.5.2",
+      "asset": "Mod.Organizer-2.5.2.7z"
+    },
+    "extensions": []
+  },
+  "stockGame": {
+    "extras": []
+  },
+  "archiveSources": []
+}

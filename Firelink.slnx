@@ -1,0 +1,20 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Firelink.Core/Firelink.Core.csproj" />
+    <Project Path="src/Firelink.Install/Firelink.Install.csproj" />
+    <Project Path="src/Firelink.Pack/Firelink.Pack.csproj" />
+    <Project Path="src/Firelink.Platform.GitHub/Firelink.Platform.GitHub.csproj" />
+    <Project Path="src/Firelink.Platform.MO2/Firelink.Platform.MO2.csproj" />
+    <Project Path="src/Firelink.Platform.Nexus/Firelink.Platform.Nexus.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Firelink.Core.Tests/Firelink.Core.Tests.csproj" />
+    <Project Path="tests/Firelink.Pack.Tests/Firelink.Pack.Tests.csproj" />
+    <Project Path="tests/Firelink.Platform.MO2.Tests/Firelink.Platform.MO2.Tests.csproj" />
+  </Folder>
+  <Folder Name="/Элементы решения/">
+    <File Path="DOC.md" />
+    <File Path="HANDOFF.md" />
+    <File Path="PROJECT-STATE.md" />
+  </Folder>
+</Solution>
