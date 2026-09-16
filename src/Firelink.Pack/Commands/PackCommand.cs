@@ -1,3 +1,4 @@
+using Firelink.Core.Models.Manifest.Directives;
 using Firelink.Pack.Settings;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -31,7 +32,7 @@ public sealed class PackCommand : AsyncCommand<PackSettings>
         var result = await _pipeline.ExecuteAsync(
             configPath, _parallelOptions, CancellationToken.None);
 
-        // Подсчёт директив
+        // Подсчёт директив.
         int totalDirectives = 0;
         int fromArchiveCount = 0;
         int inlineCount = 0;
@@ -40,10 +41,8 @@ public sealed class PackCommand : AsyncCommand<PackSettings>
             foreach (var d in directives)
             {
                 totalDirectives++;
-                if (d is Firelink.Core.Models.Manifest.Directives.FromArchiveDirective)
-                    fromArchiveCount++;
-                else if (d is Firelink.Core.Models.Manifest.Directives.InlineFileDirective)
-                    inlineCount++;
+                if (d is FromArchiveDirective) fromArchiveCount++;
+                else if (d is InlineFileDirective) inlineCount++;
             }
         }
 
@@ -66,8 +65,8 @@ public sealed class PackCommand : AsyncCommand<PackSettings>
              .AddRow("Directives", totalDirectives.ToString())
              .AddRow("  → FromArchive", fromArchiveCount.ToString())
              .AddRow("  → Inline", inlineCount.ToString())
-             .AddRow("Inline files", result.Match.InlineFiles.Count.ToString())
-             .AddRow("Orphans", result.Match.Orphans.Count.ToString());
+             .AddRow("Unmatched files", result.Match.Unmatched.Count.ToString())
+             .AddRow("meta.ini", result.Match.ModMetas.Count.ToString());
 
         _console.Write(table);
         _console.MarkupLine("[green]Done (partial — pipeline до Match).[/]");

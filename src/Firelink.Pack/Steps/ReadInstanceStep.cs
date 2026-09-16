@@ -7,7 +7,7 @@ namespace Firelink.Pack.Steps;
 
 /// <summary>
 /// Читает инстанс MO2:
-///  - Определяет пути (MO2/, downloads/, mods/, profiles/, Stock Game/).
+///  - Определяет пути (MO2/, downloads/, mods/, profiles/, Stock Game/, __Firelink_Output/).
 ///  - Проверяет, что инстанс существует и содержит нужные папки.
 ///  - Читает modlist.txt, plugins.txt, loadorder.txt из profiles/{profile}/.
 /// Возвращает InstanceSnapshot.
@@ -44,6 +44,10 @@ public sealed class ReadInstanceStep : IStep<ReadInstanceStep.Input, InstanceSna
         var modsPath = Path.Combine(mo2Path, "mods");
         var profilesPath = Path.Combine(mo2Path, "profiles");
         var stockGamePath = Path.Combine(instancePath, "Stock Game");
+
+        // __Firelink_Output живёт в корне инстанса, вне mods/ и MO2/.
+        // Здесь только вычисляется путь; создаёт и очищает его MatchStep.
+        var firelinkOutputPath = Path.Combine(instancePath, "__Firelink_Output");
 
         if (!Directory.Exists(downloadsPath))
             throw new DirectoryNotFoundException($"downloads/ not found: {downloadsPath}");
@@ -84,6 +88,7 @@ public sealed class ReadInstanceStep : IStep<ReadInstanceStep.Input, InstanceSna
             ModsPath = modsPath,
             ProfilesPath = profilesPath,
             StockGamePath = stockGamePath,
+            FirelinkOutputPath = firelinkOutputPath,
             Modlist = modlist,
             Plugins = plugins,
             Loadorder = loadorder,

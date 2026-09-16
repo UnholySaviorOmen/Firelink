@@ -65,6 +65,7 @@ public sealed class PackPipeline
                 ModScan = modScan,
                 DownloadsPath = snapshot.DownloadsPath,
                 ModsPath = snapshot.ModsPath,
+                FirelinkOutputPath = snapshot.FirelinkOutputPath,
             }, ct);
 
         _logger.LogInformation("=== Firelink pack finished (partial) ===");

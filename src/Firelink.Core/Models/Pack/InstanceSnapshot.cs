@@ -26,6 +26,13 @@ public sealed record InstanceSnapshot
     /// <summary>Stock Game/ — папка с extras.</summary>
     public required string StockGamePath { get; init; }
 
+    /// <summary>
+    /// __Firelink_Output/ в корне инстанса.
+    /// MatchStep выгружает сюда unmatched-файлы с сохранением структуры mods/&lt;ModName&gt;/&lt;path&gt;.
+    /// Не пересекается с mods/ и MO2/ — ScanModsStep её не видит.
+    /// </summary>
+    public required string FirelinkOutputPath { get; init; }
+
     public required ModlistFile Modlist { get; init; }
     public required PluginsFile Plugins { get; init; }
     public required LoadorderFile Loadorder { get; init; }

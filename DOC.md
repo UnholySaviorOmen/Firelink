@@ -1,5 +1,8 @@
 # Firelink — Документация проекта
 
+**Версия документа:** 3.2
+**Обновлено:** 2026-09-16
+
 ## Оглавление
 
 1. [Обзор](#обзор)
@@ -13,6 +16,8 @@
     - 6.3. [Директивы](#директивы)
     - 6.4. [Источники архивов](#источники-архивов)
     - 6.5. [Формат .meta](#формат-meta)
+    - 6.6. [Формат meta.ini мода](#формат-meta-ini-мода)
+    - 6.7. [__Firelink_Output](#__firelink_output)
 7. [Идентификация архивов](#идентификация-архивов)
 8. [Nexus game domain](#nexus-game-domain)
 9. [Формат modlist.txt / plugins.txt / loadorder.txt](#формат-файлов-mo2)
@@ -67,6 +72,9 @@
 16. **Nexus — один источник, несколько стратегий доступа.** Не дублируем в манифесте.
 17. **Параллелизм на уровне pipeline.** Шаги, работающие с файловой системой, используют `ParallelOptions` из DI. `IStep` не меняется.
 18. **Кеш хешей — обязателен.** In-memory на время прогона. Persist в SQLite — опционально, для ускорения повторных запусков.
+19. **Манифест самодостаточен.** Не полагается на Nexus API при чтении. Все необходимые метаданные (включая `meta.ini` модов) сохранены в самом манифесте.
+20. **Unmatched-файлы не сериализуются в манифест.** Всё, что не восстановимо из архивов, выгружается в `__Firelink_Output` (рабочий каталог автора). Автор решает судьбу этих файлов и делает патчи.
+21. **`.mohidden` — часть пути, а не отдельная сущность.** Matcher работает с путями как со строками, специальных правил нет.
 
 ---
 
@@ -77,6 +85,7 @@
 - **`plugins.txt`** — файл профиля MO2 со списком плагинов и флагом «включён».
 - **`loadorder.txt`** — файл профиля MO2 с порядком загрузки плагинов.
 - **`.meta`** — файл MO2 рядом с архивом в `downloads/`, содержит метаданные источника (для Nexus — `modID`, `fileID`).
+- **`meta.ini`** — файл MO2 внутри папки мода в `mods/`, содержит метаданные мода (для Nexus — `modID`, `fileID`, `version`, `notes`).
 - **Nexus game domain** — строковый идентификатор игры на Nexus Mods (например, `skyrimspecialedition`, `fallout4`).
 - **Канонический id архива** — строка, однозначно идентифицирующая архив: `nexus_{game_domain}_{modId}_{fileId}` для Nexus-модов, `local_{slug}` для архивов без `.meta`.
 - **Манифест** — `modlist.json`, единственный источник правды для installer-а.
@@ -84,6 +93,8 @@
 - **Installer** — `Firelink.Install`.
 - **Директива** — атомарное действие installer-а (взять файл из архива, создать папку, удалить файл, взять из inline-файла).
 - **Reconcile** — процесс приведения инстанса к состоянию, описанному в манифесте, при обновлении.
+- **Unmatched-файл** — файл мода, который не удалось восстановить ни по `(hash, path)`, ни по `hash`. Выгружается в `__Firelink_Output`.
+- **`__Firelink_Output`** — рабочий каталог автора в корне инстанса. Содержит unmatched-файлы с сохранением структуры. Очищается перед каждым прогоном `pack`.
 
 ---
 
@@ -92,10 +103,11 @@
 ### Проекты solution
 
 ```
-Firelink.sln
+Firelink.slnx
 src/
   Firelink.Core                  — ядро: модели, хеширование, абстракции
-  Firelink.Platform.MO2          — чтение/запись modlist, plugins, loadorder, .meta
+  Firelink.Platform.MO2          — чтение/запись modlist, plugins, loadorder,
+                                   .meta (архивов), meta.ini (модов)
   Firelink.Platform.Nexus        — Nexus API + стратегии доступа
   Firelink.Platform.GitHub       — GitHub Releases
   Firelink.Pack                  — CLI для создания сборок
@@ -133,6 +145,8 @@ public interface IStep<in TInput, TOutput>
 
 - Модели манифеста и директив.
 - Модели `firelink-pack.json` (PackConfig).
+- Модели packer-а: `InstanceSnapshot`, `ModScanResult`, `ScannedFile`,
+  `MatchResult`, `UnmatchedFile`, `ModMeta`.
 - Сериализация JSON.
 - Хеширование (`xxHash64`).
 - Абстракции (`IArchiveSource`, `IStep`, `IArchiveRegistry`).
@@ -142,7 +156,8 @@ public interface IStep<in TInput, TOutput>
 **`Firelink.Platform.MO2`:**
 
 - Чтение/запись `modlist.txt`, `plugins.txt`, `loadorder.txt`.
-- Чтение `.meta`-файлов (Nexus-формат).
+- Чтение `.meta`-файлов архивов (Nexus-формат, только `gameName`/`modID`/`fileID`).
+- Чтение `meta.ini`-файлов модов (Nexus-формат, полная секция `[General]`).
 - Валидация структуры инстанса.
 - Генерация файлов профиля из манифеста.
 
@@ -190,8 +205,15 @@ C:\Mods\Dev\
         SkyUI_5_1-3863-5-1.7z.meta   ← .meta рядом
         Mod.Organizer-2.5.2.7z
       mods\
+        SkyUI\
+          meta.ini                ← файл мода (не архивный)
+          interface/iconmenu.swf
       profiles\NordicUI\          ← modlist.txt, plugins.txt, loadorder.txt
     Stock Game\                   ← extras (SKSE, ENB)
+    __Firelink_Output\            ← unmatched-файлы (после pack)
+      mods\
+        SkyUI\
+          SKSE/Plugins/foo.ini
 ```
 
 ### Рабочая папка пользователя (после установки)
@@ -212,6 +234,7 @@ C:\Mods\NordicUI\
       mods\
         [NoDelete]SkyUI\          ← пользовательский мод, не трогаем
         SkyUI\                    ← мод из сборки
+          meta.ini                ← генерируется installer-ом из mods[].meta
       profiles\
     Stock Game\                   ← extras (игра копируется пользователем)
 ```
@@ -364,39 +387,11 @@ C:\Mods\NordicUI\
         }
       ]
     },
-    "extensions": [
-      {
-        "name": "FOMOD Plus",
-        "directives": [
-          {
-            "type": "FromArchive",
-            "archive": "nexus_skyrimspecialedition_12345_67890",
-            "source": "fomod_plus_installer.dll",
-            "destination": "plugins/fomod_plus_installer.dll",
-            "hash": "xxh64:def456...",
-            "size": 4567
-          }
-        ]
-      }
-    ]
+    "extensions": []
   },
 
   "stockGame": {
-    "extras": [
-      {
-        "name": "SKSE",
-        "directives": [
-          {
-            "type": "FromArchive",
-            "archive": "local_skse",
-            "source": "skse64_loader.exe",
-            "destination": "skse64_loader.exe",
-            "hash": "xxh64:jkl012...",
-            "size": 4569
-          }
-        ]
-      }
-    ]
+    "extras": []
   },
 
   "archives": [
@@ -413,18 +408,6 @@ C:\Mods\NordicUI\
           "game": "skyrimspecialedition"
         }
       ]
-    },
-    {
-      "id": "local_skse",
-      "name": "skse.7z",
-      "size": 87654321,
-      "hash": "xxh64:ghi789...",
-      "sources": [
-        {
-          "type": "mirror",
-          "url": "https://cdn.example.com/skse.7z"
-        }
-      ]
     }
   ],
 
@@ -433,11 +416,23 @@ C:\Mods\NordicUI\
       "name": "SkyUI",
       "enabled": true,
       "order": 5,
+      "meta": {
+        "gameName": "Skyrim Special Edition",
+        "gameId": "skyrimspecialedition",
+        "modId": 3863,
+        "fileId": 1000172397,
+        "version": "5.1",
+        "category": 0,
+        "repository": "Nexus",
+        "url": "https://www.nexusmods.com/skyrimspecialedition/mods/3863",
+        "comments": "",
+        "notes": ""
+      },
       "directives": [
         {
           "type": "FromArchive",
           "archive": "nexus_skyrimspecialedition_3863_1000172397",
-          "source": "options/16x9/iconmenu.swf",
+          "source": "interface/iconmenu.swf",
           "destination": "interface/iconmenu.swf",
           "hash": "xxh64:mno345...",
           "size": 4570
@@ -456,14 +451,7 @@ C:\Mods\NordicUI\
     "SkyUI.esp"
   ],
 
-  "inlineFiles": [
-    {
-      "id": "custom-patch-1",
-      "hash": "xxh64:stu901...",
-      "size": 4572,
-      "content": "base64:..."
-    }
-  ]
+  "inlineFiles": []
 }
 ```
 
@@ -478,14 +466,35 @@ C:\Mods\NordicUI\
 | `mo2` | Архив MO2 + extensions. |
 | `stockGame` | extras. |
 | `archives` | Единый пул архивов, каждый с каноническим `id`. |
-| `mods` | Моды с директивами, порядком, флагами. |
+| `mods` | Моды с директивами, порядком, флагами, **`meta`** (structured `meta.ini`). |
 | `plugins` | Плагины с флагами. |
 | `loadorder` | Порядок загрузки. |
-| `inlineFiles` | Файлы, которых нет в архивах. |
+| `inlineFiles` | Файлы, которых нет в архивах (в MVP — пустой список). |
+
+**Секция `mods[].meta`:**
+
+Обязательна **только** если у мода есть `meta.ini` в исходном инстансе. Опциональна.
+
+Поля (все — из `ModMeta`, см. раздел [Формат meta.ini мода](#формат-meta-ini-мода)):
+
+| Поле | Описание |
+|---|---|
+| `gameName` | `gameName` из `meta.ini`. Справочно. |
+| `gameId` | `gameID` из `meta.ini`. На практике — Nexus game domain. |
+| `modId` | `modID` из `meta.ini` (Nexus). |
+| `fileId` | `fileID` из `meta.ini` (Nexus). |
+| `version` | Версия мода. |
+| `category` | Категория мода в MO2. |
+| `repository` | Репозиторий-источник (обычно `Nexus`). |
+| `url` | URL страницы мода. |
+| `comments` | Комментарий MO2. |
+| `notes` | Заметки автора сборки. |
+
+**Почему все поля, а не подмножество:** манифест самодостаточен и не полагается на Nexus API при чтении. У пользователя может не быть API-ключа, у автора может быть приватный мод. Все нужные метаданные — в манифесте.
 
 **Ограничения:**
 
-- `inlineFiles[]` — лимит 2 МБ на файл, 20 МБ суммарно. Иначе манифест распухнет.
+- `inlineFiles[]` — лимит 2 МБ на файл, 20 МБ суммарно (для будущего использования; в MVP пустой).
 - `archives[].id` — уникален в пределах манифеста.
 - `mods[].name` — уникально.
 - `plugins[].name` — уникально.
@@ -500,12 +509,15 @@ C:\Mods\NordicUI\
 {
   "type": "FromArchive",
   "archive": "nexus_skyrimspecialedition_3863_1000172397",
-  "source": "options/16x9/iconmenu.swf",
+  "source": "interface/iconmenu.swf",
   "destination": "interface/iconmenu.swf",
   "hash": "xxh64:...",
   "size": 4567
 }
 ```
+
+`source` — путь внутри архива. `destination` — путь внутри папки мода.
+**Могут отличаться** (FOMOD, `.mohidden`, разные корни).
 
 **`InlineFile`** — файл, которого нет в архивах:
 
@@ -577,7 +589,7 @@ C:\Mods\NordicUI\
 
 ### Формат `.meta`
 
-MO2 создаёт `.meta`-файл рядом с каждым скачанным архивом. Формат — INI-подобный. Для Nexus-модов содержит:
+MO2 создаёт `.meta`-файл рядом с каждым скачанным архивом в `downloads/`. Формат — INI-подобный. Для Nexus-модов содержит:
 
 ```ini
 [General]
@@ -589,15 +601,130 @@ fileID=1000172397
 ...
 ```
 
-Firelink читает **только секцию `[General]`** и **только поля `gameName`, `modID`, `fileID`**. Остальное игнорирует.
+Firelink читает **только секцию `[General]`** и **только поля `gameName`, `modID`, `fileID`**. Остальное игнорирует. Реализация — `MetaReader.TryRead` в `Firelink.Platform.MO2.Readers`.
 
 **Если `.meta`:**
 
 - **Есть и валиден** → архив получает канонический id `nexus_{game_domain}_{modId}_{fileId}`, источник — `NexusSourceRef`.
-- **Есть, но не Nexus-формат** (например, `directURL`, `manualURL`, `IPS4`) → **ошибка**: «источник не поддержан, укажите `archiveSources`».
-- **Нет** → packer ищет запись в `archiveSources` из `firelink-pack.json`. Если нашёл — использует указанные источники, id = `local_{slug}`. Если не нашёл — архив **игнорируется**, и если он используется модами — **ошибка**.
+- **Есть, но не Nexus-формат** (например, `directURL`, `manualURL`, `IPS4`) → **fallback в `archiveSources`**.
+- **Нет** → packer ищет запись в `archiveSources`. Если нашёл — использует указанные источники, id = `local_{slug}`. Если не нашёл — архив **игнорируется**, и если он используется модами — **unresolved**.
 
-**Поле `gameName` игнорируется.** Game domain берётся из `meta.game` родительского конфига. Обоснование: инстанс MO2 — это инстанс одной игры, все архивы в его `downloads/` принадлежат одной игре. Маппинг `Skyrim` → `skyrimspecialedition` не нужен и хрупок.
+**Поле `gameName` игнорируется.** Game domain берётся из `meta.game` родительского конфига. Обоснование: инстанс MO2 — это инстанс одной игры, все архивы в его `downloads/` принадлежат одной игре.
+
+---
+
+### Формат `meta.ini` мода
+
+MO2 создаёт `meta.ini` внутри каждой папки мода в `mods/`. Формат — INI-подобный. Для Nexus-модов содержит:
+
+```ini
+[General]
+gameName=Skyrim Special Edition
+gameID=skyrimspecialedition
+modID=32349
+fileID=795423
+version=1.7.0
+category=0
+repository=Nexus
+url=https://www.nexusmods.com/skyrimspecialedition/mods/32349
+comments=
+notes=
+
+[installedFiles]
+1\SKSE\Plugins\ActorLimitFix.dll=...
+...
+```
+
+Firelink читает **только секцию `[General]`** — полностью. Реализация — `MetaIniReader.TryRead` в `Firelink.Platform.MO2.Readers`.
+
+**Что читается:**
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `gameName` | `string?` | Справочно. |
+| `gameID` | `string?` | На практике — Nexus game domain. |
+| `modID` | `int?` | Мод на Nexus. |
+| `fileID` | `int?` | Файл на Nexus. |
+| `version` | `string?` | Версия мода. |
+| `category` | `int?` | Категория в MO2. |
+| `repository` | `string?` | Обычно `Nexus`. |
+| `url` | `string?` | URL страницы мода. |
+| `comments` | `string?` | Комментарий MO2. |
+| `notes` | `string?` | Заметки автора сборки. |
+
+**Что игнорируется:**
+
+- Секция `[installedFiles]` — содержит абсолютные пути автора, бесполезна при воспроизведении.
+- Поле `newestVersion` — зависит от времени проверки апдейтов.
+
+**Ключи case-sensitive** (`modID` ≠ `modid`). **Имя секции case-insensitive** (`[General]` = `[general]` = `[GENERAL]`).
+
+**Если `meta.ini` нет:** мод в `ModMetas` не попадает. В манифесте `mods[].meta` отсутствует. Installer не генерирует `meta.ini` для этого мода.
+
+**Если `meta.ini` есть, но секция `[General]` пустая:** `ModMeta.IsEmpty == true`, но запись всё равно попадает в `ModMetas` (это сигнал «meta.ini был»).
+
+### `meta.ini` vs `.meta` — разные сущности
+
+|  | `.meta` | `meta.ini` |
+|---|---|---|
+| Расположение | `downloads/foo.7z.meta` | `mods/<ModName>/meta.ini` |
+| Что описывает | Архив (файл) | Мод (папку) |
+| Читается | `MetaReader` | `MetaIniReader` |
+| Полей | 3 (`gameName`, `modID`, `fileID`) | 10 (см. выше) |
+| Используется | `IndexArchivesStep` | `MatchStep` |
+| Куда идёт | Канонический id архива | `mods[].meta` манифеста |
+
+---
+
+### `__Firelink_Output`
+
+**Назначение.** Рабочий каталог автора в корне инстанса. Сюда `MatchStep` выгружает все unmatched-файлы — те, что не удалось восстановить ни по `(hash, path)`, ни по `hash`. Автор смотрит на них и решает: это его правки (делать патч-архив) или runtime-мусор (выкинуть).
+
+**Расположение:** `<InstancePath>/__Firelink_Output/`.
+
+**Структура:**
+
+```
+<InstancePath>/__Firelink_Output/
+  mods/
+    <ModName>/
+      <relative/path>
+```
+
+Структура **в точности совпадает** с путями внутри `mods/`, чтобы автор мог легко сопоставить и упаковать патч.
+
+**Что туда попадает:**
+
+- все unmatched-файлы модов, независимо от размера (лимит 2 МБ убран);
+- **не** попадает `meta.ini` (идёт в `ModMetas`).
+
+**Что туда не попадает:**
+
+- matched-файлы (они в манифесте как `FromArchive`);
+- `meta.ini`.
+
+**Жизненный цикл:**
+
+1. `MatchStep` в начале `ExecuteAsync` **очищает** `<InstancePath>/__Firelink_Output/mods` (рекурсивно), не трогая саму `__Firelink_Output`.
+2. Создаёт пустую `mods/`.
+3. По ходу обхода модов копирует unmatched-файлы (`File.Copy overwrite: true`).
+4. В конце логирует счётчик и диагностику.
+
+**Почему так:**
+
+- **Не раздувает манифест.** `inlineFiles` в манифесте пуст для MVP. Только matched-директивы.
+- **Хирургия.** Автор видит ровно то, что надо превратить в патч. Файл с изменённым содержимым → изменённый хеш → выгружен. Явно.
+- **Обновление инстанса.** При обновлении мода старый патч может перестать матчиться по хешу — автор видит это в `__Firelink_Output` и обновляет патч.
+- **Простота.** Никаких эвристик «это runtime-лог, это правка, это meta».
+
+**Что делает автор:**
+
+1. Смотрит на `__Firelink_Output/mods/`.
+2. Выкидывает очевидный мусор (логи, кеши).
+3. Оставляет свои правки.
+4. Упаковывает оставшееся в патч-архив (с сохранением структуры).
+5. Кладёт патч-архив в `downloads/`, добавляет запись в `archiveSources`.
+6. Перезапускает `pack`. Файлы находятся в патч-архиве → становятся `FromArchive` → `__Firelink_Output` для них пуст.
 
 ---
 
@@ -657,6 +784,8 @@ local_{slug}
 **Валидация:** packer принимает любую непустую строку. Если строка не входит в **известный список** (`KnownGames`) — предупреждение, но не ошибка. Список расширяемый.
 
 **Источник истины для списка:** Nexus API, эндпоинт `/v1/games.json`. Кешируется в `archives.db` (таблица `Config`). При отсутствии кеша — fallback на захардкоженный минимум.
+
+**Манифест самодостаточен:** `mods[].meta.gameId` и `mods[].meta.gameName` сохраняются в манифесте. Installer не обращается к Nexus API при генерации `meta.ini`.
 
 ---
 
@@ -738,6 +867,7 @@ Dawnguard.esm
 4. Устанавливает плагины MO2 в `MO2/plugins/`, `MO2/tools/`.
 5. Устанавливает extras в `Stock Game/`.
 6. Настраивает профиль: порядок модов, плагинов, load order.
+7. Настраивает моды через MCM (по желанию) — эти правки сохраняются в папке мода.
 
 **Результат:** рабочий инстанс MO2.
 
@@ -767,10 +897,11 @@ firelink pack C:\Mods\Dev\firelink-pack.json
    ├─ читает profiles/<Name>/modlist.txt
    ├─ читает profiles/<Name>/plugins.txt
    ├─ читает profiles/<Name>/loadorder.txt
+   ├─ вычисляет путь к __Firelink_Output
    └─ индексирует downloads/:
        ├─ для каждого файла-архива ищет <name>.meta
        ├─ если .meta есть и валиден → ArchiveEntry(id=nexus_..., sources=[Nexus])
-       ├─ если .meta есть, но не Nexus → ошибка
+       ├─ если .meta есть, но не Nexus → fallback в archiveSources
        ├─ если .meta нет → ищет в archiveSources
        │                    → если нашёл → ArchiveEntry(id=local_..., sources=[...])
        │                    → если нет → ArchiveEntry(sources=[]) + флаг "unresolved"
@@ -782,6 +913,7 @@ firelink pack C:\Mods\Dev\firelink-pack.json
        ├─ если папки нет → ОШИБКА, остановка
        ├─ если папка содержит [NoDelete] → пропустить
        └─ хешировать все файлы (с кешем по (path, length, mtime))
+           (включая meta.ini — фильтрация на этом шаге не делается)
 
 4. ScanExtensionsStep
    ├─ для каждого пути из mo2.extensions:
@@ -796,33 +928,47 @@ firelink pack C:\Mods\Dev\firelink-pack.json
    └─ если файл не найден → ПРЕДУПРЕЖДЕНИЕ, игнорировать
 
 6. MatchStep
-   ├─ распаковка архивов (ленивая, по требованию)
-   ├─ для каждого файла мода → искать в кеше хешей файлов из архивов
-   ├─ для каждого файла extension → искать
-   ├─ для каждого файла extras → искать
-   └─ если не найдено:
-       ├─ для мода → InlineFile (base64)
-       └─ для extension/extras → игнорировать
+   ├─ очистить __Firelink_Output/mods (если есть)
+   ├─ создать __Firelink_Output/mods
+   ├─ распаковка архивов (по одному через TempWorkspace)
+   ├─ построить индексы:
+   │   ├─ (hash, path) → IndexEntry
+   │   ├─ hash → List<IndexEntry>  (для fallback по хешу)
+   │   └─ path → { hash → archiveId }  (для диагностики)
+   ├─ для каждого файла мода:
+   │   ├─ если RelativePath == "meta.ini" (в корне мода):
+   │   │   ├─ MetaIniReader.TryRead → ModMeta
+   │   │   └─ modMetas[modName] = ModMeta (если не null)
+   │   ├─ иначе TryMatch:
+   │   │   ├─ 1. точное (hash, path) → FromArchive (source == destination)
+   │   │   ├─ 2. по hash (fallback) → FromArchive (source ≠ destination)
+   │   │   └─ 3. не найдено → unmatched:
+   │   │       ├─ UnmatchedFile в список
+   │   │       └─ File.Copy в __Firelink_Output/mods/<Mod>/<path>
+   │   └─ (для extensions/extras — аналогично, но в текущей версии
+   │       ScanExtensionsStep/ScanExtrasStep не реализованы)
+   └─ логировать диагностику unmatched (причины, топ-20, по модам)
 
-7. BuildManifestStep
+7. BuildManifestStep     ← НЕ РЕАЛИЗОВАН
    ├─ meta, execution
    ├─ mo2 (архив MO2 + extensions с директивами)
    ├─ stockGame (extras с директивами)
    ├─ archives (единый пул)
-   ├─ mods, plugins, loadorder
-   └─ inlineFiles
+   ├─ mods (с mods[].meta из ModMetas)
+   ├─ plugins, loadorder
+   └─ inlineFiles (пустой в MVP)
 
-8. ValidateManifestStep
+8. ValidateManifestStep  ← НЕ РЕАЛИЗОВАН
    ├─ все archive-ссылки существуют в archives
    ├─ все inlineFile-ссылки существуют в inlineFiles
    ├─ mods/plugins/loadorder согласованы
    └─ inlineFiles в пределах лимитов
 
-9. WriteManifestStep
+9. WriteManifestStep     ← НЕ РЕАЛИЗОВАН
    └─ пишет modlist.json
 ```
 
-**Результат:** `modlist.json`.
+**Результат:** `modlist.json` + рабочий каталог `__Firelink_Output/mods/`.
 
 ### Этап 1.4. Публикация
 
@@ -830,6 +976,7 @@ firelink pack C:\Mods\Dev\firelink-pack.json
 
 - `modlist.json` — манифест.
 - Зеркала для архивов (опционально).
+- Патч-архивы (если автор сделал их из `__Firelink_Output`).
 
 **Результат:** сборка готова к распространению.
 
@@ -913,17 +1060,27 @@ firelink install C:\Mods\NordicUI\modlist.json
    │   │   ├─ проверить хеши файлов по директивам
    │   │   ├─ если все совпадают → пропустить
    │   │   └─ иначе → удалить папку и разложить заново
-   │   └─ если не существует → создать и разложить
+   │   ├─ если не существует → создать и разложить
+   │   └─ если mods[].meta есть → сгенерировать meta.ini (см. п.10)
    └─ для каждой папки в mods/:
        ├─ если содержит [NoDelete] → пропустить
        └─ если не упомянута в манифесте → удалить
 
-10. RegenerateProfileStep
+10. GenerateMetaIniStep (внутри SyncModsStep или отдельным шагом)
+    ├─ для каждого mod с mods[].meta:
+    │   ├─ сгенерировать [General] с полями из mods[].meta
+    │   ├─ gameName/gameID — из mods[].meta (не из meta.game пакета!)
+    │   ├─ секцию [installedFiles] НЕ писать
+    │   ├─ поле newestVersion НЕ писать
+    │   └─ положить в mods/<Name>/meta.ini
+    └─ MO2 сам перестроит [installedFiles] при первом запуске
+
+11. RegenerateProfileStep
     ├─ modlist.txt из манифеста (с разворотом порядка)
     ├─ plugins.txt из манифеста
     └─ loadorder.txt из манифеста
 
-11. ConfigureMo2Step
+12. ConfigureMo2Step
     └─ сгенерировать ModOrganizer.ini с путём к Stock Game
 ```
 
@@ -954,6 +1111,8 @@ firelink install C:\Mods\NordicUI\modlist.json
 - Версия в `meta.version`.
 - `modlist.json` пересобирается.
 - Возможно, добавляются/удаляются моды, плагины, extras.
+- Автор пересматривает `__Firelink_Output` — часть файлов могла стать
+  unmatched снова (после обновления модов), часть патчей могла устареть.
 
 **Решения:**
 
@@ -973,6 +1132,7 @@ firelink install C:\Mods\NordicUI\modlist.json
 - Верифицирует по новому манифесту.
 - Докачивает новые архивы (локальная `downloads/` → глобальный реестр → скачать).
 - Дописывает новые файлы.
+- Пересоздаёт `meta.ini` для модов, у которых `mods[].meta` изменился.
 - Удаляет моды, которых больше нет в манифесте.
 - Перегенерирует профиль.
 
@@ -985,6 +1145,8 @@ firelink install C:\Mods\NordicUI\modlist.json
 ### Философия
 
 Nexus — **один источник** (`type: "nexus"`). Способы доступа — **стратегии внутри `NexusSource`**. Не дублируем в манифесте.
+
+**Манифест самодостаточен при чтении.** Installer не обращается к Nexus API, чтобы узнать версию или URL мода — всё это в `mods[].meta`. Nexus API нужен **только** для скачивания архивов.
 
 ### Стратегии доступа
 
@@ -1210,18 +1372,21 @@ CREATE INDEX idx_archive_file_hash ON CachedArchiveFile(file_hash);
 | Мод не в `modlist.txt`, папка есть | **Игнорируем** |
 | Папка мода содержит `[NoDelete]` | **Пропускаем** |
 | Файл extension/extras не найден | **Предупреждение**, игнорируем |
-| Файл мода не найден в архивах | `InlineFile` (base64), лимит 2 МБ |
-| Файл extension/extras не найден в архивах | **Предупреждение**, игнорируем |
+| Файл мода **матчится по (hash, path)** | `FromArchive`, source == destination |
+| Файл мода **матчится по hash** (путь ≠) | `FromArchive`, source ≠ destination |
+| Файл мода **не матчится** | `UnmatchedFile` + выгрузка в `__Firelink_Output` |
+| `meta.ini` в корне мода | `ModMeta` в `ModMetas`, не в unmatched |
+| `meta.ini` в подпапке | Обычный файл (матчится или unmatched) |
 | Архив с `.meta` (Nexus) | Используем `.meta` |
 | Архив без `.meta`, есть в `archiveSources` | Используем `archiveSources` |
-| Архив без `.meta` и без `archiveSources`, но используется модами | **Ошибка** |
+| Архив без `.meta` и без `archiveSources`, но используется модами | **unresolved** |
 | Архив без `.meta` и без `archiveSources`, не используется | **Игнорируем** |
 | Два архива с одинаковым каноническим id | **Ошибка** |
-| `.meta` не Nexus-формата | **Ошибка** |
+| `.meta` не Nexus-формата | Fallback в `archiveSources` |
 | `meta.name` содержит запрещённые символы | **Ошибка** |
 | `meta.version` не semver | **Ошибка** |
 | Путь в `extensions`/`extras` абсолютный или с `..` | **Ошибка** |
-| Суммарный размер `inlineFiles` > 20 МБ | **Ошибка** |
+| Суммарный размер `inlineFiles` > 20 МБ | **Ошибка** (если inlineFiles используются) |
 
 ### Матрица поведения installer-а
 
@@ -1239,6 +1404,8 @@ CREATE INDEX idx_archive_file_hash ON CachedArchiveFile(file_hash);
 | Мод изменился | Перезаписать |
 | Мод исчез из манифеста | Удалить |
 | Архив исчез из манифеста | **Не удалять** |
+| `mods[].meta` есть | Сгенерировать `meta.ini` (без `[installedFiles]`) |
+| `mods[].meta` нет | Не генерировать `meta.ini` |
 
 ---
 
@@ -1252,7 +1419,7 @@ CREATE INDEX idx_archive_file_hash ON CachedArchiveFile(file_hash);
 | Хеширование | System.IO.Hashing (xxHash64) |
 | База данных | Microsoft.Data.Sqlite |
 | Шифрование | System.Security.Cryptography.ProtectedData (DPAPI) |
-| Архивы | SharpCompress |
+| Распаковка | 7z.exe + 7z.dll (GNU LGPL) |
 | DI | Microsoft.Extensions.DependencyInjection |
 | Логирование | Microsoft.Extensions.Logging |
 | Retry | Polly |
@@ -1262,6 +1429,8 @@ CREATE INDEX idx_archive_file_hash ON CachedArchiveFile(file_hash);
 | Целевая ОС | Windows 10 1809+ / Windows 11 |
 
 **Примечание про таргеты:** все проекты таргетят `net8.0`. Windows-специфичный код (DPAPI) изолирован в `Firelink.Platform.Nexus` и включается условной компиляцией, если понадобится.
+
+**Примечание про SharpCompress:** удалён из зависимостей. У него баг с `OpenEntryStream` на части 7z-архивов. Заменён на `7z.exe` (см. `SevenZipExtractor`).
 
 ---
 
@@ -1274,14 +1443,19 @@ CREATE INDEX idx_archive_file_hash ON CachedArchiveFile(file_hash);
 - [x] Сериализация JSON с полиморфизмом
 - [x] Хеширование xxHash64
 - [x] Чтение/запись `modlist.txt`, `plugins.txt`, `loadorder.txt`
-- [x] Чтение `.meta` (Nexus-формат)
-- [ ] Модели `PackConfig` + валидаторы
-- [ ] Packer: `ReadConfigStep` + `ReadInstanceStep`
-- [ ] Packer: `IndexArchivesStep` + `ScanModsStep` (параллельно)
-- [ ] Packer: `MatchStep` с ленивой распаковкой
+- [x] Чтение `.meta` (Nexus-формат, архивный)
+- [x] Модели `PackConfig` + валидаторы
+- [x] Packer: `ReadConfigStep` + `ReadInstanceStep`
+- [x] Packer: `IndexArchivesStep` + `ScanModsStep` (параллельно)
+- [x] Packer: `MatchStep` с ленивой распаковкой
+- [x] Packer: диагностика inline/unmatched файлов (блоки 10.6, 10.7)
+- [x] Packer: `__Firelink_Output` — выгрузка unmatched-файлов
+- [x] Packer: `MetaIniReader` + `ModMeta` (structured `meta.ini`)
+- [x] Packer: `.mohidden` и расхождения имени при совпадении хеша
 - [ ] Packer: `BuildManifestStep` + `ValidateManifestStep` + `WriteManifestStep`
 - [ ] Installer: `BootstrapMo2Step` + `SyncArchivesStep`
 - [ ] Installer: `SyncModsStep` + `RegenerateProfileStep`
+- [ ] Installer: `GenerateMetaIniStep`
 - [ ] Глобальный реестр архивов (SQLite)
 - [ ] CLI: `pack`, `install`, `config`
 - [ ] Примеры `firelink-pack.json` (minimal, full, invalid-*)
@@ -1297,6 +1471,7 @@ CREATE INDEX idx_archive_file_hash ON CachedArchiveFile(file_hash);
 - [ ] Параллельные загрузки
 - [ ] Прогресс-бары
 - [ ] Persist кеша распакованных файлов в SQLite
+- [ ] Механизм патчей для `__Firelink_Output` (генерация патч-архивов)
 
 ### v0.3.0
 
@@ -1313,30 +1488,39 @@ CREATE INDEX idx_archive_file_hash ON CachedArchiveFile(file_hash);
 
 ---
 
----
-
 ## Статус реализации
 
-**Обновлено:** 2026-09-15
-**Версия документа:** 3.1
+**Обновлено:** 2026-09-16
+**Версия документа:** 3.2
 
 ### Готово
 
 - Скелет solution + 9 проектов + Central Package Management.
-- `Firelink.Core`: модели манифеста, JSON-сериализация, `XxHash64Value`,
-  `IStep`, `Pack*`-модели, `Slug`, `ArchiveId`, валидаторы,
-  `ArchiveExtensions`, `FileHashCache`, `IArchiveExtractor`,
-  `SevenZipExtractor`, `TempWorkspace`.
-- `Firelink.Platform.MO2`: чтение/запись `modlist.txt`, `plugins.txt`,
-  `loadorder.txt`, `MetaReader`.
-- `Firelink.Pack`: `ReadConfigStep`, `ReadInstanceStep`, `IndexArchivesStep`,
-  `ScanModsStep`, `MatchStep`, `PackPipeline`, CLI (`pack`, `hash`, `doctor`).
+- `Firelink.Core`:
+  - модели манифеста, JSON-сериализация, `XxHash64Value`, `IStep`;
+  - `Pack*`-модели;
+  - `InstanceSnapshot` (с `FirelinkOutputPath`), `ModScanResult`,
+    `ScannedFile`, `MatchResult` (новый: `ModDirectives` + `Unmatched`
+    + `ModMetas`), `UnmatchedFile`, `ModMeta`;
+  - `InlineFileContent` / `OrphanFile` — типы есть, но не используются;
+  - `Slug`, `ArchiveId`, валидаторы;
+  - `ArchiveExtensions`, `FileHashCache`, `IArchiveExtractor`,
+    `SevenZipExtractor`, `TempWorkspace`.
+- `Firelink.Platform.MO2`:
+  - чтение/запись `modlist.txt`, `plugins.txt`, `loadorder.txt`;
+  - `MetaReader` (архивный `.meta`);
+  - `MetaIniReader` (модовый `meta.ini`, полная секция `[General]`).
+- `Firelink.Pack`:
+  - `ReadConfigStep`, `ReadInstanceStep`, `IndexArchivesStep`,
+    `ScanModsStep`, **`MatchStep`** (переписан в 10.7);
+  - `PackPipeline`;
+  - CLI (`pack`, `hash`, `doctor`).
 - `Firelink.Install`: CLI-заглушки (`install`, `verify`, `doctor`).
-- 263 теста, все проходят.
+- **288 тестов, все проходят.**
 
 ### В работе
 
-- Диагностика inline-файлов (46 из 1131 при прогоне на `OmenRim 7`).
+Ничего. Блок 10.7 закрыт. Следующий — блок 11.
 
 ### Следующие блоки
 
@@ -1346,3 +1530,22 @@ CREATE INDEX idx_archive_file_hash ON CachedArchiveFile(file_hash);
 ### Ключевые решения, принятые в процессе
 
 См. `HANDOFF.md`, раздел «Ключевые архитектурные решения».
+
+### Что изменилось в 10.6–10.7
+
+- **10.6:** диагностика inline-файлов через второй индекс `path → { hash → archiveId }`.
+  Обнаружено: 46 inline = 33 `meta.ini` + 11 runtime-логов/авторских `.ini`.
+- **10.7:** три ключевых изменения:
+  1. **`meta.ini` — structured.** `MetaIniReader` читает полную секцию
+     `[General]` в `ModMeta`. Идёт в `ModMetas`, попадает в `mods[].meta`
+     манифеста. Installer генерирует `meta.ini` из этого.
+  2. **Unmatched-файлы — в `__Firelink_Output`.** Не base64, не лимит
+     2 МБ. Просто копия с сохранением структуры в корне инстанса.
+     Автор вычищает мусор, оставляет правки, делает патч-архив.
+  3. **Матчинг по `(hash, path)` → fallback по `hash`.** Детерминированный
+     выбор по `(archiveId, relativePath)`. `source` и `destination` могут
+     отличаться (`.mohidden`, FOMOD, разные корни).
+
+  Результат на `OmenRim 7`: 142 matched (exact), 943 matched (by hash),
+  6 unmatched, 40 `meta.ini`. Из 6 unmatched: 2 runtime-лога (hash-differs),
+  4 авторских `.ini` (path-not-found).

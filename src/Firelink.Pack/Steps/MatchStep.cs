@@ -1,26 +1,36 @@
-using System.Collections.Concurrent;
 using Firelink.Core.Abstractions;
 using Firelink.Core.Archives;
 using Firelink.Core.Archives.Extraction;
 using Firelink.Core.Models.Hashing;
 using Firelink.Core.Models.Manifest.Directives;
 using Firelink.Core.Models.Pack;
+using Firelink.Platform.MO2.Readers;
 using Microsoft.Extensions.Logging;
 
 namespace Firelink.Pack.Steps;
 
 /// <summary>
 /// Сопоставляет файлы модов с файлами внутри архивов.
-/// Распаковывает архивы по одному через TempWorkspace.
 ///
-/// Дополнительно (диагностика, блок 10.6) строит второй индекс
-/// path → { hash → archiveId }, чтобы для каждого inline-файла
-/// определить причину: "path not found" или "hash differs".
+/// Логика матчинга:
+///  1. Точное совпадение (hash, path) — идеальный случай.
+///  2. Совпадение hash, путь отличается (например .mohidden-суффикс) —
+///     берётся первый IndexEntry по (archiveId, relativePath) для детерминизма;
+///     destination = путь в моде, source = путь в архиве.
+///  3. Совпадения нет — файл попадает в Unmatched и выгружается
+///     в __Firelink_Output/mods/&lt;ModName&gt;/&lt;relativePath&gt;.
+///
+/// meta.ini (в корне мода) читается через MetaIniReader и кладётся
+/// в MatchResult.ModMetas. В Unmatched и в директивы он не попадает.
+///
+/// Никаких base64-inline и orphan-лимитов: всё, что не восстановимо
+/// из архивов, идёт в __Firelink_Output — автор решает, делать ли патч.
 /// </summary>
 public sealed class MatchStep : IStep<MatchStep.Input, MatchResult>
 {
-    private const long MaxInlineFileSize = 2L * 1024 * 1024;   // 2 МБ
+    private const string MetaIniFileName = "meta.ini";
     private const int InlineDiagnosticsTopN = 20;
+    private const string FirelinkOutputModsSubdir = "mods";
 
     private readonly IArchiveExtractor _extractor;
     private readonly FileHashCache _hashCache;
@@ -38,249 +48,209 @@ public sealed class MatchStep : IStep<MatchStep.Input, MatchResult>
 
     public Task<MatchResult> ExecuteAsync(Input input, CancellationToken ct)
     {
-        // 1. Индексы: hash → (archiveId, relativePath, size)
-        //             path → { hash → archiveId }  (для диагностики)
-        var (index, pathIndex) = BuildArchiveIndexes(input, ct);
+        // 1. Готовим __Firelink_Output/mods.
+        var outputModsRoot = PrepareFirelinkOutput(input.FirelinkOutputPath);
+
+        // 2. Строим индексы.
+        var indexes = BuildArchiveIndexes(input, ct);
 
         _logger.LogInformation(
-            "Archive index built: {Count} unique hashes from {Archives} archives",
-            index.Count, input.ArchiveIndex.Resolved.Count);
+            "Archive index built: {Hashes} unique hashes, {HashPaths} unique (hash,path), {Paths} unique paths across {Archives} archives",
+            indexes.ByHash.Count, indexes.ByHashPath.Count, indexes.ByPath.Count,
+            input.ArchiveIndex.Resolved.Count);
 
-        _logger.LogInformation(
-            "Archive path index built: {Count} unique paths across {Archives} archives",
-            pathIndex.Count, input.ArchiveIndex.Resolved.Count);
-
-        // 2. Сопоставление по модам
+        // 3. Обход модов.
         var modDirectives = new Dictionary<string, IReadOnlyList<Directive>>(StringComparer.Ordinal);
-        var inlineFiles = new List<InlineFileContent>();
-        var orphans = new List<OrphanFile>();
+        var modMetas = new Dictionary<string, ModMeta>(StringComparer.Ordinal);
+        var unmatched = new List<UnmatchedFile>();
 
-        // Сырые inline-записи для диагностики (вариант A — не идут в MatchResult).
-        var inlineDiagnostics = new List<InlineRecord>();
-
-        int inlineCounter = 0;
         int totalFiles = 0;
-        int matchedFiles = 0;
-        int inlineCount = 0;
+        int matchedExact = 0;
+        int matchedByHash = 0;
+        int unmatchedCount = 0;
+        int metaIniCount = 0;
 
         foreach (var (modName, files) in input.ModScan.Mods)
         {
             ct.ThrowIfCancellationRequested();
 
             var directives = new List<Directive>(files.Count);
+            var modPath = Path.Combine(input.ModsPath, modName);
 
             foreach (var file in files)
             {
                 totalFiles++;
 
-                if (index.TryGetValue(file.Hash, out var found))
+                // meta.ini в корне мода — отдельная сущность.
+                if (IsRootMetaIni(file.RelativePath))
                 {
-                    matchedFiles++;
-                    directives.Add(new FromArchiveDirective
+                    var metaIniPath = Path.Combine(modPath, MetaIniFileName);
+                    var modMeta = MetaIniReader.TryRead(metaIniPath);
+                    if (modMeta is not null)
                     {
-                        Archive = found.ArchiveId,
-                        Source = found.RelativePath,
-                        Destination = file.RelativePath,
-                        Hash = file.Hash,
-                        Size = file.Size,
-                    });
+                        modMetas[modName] = modMeta;
+                        metaIniCount++;
+                    }
+                    continue;
                 }
-                else if (file.Size <= MaxInlineFileSize)
+
+                var directive = TryMatch(file, modName, indexes, out var matchKind);
+                if (directive is not null)
                 {
-                    inlineCount++;
-                    var id = $"inline-{inlineCounter++:D6}";
-                    var fullPath = Path.Combine(input.ModsPath, modName,
-                        file.RelativePath.Replace('/', Path.DirectorySeparatorChar));
-                    var content = File.ReadAllBytes(fullPath);
-
-                    inlineFiles.Add(new InlineFileContent
+                    directives.Add(directive);
+                    switch (matchKind)
                     {
-                        Id = id,
-                        Content = content,
-                        Hash = file.Hash,
-                    });
-
-                    directives.Add(new InlineFileDirective
-                    {
-                        InlineFileId = id,
-                        Destination = file.RelativePath,
-                    });
-
-                    // Диагностика: разберёмся, почему не нашли в архивах.
-                    inlineDiagnostics.Add(new InlineRecord(
-                        ModName: modName,
-                        RelativePath: file.RelativePath,
-                        Hash: file.Hash));
+                        case MatchKind.Exact:
+                            matchedExact++;
+                            break;
+                        case MatchKind.ByHash:
+                            matchedByHash++;
+                            break;
+                    }
+                    continue;
                 }
-                else
-                {
-                    orphans.Add(new OrphanFile
-                    {
-                        ModName = modName,
-                        RelativePath = file.RelativePath,
-                        Size = file.Size,
-                    });
-                }
+
+                // Не сматчилось — выгружаем в __Firelink_Output.
+                unmatchedCount++;
+                unmatched.Add(new UnmatchedFile(
+                    ModName: modName,
+                    RelativePath: file.RelativePath,
+                    Size: file.Size));
+
+                WriteUnmatchedFile(input.ModsPath, outputModsRoot, modName, file.RelativePath);
             }
 
             modDirectives[modName] = directives;
         }
 
         _logger.LogInformation(
-            "Match complete: {Total} files, {Matched} matched, {Inline} inline, {Orphans} orphans",
-            totalFiles, matchedFiles, inlineCount, orphans.Count);
+            "Match complete: {Total} files, {Exact} matched (exact), {ByHash} matched (by hash), {Unmatched} unmatched, {MetaIni} meta.ini",
+            totalFiles, matchedExact, matchedByHash, unmatchedCount, metaIniCount);
 
-        if (orphans.Count > 0)
+        if (unmatchedCount > 0)
         {
-            _logger.LogWarning(
-                "{Count} orphan files (not in any archive and > {Limit} bytes):",
-                orphans.Count, MaxInlineFileSize);
-            foreach (var o in orphans.Take(10))
-                _logger.LogWarning("  - {Mod}/{Path} ({Size} bytes)",
-                    o.ModName, o.RelativePath, o.Size);
-            if (orphans.Count > 10)
-                _logger.LogWarning("  ... and {More} more", orphans.Count - 10);
-        }
+            _logger.LogInformation(
+                "Unmatched files written to __Firelink_Output: {Count} ({Root})",
+                unmatchedCount, outputModsRoot);
 
-        // 3. Диагностика inline-файлов.
-        if (inlineDiagnostics.Count > 0)
-        {
-            LogInlineDiagnostics(inlineDiagnostics, pathIndex);
+            LogInlineDiagnostics(unmatched, indexes.ByPath);
         }
 
         return Task.FromResult(new MatchResult
         {
             ModDirectives = modDirectives,
-            InlineFiles = inlineFiles,
-            Orphans = orphans,
+            Unmatched = unmatched,
+            ModMetas = modMetas,
         });
     }
 
     // ------------------------------------------------------------------
-    //  Диагностика
+    //  Матчинг
     // ------------------------------------------------------------------
 
-    private void LogInlineDiagnostics(
-        IReadOnlyList<InlineRecord> records,
-        IReadOnlyDictionary<string, Dictionary<XxHash64Value, string>> pathIndex)
+    private FromArchiveDirective? TryMatch(
+        ScannedFile file,
+        string modName,
+        ArchiveIndexes indexes,
+        out MatchKind kind)
     {
-        _logger.LogInformation(
-            "Inline diagnostics: {Count} inline files across {Mods} mods",
-            records.Count, records.Select(r => r.ModName).Distinct(StringComparer.Ordinal).Count());
-
-        // Разбор причины для каждой записи.
-        var resolved = new List<ResolvedInline>(records.Count);
-        foreach (var rec in records)
+        // 1. Точное (hash, path).
+        if (indexes.ByHashPath.TryGetValue((file.Hash, file.RelativePath), out var exact))
         {
-            var (reason, archiveId) = ClassifyInline(rec, pathIndex);
-            resolved.Add(new ResolvedInline(rec, reason, archiveId));
+            kind = MatchKind.Exact;
+            return new FromArchiveDirective
+            {
+                Archive = exact.ArchiveId,
+                Source = exact.RelativePath,
+                Destination = file.RelativePath,
+                Hash = file.Hash,
+                Size = file.Size,
+            };
         }
 
-        var byReason = resolved
-            .GroupBy(r => r.Reason)
-            .ToDictionary(g => g.Key, g => g.Count());
-
-        int pathNotFound = byReason.TryGetValue(InlineReason.PathNotFound, out var pnf) ? pnf : 0;
-        int hashDiffers = byReason.TryGetValue(InlineReason.HashDiffers, out var hd) ? hd : 0;
-
-        _logger.LogInformation(
-            "  by reason: path-not-found = {PathNotFound}, hash-differs = {HashDiffers}",
-            pathNotFound, hashDiffers);
-
-        // Топ-N с деталями.
-        _logger.LogInformation("  --- top {N} ---", InlineDiagnosticsTopN);
-
-        int shown = 0;
-        foreach (var item in resolved)
+        // 2. По хешу, путь отличается.
+        if (indexes.ByHash.TryGetValue(file.Hash, out var candidates) && candidates.Count > 0)
         {
-            if (shown >= InlineDiagnosticsTopN) break;
-            shown++;
-
-            var rec = item.Record;
-            _logger.LogInformation(
-                "  {Index}. {Mod} / {Path}",
-                shown, rec.ModName, rec.RelativePath);
-
-            switch (item.Reason)
+            var pick = candidates[0];
+            kind = MatchKind.ByHash;
+            return new FromArchiveDirective
             {
-                case InlineReason.PathNotFound:
-                    _logger.LogInformation("      reason: path-not-found");
-                    break;
+                Archive = pick.ArchiveId,
+                Source = pick.RelativePath,
+                Destination = file.RelativePath,
+                Hash = file.Hash,
+                Size = file.Size,
+            };
+        }
 
-                case InlineReason.HashDiffers:
-                    _logger.LogInformation(
-                        "      reason: hash-differs (present in '{Archive}' as '{Path}')",
-                        item.ArchiveId ?? "<unknown>", rec.RelativePath);
-                    break;
+        kind = MatchKind.None;
+        return null;
+    }
+
+    // ------------------------------------------------------------------
+    //  __Firelink_Output
+    // ------------------------------------------------------------------
+
+    private string PrepareFirelinkOutput(string firelinkOutputPath)
+    {
+        var outputModsRoot = Path.Combine(firelinkOutputPath, FirelinkOutputModsSubdir);
+
+        if (Directory.Exists(outputModsRoot))
+        {
+            try
+            {
+                Directory.Delete(outputModsRoot, recursive: true);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    $"Failed to clean __Firelink_Output: {outputModsRoot}", ex);
             }
         }
 
-        if (resolved.Count > shown)
+        Directory.CreateDirectory(outputModsRoot);
+
+        _logger.LogInformation("Firelink output cleaned: {Path}", outputModsRoot);
+
+        return outputModsRoot;
+    }
+
+    private void WriteUnmatchedFile(
+        string modsRoot,
+        string outputModsRoot,
+        string modName,
+        string relativePath)
+    {
+        var srcPath = Path.Combine(modsRoot, modName,
+            relativePath.Replace('/', Path.DirectorySeparatorChar));
+
+        var dstPath = Path.Combine(outputModsRoot, modName,
+            relativePath.Replace('/', Path.DirectorySeparatorChar));
+
+        try
         {
-            _logger.LogInformation(
-                "  ({More} more inline files not shown; counts by reason above)",
-                resolved.Count - shown);
+            var dstDir = Path.GetDirectoryName(dstPath);
+            if (!string.IsNullOrEmpty(dstDir))
+                Directory.CreateDirectory(dstDir);
+
+            File.Copy(srcPath, dstPath, overwrite: true);
         }
-
-        // Разбивка по модам.
-        _logger.LogInformation("  by mod:");
-
-        var byMod = resolved
-            .GroupBy(r => r.Record.ModName, StringComparer.Ordinal)
-            .OrderByDescending(g => g.Count())
-            .ThenBy(g => g.Key, StringComparer.Ordinal);
-
-        foreach (var g in byMod)
+        catch (Exception ex)
         {
-            int mPnf = g.Count(r => r.Reason == InlineReason.PathNotFound);
-            int mHd = g.Count(r => r.Reason == InlineReason.HashDiffers);
-
-            _logger.LogInformation(
-                "    {Mod,-40} : {Total,3} (path-not-found={Pnf}, hash-differs={Hd})",
-                g.Key, g.Count(), mPnf, mHd);
+            _logger.LogWarning(ex,
+                "Failed to write unmatched file '{Mod}/{Path}' to __Firelink_Output",
+                modName, relativePath);
         }
     }
 
-    /// <summary>
-    /// Классифицирует inline-файл:
-    ///  - PathNotFound — пути нет ни в одном архиве;
-    ///  - HashDiffers  — путь есть, но ни один хеш по этому пути не совпал.
-    ///    Возвращает archiveId первого архива, где встретился этот путь.
-    /// </summary>
-    private static (InlineReason Reason, string? ArchiveId) ClassifyInline(
-        InlineRecord rec,
-        IReadOnlyDictionary<string, Dictionary<XxHash64Value, string>> pathIndex)
-    {
-        if (!pathIndex.TryGetValue(rec.RelativePath, out var hashesByPath) || hashesByPath.Count == 0)
-        {
-            return (InlineReason.PathNotFound, null);
-        }
-
-        // Путь есть. Совпадает ли хотя бы один хеш?
-        if (hashesByPath.ContainsKey(rec.Hash))
-        {
-            // В теории сюда не должны попадать: если бы хеш совпал — MatchStep бы
-            // сматчил файл по основному индексу. Но подстрахуемся.
-            // Считаем это как "hash differs" не будем — но и как path-not-found тоже нет.
-            // На практике: попадание сюда означает, что между основным и вторым
-            // индексом рассинхрон — не должно случаться.
-            return (InlineReason.HashDiffers, hashesByPath[rec.Hash]);
-        }
-
-        // Ни один хеш не совпал. Берём первый archiveId для информативности.
-        var firstArchive = hashesByPath.Values.FirstOrDefault();
-        return (InlineReason.HashDiffers, firstArchive);
-    }
-
     // ------------------------------------------------------------------
-    //  Построение индексов
+    //  Индексы
     // ------------------------------------------------------------------
 
-    private (Dictionary<XxHash64Value, IndexEntry> ByHash,
-             Dictionary<string, Dictionary<XxHash64Value, string>> ByPath)
-        BuildArchiveIndexes(Input input, CancellationToken ct)
+    private ArchiveIndexes BuildArchiveIndexes(Input input, CancellationToken ct)
     {
-        var byHash = new Dictionary<XxHash64Value, IndexEntry>();
+        var byHashPath = new Dictionary<(XxHash64Value, string), IndexEntry>();
+        var byHash = new Dictionary<XxHash64Value, List<IndexEntry>>();
         var byPath = new Dictionary<string, Dictionary<XxHash64Value, string>>(
             StringComparer.OrdinalIgnoreCase);
 
@@ -344,15 +314,25 @@ public sealed class MatchStep : IStep<MatchStep.Input, MatchResult>
                     continue;
                 }
 
-                // Основной индекс: hash → entry (first-wins).
-                byHash.TryAdd(hash, new IndexEntry
+                var entry = new IndexEntry
                 {
                     ArchiveId = archive.Id,
                     RelativePath = relativePath,
                     Size = size,
-                });
+                };
 
-                // Второй индекс: path → { hash → archiveId } (first-wins по хешу).
+                // Точный индекс (hash, path).
+                byHashPath.TryAdd((hash, relativePath), entry);
+
+                // Основной индекс: hash → list.
+                if (!byHash.TryGetValue(hash, out var list))
+                {
+                    list = new List<IndexEntry>(1);
+                    byHash[hash] = list;
+                }
+                list.Add(entry);
+
+                // Диагностический индекс: path → { hash → archiveId }.
                 if (!byPath.TryGetValue(relativePath, out var hashesByPath))
                 {
                     hashesByPath = new Dictionary<XxHash64Value, string>();
@@ -362,8 +342,115 @@ public sealed class MatchStep : IStep<MatchStep.Input, MatchResult>
             }
         }
 
-        return (byHash, byPath);
+        // Детерминизм: сортируем списки по (archiveId, relativePath).
+        foreach (var list in byHash.Values)
+        {
+            list.Sort(static (a, b) =>
+            {
+                var c = string.CompareOrdinal(a.ArchiveId, b.ArchiveId);
+                if (c != 0) return c;
+                return string.CompareOrdinal(a.RelativePath, b.RelativePath);
+            });
+        }
+
+        return new ArchiveIndexes(byHashPath, byHash, byPath);
     }
+
+    // ------------------------------------------------------------------
+    //  Диагностика
+    // ------------------------------------------------------------------
+
+    private void LogInlineDiagnostics(
+        IReadOnlyList<UnmatchedFile> records,
+        IReadOnlyDictionary<string, Dictionary<XxHash64Value, string>> pathIndex)
+    {
+        _logger.LogInformation(
+            "Unmatched diagnostics: {Count} files across {Mods} mods",
+            records.Count,
+            records.Select(r => r.ModName).Distinct(StringComparer.Ordinal).Count());
+
+        var resolved = new List<ResolvedUnmatched>(records.Count);
+        foreach (var rec in records)
+        {
+            var (reason, archiveId) = ClassifyUnmatched(rec, pathIndex);
+            resolved.Add(new ResolvedUnmatched(rec, reason, archiveId));
+        }
+
+        int pathNotFound = resolved.Count(r => r.Reason == UnmatchedReason.PathNotFound);
+        int hashDiffers = resolved.Count(r => r.Reason == UnmatchedReason.HashDiffers);
+
+        _logger.LogInformation(
+            "  by reason: path-not-found = {PathNotFound}, hash-differs = {HashDiffers}",
+            pathNotFound, hashDiffers);
+
+        _logger.LogInformation("  --- top {N} ---", InlineDiagnosticsTopN);
+
+        int shown = 0;
+        foreach (var item in resolved)
+        {
+            if (shown >= InlineDiagnosticsTopN) break;
+            shown++;
+
+            var rec = item.Record;
+            _logger.LogInformation(
+                "  {Index}. {Mod} / {Path}",
+                shown, rec.ModName, rec.RelativePath);
+
+            switch (item.Reason)
+            {
+                case UnmatchedReason.PathNotFound:
+                    _logger.LogInformation("      reason: path-not-found");
+                    break;
+
+                case UnmatchedReason.HashDiffers:
+                    _logger.LogInformation(
+                        "      reason: hash-differs (present in '{Archive}' as '{Path}')",
+                        item.ArchiveId ?? "<unknown>", rec.RelativePath);
+                    break;
+            }
+        }
+
+        if (resolved.Count > shown)
+        {
+            _logger.LogInformation(
+                "  ({More} more unmatched files not shown; counts by reason above)",
+                resolved.Count - shown);
+        }
+
+        _logger.LogInformation("  by mod:");
+
+        var byMod = resolved
+            .GroupBy(r => r.Record.ModName, StringComparer.Ordinal)
+            .OrderByDescending(g => g.Count())
+            .ThenBy(g => g.Key, StringComparer.Ordinal);
+
+        foreach (var g in byMod)
+        {
+            int mPnf = g.Count(r => r.Reason == UnmatchedReason.PathNotFound);
+            int mHd = g.Count(r => r.Reason == UnmatchedReason.HashDiffers);
+
+            _logger.LogInformation(
+                "    {Mod,-40} : {Total,3} (path-not-found={Pnf}, hash-differs={Hd})",
+                g.Key, g.Count(), mPnf, mHd);
+        }
+    }
+
+    private static (UnmatchedReason Reason, string? ArchiveId) ClassifyUnmatched(
+        UnmatchedFile rec,
+        IReadOnlyDictionary<string, Dictionary<XxHash64Value, string>> pathIndex)
+    {
+        if (!pathIndex.TryGetValue(rec.RelativePath, out var hashesByPath) || hashesByPath.Count == 0)
+        {
+            return (UnmatchedReason.PathNotFound, null);
+        }
+
+        // Путь есть. Всё, что не сматчилось по (hash, path) и по hash — hash-differs.
+        var firstArchive = hashesByPath.Values.FirstOrDefault();
+        return (UnmatchedReason.HashDiffers, firstArchive);
+    }
+
+    private static bool IsRootMetaIni(string relativePath)
+        => string.Equals(relativePath, MetaIniFileName, StringComparison.OrdinalIgnoreCase);
 
     // ------------------------------------------------------------------
     //  Типы
@@ -376,20 +463,27 @@ public sealed class MatchStep : IStep<MatchStep.Input, MatchResult>
         public required long Size { get; init; }
     }
 
-    private enum InlineReason
+    private sealed record ArchiveIndexes(
+        Dictionary<(XxHash64Value, string), IndexEntry> ByHashPath,
+        Dictionary<XxHash64Value, List<IndexEntry>> ByHash,
+        Dictionary<string, Dictionary<XxHash64Value, string>> ByPath);
+
+    private enum MatchKind
+    {
+        None,
+        Exact,
+        ByHash,
+    }
+
+    private enum UnmatchedReason
     {
         PathNotFound,
         HashDiffers,
     }
 
-    private readonly record struct InlineRecord(
-        string ModName,
-        string RelativePath,
-        XxHash64Value Hash);
-
-    private readonly record struct ResolvedInline(
-        InlineRecord Record,
-        InlineReason Reason,
+    private readonly record struct ResolvedUnmatched(
+        UnmatchedFile Record,
+        UnmatchedReason Reason,
         string? ArchiveId);
 
     public sealed class Input
@@ -398,5 +492,6 @@ public sealed class MatchStep : IStep<MatchStep.Input, MatchResult>
         public required ModScanResult ModScan { get; init; }
         public required string DownloadsPath { get; init; }
         public required string ModsPath { get; init; }
+        public required string FirelinkOutputPath { get; init; }
     }
 }

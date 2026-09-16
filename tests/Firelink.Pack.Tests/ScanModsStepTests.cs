@@ -51,6 +51,7 @@ public class ScanModsStepTests : IDisposable
         ModsPath = _modsDir,
         ProfilesPath = Path.Combine(_tempDir, "profiles"),
         StockGamePath = Path.Combine(_tempDir, "Stock Game"),
+        FirelinkOutputPath = Path.Combine(_tempDir, "__Firelink_Output"),
         Modlist = modlist,
         Plugins = new PluginsFile { Entries = Array.Empty<PluginEntry>() },
         Loadorder = new LoadorderFile { Plugins = Array.Empty<string>() },
@@ -114,7 +115,6 @@ public class ScanModsStepTests : IDisposable
     [Fact]
     public async Task Execute_MissingModDirectory_Throws()
     {
-        // Мод включён, но папки нет
         var modlist = Modlist(("NonExistentMod", true));
 
         var act = async () => await _step.ExecuteAsync(MakeInput(modlist), CancellationToken.None);
@@ -138,8 +138,6 @@ public class ScanModsStepTests : IDisposable
     [Fact]
     public async Task Execute_HashesAreCorrect()
     {
-        // Известный контент — знаем, какой будет хеш для пустого файла.
-        // xxHash64 от пустой строки = 0xef46db3751d8e999 (значение seed=0)
         WriteMod("Mod", ("empty.bin", ""));
 
         var modlist = Modlist(("Mod", true));
@@ -147,8 +145,6 @@ public class ScanModsStepTests : IDisposable
         var result = await _step.ExecuteAsync(MakeInput(modlist), CancellationToken.None);
 
         var file = result.Mods["Mod"].Single();
-        // Не проверяем конкретное значение (может отличаться версией System.IO.Hashing),
-        // но проверяем, что хеш посчитан и не нулевой
         file.Hash.Value.Should().NotBe(0);
         file.Size.Should().Be(0);
     }
@@ -202,7 +198,6 @@ public class ScanModsStepTests : IDisposable
     [Fact]
     public async Task Execute_HashCacheUsedAcrossMods()
     {
-        // Одинаковый контент в двух модах — второй должен взять хеш из кеша.
         WriteMod("A", ("shared.txt", "same content"));
         WriteMod("B", ("shared.txt", "same content"));
 
@@ -214,8 +209,6 @@ public class ScanModsStepTests : IDisposable
         var hashB = result.Mods["B"].Single().Hash;
 
         hashA.Should().Be(hashB);
-        // Файлы разные — пути разные, значит в кеше 2 записи.
-        // (Кеш работает по пути файла, а не по контенту.)
         _cache.Count.Should().Be(2);
     }
 }
