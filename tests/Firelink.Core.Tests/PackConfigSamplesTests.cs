@@ -32,7 +32,7 @@ public class PackConfigSamplesTests
         config.Meta.Name.Should().Be("Minimal Pack");
         config.Instance.Path.Should().Be("Minimal Pack");
         config.Mo2.Profile.Should().Be("Default");
-        config.Mo2.Source.Should().BeOfType<GitHubSourceRef>();
+        config.Mo2.Source.Should().BeOfType<MirrorSourceRef>();
 
         var result = PackConfigValidator.Validate(config);
         result.IsValid.Should().BeTrue(

@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Firelink.Core.Models.Manifest;
@@ -10,6 +10,7 @@ public static class ManifestJson
         WriteIndented = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        Converters = { new UtcDateTimeOffsetJsonConverter() },
     };
 
     public static string Serialize(ModlistManifest manifest)
@@ -26,9 +27,28 @@ public static class ManifestJson
                ?? throw new JsonException("Manifest is null");
     }
 
+    /// <summary>
+    /// Синхронная версия LoadAsync. Для verify.
+    /// </summary>
+    public static ModlistManifest Load(string path)
+    {
+        using var fs = File.OpenRead(path);
+        return JsonSerializer.Deserialize<ModlistManifest>(fs, Options)
+               ?? throw new JsonException("Manifest is null");
+    }
+
     public static async Task SaveAsync(string path, ModlistManifest manifest, CancellationToken ct)
     {
         await using var fs = File.Create(path);
         await JsonSerializer.SerializeAsync(fs, manifest, Options, ct);
+    }
+
+    /// <summary>
+    /// Синхронная версия SaveAsync. Для тестов.
+    /// </summary>
+    public static void Save(string path, ModlistManifest manifest)
+    {
+        using var fs = File.Create(path);
+        JsonSerializer.Serialize(fs, manifest, Options);
     }
 }

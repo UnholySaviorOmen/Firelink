@@ -11,6 +11,16 @@ public static class PluginsWriter
 {
     public static void WriteFile(string path, PluginsFile file)
     {
+        var content = Serialize(file);
+        File.WriteAllText(
+            path, content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+    }
+
+    /// <summary>
+    /// Сериализует содержимое plugins.txt в строку (для verify).
+    /// </summary>
+    public static string Serialize(PluginsFile file)
+    {
         var sb = new StringBuilder();
 
         // MO2 сохраняет заголовки. Не критично, но для совместимости — пишем.
@@ -24,6 +34,6 @@ public static class PluginsWriter
             sb.Append("\r\n");
         }
 
-        File.WriteAllText(path, sb.ToString(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+        return sb.ToString();
     }
 }

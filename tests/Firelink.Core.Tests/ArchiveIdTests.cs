@@ -59,30 +59,4 @@ public class ArchiveIdTests
         var act = () => ArchiveId.FromLocal("");
         act.Should().Throw<ArgumentException>();
     }
-
-    [Fact]
-    public void FromGitHub_FormatsCorrectly()
-    {
-        var id = ArchiveId.FromGitHub(
-            "ModOrganizer2",
-            "modorganizer",
-            "v2.5.2",
-            "Mod.Organizer-2.5.2.7z");
-
-        id.Should().Be("github_modorganizer2_modorganizer_v2-5-2_mod-organizer-2-5-2");
-    }
-
-    [Fact]
-    public void FromGitHub_EmptyOwner_Throws()
-    {
-        var act = () => ArchiveId.FromGitHub("", "repo", "tag", "asset.7z");
-        act.Should().Throw<ArgumentException>();
-    }
-
-    [Fact]
-    public void FromGitHub_EmptyAsset_Throws()
-    {
-        var act = () => ArchiveId.FromGitHub("owner", "repo", "tag", "");
-        act.Should().Throw<ArgumentException>();
-    }
 }

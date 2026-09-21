@@ -64,7 +64,7 @@ public class ScanModsStepTests : IDisposable
     };
 
     [Fact]
-    public async Task Execute_OnlyEnabledMods_AreScanned()
+    public async Task Execute_AllMods_AreScanned()
     {
         WriteMod("Enabled", ("file.txt", "hello"));
         WriteMod("Disabled", ("file.txt", "world"));
@@ -75,9 +75,9 @@ public class ScanModsStepTests : IDisposable
 
         var result = await _step.ExecuteAsync(MakeInput(modlist), CancellationToken.None);
 
-        result.Mods.Should().HaveCount(1);
+        result.Mods.Should().HaveCount(2);
         result.Mods.Should().ContainKey("Enabled");
-        result.Mods.Should().NotContainKey("Disabled");
+        result.Mods.Should().ContainKey("Disabled");
     }
 
     [Fact]
@@ -97,6 +97,48 @@ public class ScanModsStepTests : IDisposable
     }
 
     [Fact]
+    public async Task Execute_EnabledModMissingDirectory_Throws()
+    {
+        var modlist = Modlist(("MissingEnabled", true));
+
+        var act = async () => await _step.ExecuteAsync(MakeInput(modlist), CancellationToken.None);
+        await act.Should().ThrowAsync<DirectoryNotFoundException>()
+            .WithMessage("*MissingEnabled*");
+    }
+
+    [Fact]
+    public async Task Execute_DisabledModMissingDirectory_SkippedGracefully()
+    {
+        WriteMod("Present", ("f.txt", "x"));
+
+        var modlist = Modlist(
+            ("Present", true),
+            ("MissingDisabled", false));
+
+        var result = await _step.ExecuteAsync(MakeInput(modlist), CancellationToken.None);
+
+        result.Mods.Should().HaveCount(1);
+        result.Mods.Should().ContainKey("Present");
+        result.Mods.Should().NotContainKey("MissingDisabled");
+    }
+
+    [Fact]
+    public async Task Execute_SeparatorWithoutFolder_SkippedSilently()
+    {
+        WriteMod("RealMod", ("f.txt", "x"));
+
+        var modlist = Modlist(
+            ("RealMod", true),
+            ("# \U0001F4C2 Мои моды_separator", false));
+
+        var result = await _step.ExecuteAsync(MakeInput(modlist), CancellationToken.None);
+
+        result.Mods.Should().HaveCount(1);
+        result.Mods.Should().ContainKey("RealMod");
+        result.Mods.Should().NotContainKey("# \U0001F4C2 Мои моды_separator");
+    }
+
+    [Fact]
     public async Task Execute_NestedFiles_HaveForwardSlashPaths()
     {
         WriteMod("Mod", ("interface/iconmenu.swf", "a"));
@@ -110,16 +152,6 @@ public class ScanModsStepTests : IDisposable
         files.Should().HaveCount(2);
         files.Should().Contain(f => f.RelativePath == "interface/iconmenu.swf");
         files.Should().Contain(f => f.RelativePath == "scripts/deep/nested/file.pex");
-    }
-
-    [Fact]
-    public async Task Execute_MissingModDirectory_Throws()
-    {
-        var modlist = Modlist(("NonExistentMod", true));
-
-        var act = async () => await _step.ExecuteAsync(MakeInput(modlist), CancellationToken.None);
-        await act.Should().ThrowAsync<DirectoryNotFoundException>()
-            .WithMessage("*NonExistentMod*");
     }
 
     [Fact]

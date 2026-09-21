@@ -1,359 +1,248 @@
 # Firelink — состояние проекта
 
-**Обновлено:** 2026-09-16
-**Всего тестов:** 288, 0 failed
-**Текущий блок:** ждём старта блока 11
-**Последний закрытый блок:** 10.7 (диагностика inline, `__Firelink_Output`,
-structured meta.ini)
+**Обновлено:** 2026-09-21
+**Всего тестов:** 593, 0 failed
+**Текущий блок:** ничего (все хвосты закрыты)
+**Последний закрытый блок:** 12.13.10 — error-msg для пробелов без кавычек
+**Следующий блок:** 12.8 — NexusDownloader
 
 ---
 
 ## Что это
 
-Firelink — инструмент для создания и установки воспроизводимых сборок модов
-для Mod Organizer 2. Два CLI-приложения: `Firelink.Pack` (автор) и
+Firelink — инструмент для создания и установки воспроизводимых сборок
+модов для Mod Organizer 2. Два CLI: `Firelink.Pack` (автор) и
 `Firelink.Install` (пользователь). Манифест `modlist.json` — единственный
 источник правды. Файлы восстанавливаются по хешам `xxHash64`.
 
-Подробности — в `DOC.md` (v3.2).
+Подробности — в `DOC.md` (v3.9). План — в `HANDOFF.md`.
 
 ---
 
-## Структура репозитория (актуально после 10.7)
+## Статус MVP
+
+**MVP работает end-to-end:**
+
+- Прогон `firelink-install install` на `C:\Firelink\TestInstance\`
+  (19.09.2026, до 12.13.x).
+- 82 мода разложены, 82 meta.ini записаны, профиль сгенерирован.
+- **12.11.1–12.11.3:** Verify (Pipeline + Tests + CLI).
+- **12.11.5:** `meta.ini` в verify (семантическое сравнение).
+- **12.11.6:** extensions/extras в verify.
+- **12.11.7:** Ctrl+C в CLI (Normalized cancellation + `CancellationHelper`).
+- **12.11.7.1:** `ArchiveMatcher.Build` → `BuildAsync`, отмена
+  пробрасывается.
+- **12.12:** integration pack → install.
+- **12.13.1:** ArchiveMatcher + фикс Unmatched root + InternalsVisibleTo.
+- **12.13.2:** ScanExtensionsStep + ScanExtrasStep + EntryScanResult.
+- **12.13.3:** MatchExtensionsStep + MatchExtrasStep + MatchEntriesResult.
+- **12.13.4:** BuildManifestStep + PackPipeline + DI + write unmatched.
+- **12.13.5:** integration test pack → install с extensions/extras.
+- **12.13.6:** унификация extract-а `MatchStep` через `ArchiveMatcher`.
+- **12.13.7 + 12.13.8:** таблицы CLI включают extensions/extras.
+- **12.13.10:** error-msg для пробелов без кавычек.
+- **13.1:** общий helper скачивания `ArchiveDownloadHelper`.
+
+**Реальный прогон на `OmenRim 7` после 12.13.6 (2026-09-20):**
+- Pack: 82 мода, 4236 matched-директив, 69 архивов.
+  - extensions (`plugins/curationclub`) — 49/49 matched.
+  - extras (`skse64_loader.exe`, `skse64_1_7_104.dll`) — 2/2 matched.
+  - 6 unmatched (runtime `.log`/`.ini` от SKSE) → `__Firelink_Output`.
+- Install: 82 мода, 82 meta.ini, 1 extension written, 2 extras written.
+- Verify: **4338 passed, 0 failed**.
+- `ArchiveMatcher` — **один** extract на 70 архивов (12.13.6).
+
+---
+
+## Структура репозитория (после 12.13.10 + 13.1 + 12.11.7)
 C:\Code\Firelink
 Firelink.slnx
 Directory.Build.props
-Directory.Build.targets ← глобальное копирование Assets/7z
-Directory.Packages.props ← SharpCompress УДАЛЁН
-DOC.md ← v3.2
+Directory.Build.targets
+Directory.Packages.props
+DOC.md ← v3.9
 PROJECT-STATE.md
 HANDOFF.md
+repo-dump.md
 samples/
 firelink-pack.minimal.json
 firelink-pack.full.json
 firelink-pack.invalid-name.json
-firelink-pack.invalid-version.json
 firelink-pack.invalid-path.json
+firelink-pack.invalid-version.json
 src/
 Firelink.Core/
-Hashing/
-XxHash64Value.cs
-XxHash64ValueJsonConverter.cs
+Abstractions/ (IStep, IArchiveDownloader)
+CancellationHelper.cs ← блок 6
+Hashing/ (XxHash64Value, XxHash64ValueJsonConverter)
 Models/Manifest/
-ArchiveEntry.cs
-ModlistManifest.cs
-ManifestJson.cs
-Directives/ (Directive + 4 наследника)
-Sources/ (ArchiveSourceRef + 3 наследника)
-Models/Mo2/
-ModlistEntry.cs / ModlistFile.cs
-PluginEntry.cs / PluginsFile.cs
-LoadorderFile.cs
-Models/Pack/
-PackConfig.cs / PackMeta.cs / PackInstance.cs
-PackMo2.cs / PackStockGame.cs
-PackArchiveSource.cs / PackConfigJson.cs
-ArchiveIndex.cs / UnresolvedArchive.cs
-InstanceSnapshot.cs ← + FirelinkOutputPath (10.7)
-ModScanResult.cs / ScannedFile.cs
-MatchResult.cs ← переписан (10.7)
-UnmatchedFile.cs ← НОВЫЙ (10.7)
-ModMeta.cs ← НОВЫЙ (10.7)
-InlineFileContent.cs ← не используется (10.7)
-OrphanFile.cs ← не используется (10.7)
-Identity/
-Slug.cs / ArchiveId.cs
-Validation/
-ValidationResult.cs
-NameValidator.cs / SemverValidator.cs
-RelativePathValidator.cs / InstancePathValidator.cs
-PackConfigValidator.cs
-Archives/
-ArchiveExtensions.cs / FileHashCache.cs
-Extraction/IArchiveExtractor.cs
-Extraction/SevenZipExtractor.cs
-Extraction/TempWorkspace.cs
-Abstractions/IStep.cs
-Assets/7z/7z.exe, 7z.dll, License.txt
+ArchiveEntry, ModlistManifest, ManifestJson (Load/Save sync),
+ManifestSchema, UtcDateTimeOffsetJsonConverter, ModMeta,
+Directives/ (Directive, FromArchiveDirective,
+CreateDirectoryDirective, DeleteDirective),
+Sources/ (ArchiveSourceRef, NexusSourceRef, MirrorSourceRef)
+Models/Mo2/ (ModlistEntry, ModlistFile, PluginEntry, PluginsFile,
+LoadorderFile)
+Models/Pack/ (PackConfig, PackMeta, PackInstance, PackMo2,
+PackStockGame, PackArchiveSource, PackConfigJson,
+InstanceSnapshot, MatchResult, ModScanResult,
+UnmatchedFile, UnmatchedEntry, EntryScanResult,
+ArchiveIndex, MatchEntriesResult)
+Identity/ (Slug, ArchiveId)
+Validation/ (ValidationResult, NameValidator, SemverValidator,
+RelativePathValidator, InstancePathValidator,
+PackConfigValidator)
+Archives/ (ArchiveExtensions, FileHashCache,
+ArchiveDownloadHelper, ← блок 5
+Extraction/ (IArchiveExtractor, SevenZipExtractor,
+TempWorkspace))
+Assets/7z/ (7z.exe, 7z.dll, License.txt)
 Firelink.Platform.MO2/
 Models/MetaFile.cs
-Readers/
-ModlistReader.cs / PluginsReader.cs
-LoadorderReader.cs / MetaReader.cs
-MetaIniReader.cs ← НОВЫЙ (10.7)
-Writers/
-ModlistWriter.cs / PluginsWriter.cs / LoadorderWriter.cs
+Readers/ (ModlistReader, PluginsReader, LoadorderReader,
+MetaReader, MetaIniReader)
+Writers/ (ModlistWriter, PluginsWriter, LoadorderWriter,
+MetaIniWriter; + Serialize)
 Firelink.Platform.Nexus/ (пусто)
-Firelink.Platform.GitHub/ (пусто)
 Firelink.Pack/
-Commands/
-PackCommand.cs ← обновлён (10.7)
-HashCommand.cs
-DoctorCommand.cs
-Settings/
-PackSettings.cs / DoctorSettings.cs
+Commands/ (PackCommand, HashCommand, DoctorCommand)
+Settings/ (PackSettings, DoctorSettings)
 Infrastructure/TypeRegistrar.cs
-Steps/
-ReadConfigStep.cs
-ReadInstanceStep.cs ← + FirelinkOutputPath (10.7)
-IndexArchivesStep.cs
-ScanModsStep.cs
-MatchStep.cs ← переписан (10.7)
-PackPipeline.cs ← обновлён (10.7)
-Program.cs
+Matching/ (ArchiveMatcher, ArchiveIndexes, Mo2ArchiveBuilder)
+Steps/ (ReadConfigStep, ReadInstanceStep, IndexArchivesStep,
+ScanModsStep, ScanExtensionsStep, ScanExtrasStep,
+MatchStep, MatchExtensionsStep, MatchExtrasStep,
+BuildManifestStep, ValidateManifestStep, WriteManifestStep)
+PackPipeline.cs
+Program.cs (с PropagateExceptions + CommandParseException catch)
 Firelink.Install/
-Commands/ (InstallCommand, VerifyCommand, DoctorCommand — заглушки)
+Commands/ (InstallCommand, VerifyCommand, DoctorCommand)
 Settings/ (InstallSettings, VerifySettings, DoctorSettings)
 Infrastructure/TypeRegistrar.cs
-Program.cs
+Downloaders/ (MirrorDownloader, DownloaderRegistry)
+Steps/ (ReadManifestStep, ResolveTargetStep, ValidateTargetStep,
+BootstrapInstanceStep, BootstrapMo2Step, SyncArchivesStep,
+ExecuteExtensionsStep, ExecuteExtrasStep, SyncModsStep,
+GenerateMetaIniStep, RegenerateProfileStep)
+Verify/ (VerifyContext, VerifyCheckResult, VerifyReport, VerifyPipeline)
+InstallPipeline.cs
+Program.cs (с PropagateExceptions + CommandParseException catch)
 tests/
 Firelink.Core.Tests/
-ManifestRoundtripTests.cs
-SlugTests.cs / ArchiveIdTests.cs
-PackConfigJsonTests.cs
-NameValidatorTests.cs / SemverValidatorTests.cs
-RelativePathValidatorTests.cs / InstancePathValidatorTests.cs
-PackConfigValidatorTests.cs / PackConfigSamplesTests.cs
-XxHash64ValueParseTests.cs
-SevenZipExtractorTests.cs / TempWorkspaceTests.cs
 Firelink.Platform.MO2.Tests/
-ModlistReaderTests.cs / PluginsReaderTests.cs
-LoadorderReaderTests.cs / RoundtripTests.cs
-MetaReaderTests.cs
-MetaIniReaderTests.cs ← НОВЫЙ (10.7)
 Firelink.Pack.Tests/
-IndexArchivesStepTests.cs
-ReadConfigStepTests.cs
-ReadInstanceStepTests.cs
-ScanModsStepTests.cs ← +FirelinkOutputPath в MakeSnapshot (10.7)
-MatchStepTests.cs ← переписан (10.7)
+ArchiveMatcherTests.cs
+ScanExtensionsStepTests.cs
+ScanExtrasStepTests.cs
+MatchExtensionsStepTests.cs
+MatchExtrasStepTests.cs
+Firelink.Install.Tests/
+Verify/ (VerifyPipelineTests)
+Firelink.Integration.Tests/
+PackInstallRoundtripTests.cs
+PackInstallExtensionsExtrasTests.cs
 
 text
 
 Реальные инстансы:
 
-- `C:\Firelink\OmenRim 7\`
-  - 82 мода в modlist.txt (40 включённых)
-  - 6 плагинов включённых, 86 в loadorder
-  - 68 архивов в downloads/: 36 .zip, 31 .7z, 1 .rar
-  - 67 .meta-файлов
-  - 135 файлов в downloads/ (~1.2 ГБ)
-  - 1131 файл в 40 включённых модах
-  - `__Firelink_Output/mods/` — 6 файлов после 10.7
-- Большой инстанс — 4370 модов в modlist.txt
-  - downloads/ ≈ 200–300 ГБ
-  - средний архив ≤ 200 МБ, гиганты 5–20 ГБ
+- `C:\Firelink\TestInstance\` — MVP прогон (до 12.13.x), verify OK.
+- `C:\Firelink\TestInstance2\` — после 12.13.6, 82 мода,
+  extensions/extras, verify 0 failed.
+- `C:\Firelink\OmenRim 7\` — тестовый оригинал.
+- Большой инстанс — 4370 модов (прогон E1 отменён).
 
 ---
 
-## Компоненты
-
-### Firelink.Core
-
-**Hashing:** `XxHash64Value` (strict Parse — 16 hex, без пробелов),
-`XxHash64ValueJsonConverter`.
-
-**Models/Manifest:** `ArchiveEntry`, `ModlistManifest`, `ManifestJson`,
-`Directive` + 4 наследника, `ArchiveSourceRef` + 3 наследника.
-
-**Models/Mo2:** `ModlistEntry`, `ModlistFile`, `PluginEntry`, `PluginsFile`,
-`LoadorderFile`.
-
-**Models/Pack:** `PackConfig`, `PackMeta`, `PackInstance`, `PackMo2`,
-`PackStockGame`, `PackArchiveSource`, `PackConfigJson`, `ArchiveIndex`,
-`UnresolvedArchive`, `InstanceSnapshot` (с `FirelinkOutputPath`),
-`ModScanResult`, `ScannedFile`, `MatchResult` (новый), `UnmatchedFile` (новый),
-`ModMeta` (новый), `InlineFileContent` (не используется),
-`OrphanFile` (не используется).
-
-**Identity:** `Slug`, `ArchiveId`.
-
-**Validation:** `ValidationResult`, `NameValidator`, `SemverValidator`,
-`RelativePathValidator`, `InstancePathValidator`, `PackConfigValidator`.
-
-**Archives:** `ArchiveExtensions`, `FileHashCache`,
-`Extraction/IArchiveExtractor`, `Extraction/SevenZipExtractor`,
-`Extraction/TempWorkspace`.
-
-**Abstractions:** `IStep<TInput, TOutput>`.
-
-**Assets:** `Assets/7z/7z.exe`, `7z.dll`, `License.txt`.
-
-### Firelink.Platform.MO2
-
-**Models:** `MetaFile`.
-
-**Readers:** `ModlistReader`, `PluginsReader`, `LoadorderReader`,
-`MetaReader` (архивный `downloads/*.meta`), **`MetaIniReader`** (новый,
-`mods/<Name>/meta.ini`).
-
-**Writers:** `ModlistWriter`, `PluginsWriter`, `LoadorderWriter`.
-
-### Firelink.Pack
-
-**Steps:** `ReadConfigStep`, `ReadInstanceStep`, `IndexArchivesStep`,
-`ScanModsStep`, **`MatchStep`** (переписан).
-
-**PackPipeline** — оркестратор.
-
-**CLI:** `pack`, `hash`, `doctor`.
-
-### Firelink.Install
-
-**CLI:** `install`, `verify`, `doctor` — заглушки.
-
----
-
-## Пайплайн packer-а (текущий)
-ReadConfigStep
-↓ PackConfig
-ReadInstanceStep
-↓ InstanceSnapshot (82 mods, 6 plugins, 86 loadorder, +FirelinkOutputPath)
-IndexArchivesStep
-↓ ArchiveIndex (68 resolved, 0 unresolved)
-ScanModsStep
-↓ ModScanResult (40 mods, 1131 files)
-MatchStep
-↓ MatchResult (1085 directives, 6 unmatched, 40 meta.ini)
-[STOP — pipeline не завершён]
+## Пайплайн packer-а (полный)
+ReadConfigStep → ReadInstanceStep → IndexArchivesStep → ScanModsStep →
+ScanExtensionsStep → ScanExtrasStep →
+[build ArchiveMatcher via BuildAsync] →
+MatchStep → MatchExtensionsStep → MatchExtrasStep →
+[write unmatched extensions/extras] →
+BuildManifestStep → ValidateManifestStep → WriteManifestStep
 
 text
 
-**Что нужно добавить:**
-- `BuildManifestStep` → `ModlistManifest`.
-- `ValidateManifestStep` → проверка ссылок.
-- `WriteManifestStep` → `modlist.json` на диск.
-
 ---
 
-## Результаты последнего прогона `pack` на `OmenRim 7`
-Config OK: OmenRim 7 v0.1.0 (skyrimspecialedition)
-Instance snapshot: 82 mods, 6 plugins, 86 load order entries
-Indexing 68 archives in ...downloads
-Ignoring non-Nexus .meta for 'Effect 11-...zip' → archiveSources
-Indexed: 68 resolved, 0 unresolved
-ScanModsStep: scanning 40 enabled mods (out of 82)
-ScanModsStep: 40 mods, 1131 files total
-Extracting archive 68/68 (16 секунд через 7z.exe)
-Archive index built: 4803 unique hashes, 6524 unique paths across 68 archives
-Match complete: 1131 files, 142 matched (exact), 943 matched (by hash), 6 unmatched, 40 meta.ini
-Unmatched files written to __Firelink_Output: 6
-Unmatched diagnostics: 6 files across 5 mods
-by reason: path-not-found = 4, hash-differs = 2
+## Пайплайн installer-а
+ReadManifestStep → ResolveTargetStep → ValidateTargetStep →
+BootstrapInstanceStep → BootstrapMo2Step → SyncArchivesStep →
+ExecuteExtensionsStep → ExecuteExtrasStep → SyncModsStep →
+GenerateMetaIniStep → RegenerateProfileStep
 
 text
 
-Таблица:
-╭───────────────────────┬───────────────────────╮
-│ Field │ Value │
-├───────────────────────┼───────────────────────┤
-│ Name │ OmenRim 7 │
-│ Version │ 0.1.0 │
-│ Game │ skyrimspecialedition │
-│ Instance │ C:\Firelink\OmenRim 7 │
-│ Mods (all) │ 82 │
-│ Plugins │ 6 │
-│ Loadorder │ 86 │
-│ Archives (resolved) │ 68 │
-│ Archives (unresolved) │ 0 │
-│ Mods (scanned) │ 40 │
-│ Files scanned │ 1131 │
-│ Directives │ 1085 │
-│ → FromArchive │ 1085 │
-│ → Inline │ 0 │
-│ Unmatched files │ 6 │
-│ meta.ini │ 40 │
-╰───────────────────────┴───────────────────────╯
-
-text
-
-**Ключевые числа:**
-- **142 matched (exact)** — точное совпадение `(hash, path)`.
-- **943 matched (by hash)** — совпадение хеша, путь отличается.
-  Крупная цифра (83%), объясняется тем, что в архивах путь может
-  отличаться от пути после установки MO2 (FOMOD, разная структура корня).
-  Содержимое идентично — семантических потерь нет.
-- **6 unmatched** — то, что не восстановимо из архивов.
-- **40 meta.ini** — по числу сканированных модов.
-
-**Что лежит в `__Firelink_Output/mods/` после прогона:**
-Actor Limit Fix/SKSE/Plugins/ActorLimitFix.log
-Bug Fixes SSE/SKSE/Plugins/BugFixesSSE.log
-Enhanced Invisibility/SKSE/Plugins/po3_EnhancedInvisibility.ini
-Enhanced Reanimation/SKSE/Plugins/po3_EnhancedReanimation.ini
-SKSE Output/SKSE/Plugins/po3_SpellPerkItemDistributor.ini
-SKSE Output/SKSE/Plugins/po3_Tweaks.ini
-
-text
-
-Из 6:
-- 2 runtime-лога (`ActorLimitFix.log`, `BugFixesSSE.log`) — hash-differs,
-  автор выкинет.
-- 4 авторских `.ini` (po3_*) — path-not-found, автор оставит и сделает
-  патч-архив.
+**CLI:** `firelink-install install <manifest> [--target <dir>]`.
+**CLI:** `firelink-install verify <target> [--verbose]`.
 
 ---
 
-## Ключевые метрики инстанса `OmenRim 7`
+## Прогоны на реальных инстансах
 
-| Метрика | Значение |
-|---|---|
-| Строк в `modlist.txt` | 82 |
-| Включённых модов (`+`) | 40 |
-| Отключённых (`-`) | 42 |
-| `[NoDelete]` модов | 0 |
-| Архивов в `downloads/` | 68 |
-| `.meta` файлов | 67 |
-| Архивов без валидного `.meta` | 2 (Effect 11, NAT.ENB) |
-| Файлов в `downloads/` | 135 |
-| Размер `downloads/` | ~1.2 ГБ |
-| Файлов в 40 включённых модах | 1131 |
-| Уникальных хешей в архивах | 4803 |
-| Уникальных путей в архивах | 6524 |
-| Matched exact | 142 |
-| Matched by hash | 943 |
-| Unmatched | 6 |
-| `meta.ini` | 40 |
+**`C:\Firelink\TestInstance\` (19.09.2026, до 12.13.x):**
+
+- Install: 82 мода, 68 архивов, 82 meta.ini, профиль `Default`.
+- Verify: 4337 passed (здоровый), 4310/2 (сломанный), install
+  восстанавливает.
+
+**`C:\Firelink\TestInstance2\` (20.09.2026, после 12.13.6, `OmenRim 7`):**
+
+- Pack: 82 мода, 4236 matched, 69 архивов, 49/49 extensions, 2/2 extras.
+- Install: 82 мода, 1 extension written, 2 extras written, 82 meta.ini.
+- Verify: **4338 passed, 0 failed**.
 
 ---
 
-## Следующие блоки
+## CLI: сценарии и exit codes
 
-1. **Блок 11:** `BuildManifestStep`, `ValidateManifestStep`, `WriteManifestStep`.
-2. **Блок 12:** installer.
+| Сценарий | Вывод | Exit code |
+|---|---|---|
+| `pack` OK | таблица, `Done.` | 0 |
+| `pack` с пробелами без кавычек | `CLI error` + hint | 2 |
+| `pack` без `<config>` | `ERROR: Command 'pack' is missing required argument 'config'.` | 2 |
+| `pack` + Ctrl+C | `Cancelled.` | 130 |
+| `install` OK | таблица, `Done.` | 0 |
+| `install` + Ctrl+C | `Cancelled.` | 130 |
+| `verify` OK | `All checks passed.` | 0 |
+| `verify` с падениями | summary + failures | 1 |
 
-**Вопросы перед Блоком 11 (подтвердить перед кодом):**
-1. `order` модов = индекс в `modlist.txt` (0, 1, 2...).
-2. Все плагины сохраняем, включая `disabled`.
-3. `mo2.archive` = заглушка (`id`, `hash=0`, `size=0`, `sources=[]`).
-4. `extensions = []`, `extras = []` — пока пусто.
-5. `mods[].meta` пишется **со всеми полями `ModMeta`** (включая
-   `gameName`/`gameId`/`repository`/`url`) — манифест самодостаточный,
-   без опоры на Nexus API.
-6. `inlineFiles` в манифесте — **не заполняем** в MVP.
+---
+
+## Что в работе
+
+Ничего. Все хвосты MVP закрыты.
+
+---
+
+## Следующий блок
+
+**12.8 — NexusDownloader.** Подробное описание — в `HANDOFF.md`,
+раздел «План работы».
 
 ---
 
 ## Технический долг
 
 - Persist кеша хешей в SQLite (v0.2.0).
-- Глобальный реестр `archives.db` — после Блока 11.
-- Nexus API — v0.2.0.
-- Прогресс-бар Spectre — после Блока 11.
-- `Firelink.Platform.Nexus` и `Firelink.Platform.GitHub` пусты.
-- `PackCommand` показывает устаревшую колонку `Inline` (всегда 0).
-- `InlineFileContent` / `OrphanFile` не используются — решить судьбу.
-- `943 matched by hash` — понять природу расхождений путей (не срочно).
-- Механизм патчей для inline-файлов — v0.2.0 (использует `__Firelink_Output`).
-- `ScanExtensionsStep`/`ScanExtrasStep` не написаны.
-- `mo2.archive` в манифесте — заглушка, нужно реализовать правильную загрузку.
+- Глобальный реестр `archives.db` — v0.2.0.
+- Nexus API — **12.8**.
+- Прогресс-бар Spectre — v0.2.0.
+- `Firelink.Platform.Nexus` пуст — до 12.8.
+- `SyncModsStep` поддерживает только `FromArchive`.
+- `ConfigureMo2Step` — не делаем.
+- E1 (прогон на большом инстансе) — отменён по решению.
 
 ---
 
 ## Окружение
 
 - Windows 10/11.
-- .NET 8 SDK (SDK 10 тоже установлен, проекты таргетят `net8.0`).
+- .NET 8 SDK (SDK 10 тоже).
 - Visual Studio 2022.
-- Тестовый инстанс `C:\Firelink\OmenRim 7\`.
-- Большой инстанс — 4370 модов.
+- `C:\Firelink\TestInstance\` — MVP прогон (до 12.13.x).
+- `C:\Firelink\TestInstance2\` — после 12.13.6, extensions/extras,
+  verify 0 failed.
+- `C:\Firelink\OmenRim 7\` — тестовый оригинал.
+- Большой инстанс — 4370 модов (не используется).

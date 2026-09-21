@@ -10,6 +10,16 @@ public static class LoadorderWriter
 
     public static void WriteFile(string path, LoadorderFile file)
     {
+        var content = Serialize(file);
+        File.WriteAllText(
+            path, content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+    }
+
+    /// <summary>
+    /// Сериализует содержимое loadorder.txt в строку (для verify).
+    /// </summary>
+    public static string Serialize(LoadorderFile file)
+    {
         var sb = new StringBuilder();
         sb.Append(Header).Append("\r\n");
         foreach (var plugin in file.Plugins)
@@ -17,6 +27,6 @@ public static class LoadorderWriter
             sb.Append(plugin).Append("\r\n");
         }
 
-        File.WriteAllText(path, sb.ToString(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+        return sb.ToString();
     }
 }

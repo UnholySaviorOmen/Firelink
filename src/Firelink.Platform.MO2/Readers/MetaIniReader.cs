@@ -1,5 +1,5 @@
 using System.Globalization;
-using Firelink.Core.Models.Pack;
+using Firelink.Core.Models.Manifest;
 
 namespace Firelink.Platform.MO2.Readers;
 
@@ -10,8 +10,18 @@ namespace Firelink.Platform.MO2.Readers;
 /// Читается только секция [General]. Секция [installedFiles] игнорируется:
 /// она содержит абсолютные пути автора и бесполезна при воспроизведении.
 ///
-/// Ключи case-sensitive (MO2 пишет modID, fileID, gameID — именно так).
+/// Ключи читаются case-insensitive: MO2 в разных версиях и разных модах
+/// пишет modID и modid, fileID и fileid, gameID и gameid. Парсер принимает
+/// оба варианта. При записи (MetaIniWriter) используется camelCase —
+/// официальный формат MO2.
+///
 /// Имя секции — case-insensitive ([General], [general], [GENERAL]).
+///
+/// Поля newestVersion, category, nexusFileStatus, installationFile,
+/// nexusDescription, hasCustomURL, lastNexusQuery, lastNexusUpdate,
+/// nexusLastModified, nexusCategory, converted, validated, color,
+/// endorsed, tracked — не читаются. MO2 сам их регенерирует при первом
+/// запуске (запрос к Nexus, timestamps).
 ///
 /// Если файла нет — TryRead возвращает null.
 /// Если файл есть, но секции [General] нет — возвращается ModMeta.Empty.
@@ -36,7 +46,6 @@ public static class MetaIniReader
         int? modId = null;
         int? fileId = null;
         string? version = null;
-        int? category = null;
         string? repository = null;
         string? url = null;
         string? comments = null;
@@ -55,7 +64,8 @@ public static class MetaIniReader
                 var close = line.IndexOf(']');
                 if (close < 0) continue;
                 var section = line[1..close].Trim();
-                inGeneral = section.Equals(SectionGeneral, StringComparison.OrdinalIgnoreCase);
+                inGeneral = section.Equals(
+                    SectionGeneral, StringComparison.OrdinalIgnoreCase);
                 continue;
             }
 
@@ -64,28 +74,25 @@ public static class MetaIniReader
             var eq = line.IndexOf('=');
             if (eq < 0) continue;
 
-            var key = line[..eq].Trim();
+            var key = line[..eq].Trim().ToLowerInvariant();
             var value = line[(eq + 1)..].Trim();
 
             switch (key)
             {
-                case "gameName" when gameName is null:
+                case "gamename" when gameName is null:
                     gameName = value;
                     break;
-                case "gameID" when gameId is null:
+                case "gameid" when gameId is null:
                     gameId = value;
                     break;
-                case "modID" when modId is null:
+                case "modid" when modId is null:
                     if (TryParseInt(value, out var mi)) modId = mi;
                     break;
-                case "fileID" when fileId is null:
+                case "fileid" when fileId is null:
                     if (TryParseInt(value, out var fi)) fileId = fi;
                     break;
                 case "version" when version is null:
                     version = value;
-                    break;
-                case "category" when category is null:
-                    if (TryParseInt(value, out var cat)) category = cat;
                     break;
                 case "repository" when repository is null:
                     repository = value;
@@ -109,7 +116,6 @@ public static class MetaIniReader
             ModId = modId,
             FileId = fileId,
             Version = version,
-            Category = category,
             Repository = repository,
             Url = url,
             Comments = comments,
@@ -118,7 +124,8 @@ public static class MetaIniReader
     }
 
     private static bool TryParseInt(string value, out int result)
-        => int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out result);
+        => int.TryParse(
+            value, NumberStyles.Integer, CultureInfo.InvariantCulture, out result);
 
     private static string Normalize(string raw)
     {

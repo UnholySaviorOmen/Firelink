@@ -1,0 +1,21 @@
+namespace Firelink.Core.Models.Pack;
+
+/// <summary>
+/// Файл, который не удалось восстановить из архивов.
+/// Packer выгружает такие файлы в __Firelink_Output с сохранением структуры,
+/// чтобы автор мог увидеть свои правки и решить, делать ли из них патч.
+///
+/// Используется для unmatched extensions и unmatched extras.
+/// Для unmatched модов используется UnmatchedFile (ModName вместо EntryName).
+///
+/// EntryName:
+///   - для extensions — нормализованный relative path из config.Mo2.Extensions[]
+///     (например, "plugins/fomod.dll", "tools/BethINI");
+///   - для extras — нормализованный relative path из config.StockGame.Extras[].
+///
+/// RelativePath — путь файла внутри корня (MO2/ или Stock Game/).
+/// </summary>
+public readonly record struct UnmatchedEntry(
+    string EntryName,
+    string RelativePath,
+    long Size);

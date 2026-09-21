@@ -1,4 +1,5 @@
 using Firelink.Core.Archives;
+using Firelink.Core.Models.Hashing;
 using Firelink.Core.Models.Manifest.Sources;
 using Firelink.Core.Models.Pack;
 using Firelink.Pack.Steps;
@@ -48,7 +49,11 @@ public class IndexArchivesStepTests : IDisposable
             Version = "2.5.2",
             Profile = "Default",
             Archive = "x.7z",
-            Source = new GitHubSourceRef { Repo = "a/b", Tag = "v1", Asset = "x.7z" },
+            Source = new MirrorSourceRef
+            {
+                Url = "https://example.com/x.7z",
+                Hash = new XxHash64Value(0xabc),
+            },
             Extensions = Array.Empty<string>(),
         },
         StockGame = new PackStockGame { Extras = Array.Empty<string>() },

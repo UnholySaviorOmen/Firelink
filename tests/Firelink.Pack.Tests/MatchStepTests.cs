@@ -4,9 +4,9 @@ using Firelink.Core.Archives;
 using Firelink.Core.Archives.Extraction;
 using Firelink.Core.Models.Hashing;
 using Firelink.Core.Models.Manifest;
-using Firelink.Core.Models.Manifest.Directives;
 using Firelink.Core.Models.Manifest.Sources;
 using Firelink.Core.Models.Pack;
+using Firelink.Pack.Matching;
 using Firelink.Pack.Steps;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -23,16 +23,15 @@ public class MatchStepTests : IDisposable
 
     public MatchStepTests()
     {
-        _tempDir = Path.Combine(Path.GetTempPath(), "firelink-match-" + Guid.NewGuid());
+        _tempDir = Path.Combine(
+            Path.GetTempPath(), "firelink-match-" + Guid.NewGuid());
         _downloadsDir = Path.Combine(_tempDir, "downloads");
         _modsDir = Path.Combine(_tempDir, "mods");
         _outputDir = Path.Combine(_tempDir, "__Firelink_Output");
         Directory.CreateDirectory(_downloadsDir);
         Directory.CreateDirectory(_modsDir);
 
-        var extractor = new SevenZipExtractor(
-            NullLogger<SevenZipExtractor>.Instance);
-        _step = new MatchStep(extractor, _hashCache, NullLogger<MatchStep>.Instance);
+        _step = new MatchStep(NullLogger<MatchStep>.Instance);
     }
 
     public void Dispose()
@@ -44,7 +43,9 @@ public class MatchStepTests : IDisposable
     //  Хелперы
     // ------------------------------------------------------------------
 
-    private string CreateZip(string name, params (string entryPath, byte[] content)[] files)
+    private string CreateZip(
+        string name,
+        params (string entryPath, byte[] content)[] files)
     {
         var zipPath = Path.Combine(_downloadsDir, name);
         using var fs = File.Create(zipPath);
@@ -74,14 +75,14 @@ public class MatchStepTests : IDisposable
 
     private bool OutputFileExists(string modName, string relativePath)
     {
-        var fullPath = Path.Combine(_outputDir, "mods", modName,
+        var fullPath = Path.Combine(_outputDir, "MO2", "mods", modName,
             relativePath.Replace('/', Path.DirectorySeparatorChar));
         return File.Exists(fullPath);
     }
 
     private byte[] ReadOutputFile(string modName, string relativePath)
     {
-        var fullPath = Path.Combine(_outputDir, "mods", modName,
+        var fullPath = Path.Combine(_outputDir, "MO2", "mods", modName,
             relativePath.Replace('/', Path.DirectorySeparatorChar));
         return File.ReadAllBytes(fullPath);
     }
@@ -101,25 +102,55 @@ public class MatchStepTests : IDisposable
             Hash = _hashCache.GetOrCompute(Path.Combine(_downloadsDir, name)),
             Sources = new ArchiveSourceRef[]
             {
-                new NexusSourceRef { ModId = 1, FileId = 1, Game = "skyrimspecialedition" },
+                new NexusSourceRef
+                {
+                    ModId = 1, FileId = 1, Game = "skyrimspecialedition",
+                },
             },
         };
 
+    private async Task<ArchiveMatcher> MakeMatcherAsync(
+        params ArchiveEntry[] entries)
+    {
+        var index = new ArchiveIndex
+        {
+            Resolved = entries,
+            Unresolved = Array.Empty<UnresolvedArchive>(),
+        };
+
+        var extractor = new SevenZipExtractor(
+            NullLogger<SevenZipExtractor>.Instance);
+
+        var matcher = new ArchiveMatcher(
+            index, _downloadsDir, extractor, _hashCache,
+            NullLogger<ArchiveMatcher>.Instance);
+
+        await matcher.BuildAsync(CancellationToken.None);
+
+        return matcher;
+    }
+
     private MatchStep.Input MakeInput(
-        ArchiveIndex archiveIndex,
+        ArchiveMatcher matcher,
         ModScanResult modScan) => new()
         {
-            ArchiveIndex = archiveIndex,
+            ArchiveIndex = new ArchiveIndex
+            {
+                Resolved = Array.Empty<ArchiveEntry>(),
+                Unresolved = Array.Empty<UnresolvedArchive>(),
+            },
             ModScan = modScan,
             DownloadsPath = _downloadsDir,
             ModsPath = _modsDir,
             FirelinkOutputPath = _outputDir,
+            Matcher = matcher,
         };
 
     private static ModScanResult MakeModScan(
         params (string modName, ScannedFile[] files)[] mods)
     {
-        var dict = new Dictionary<string, IReadOnlyList<ScannedFile>>(StringComparer.Ordinal);
+        var dict = new Dictionary<string, IReadOnlyList<ScannedFile>>(
+            StringComparer.Ordinal);
         foreach (var (name, files) in mods)
             dict[name] = files;
         return new ModScanResult { Mods = dict };
@@ -146,12 +177,10 @@ public class MatchStepTests : IDisposable
         CreateZip("test.zip", ("interface/iconmenu.swf", content));
         WriteModFile("SkyUI", "interface/iconmenu.swf", content);
 
-        var archiveEntry = MakeArchiveEntry("nexus_skyrimspecialedition_1_1", "test.zip");
-        var archiveIndex = new ArchiveIndex
-        {
-            Resolved = new[] { archiveEntry },
-            Unresolved = Array.Empty<UnresolvedArchive>(),
-        };
+        var archiveEntry = MakeArchiveEntry(
+            "nexus_skyrimspecialedition_1_1", "test.zip");
+        var matcher = await MakeMatcherAsync(archiveEntry);
+
         var modScan = MakeModScan(("SkyUI", new[]
         {
             new ScannedFile
@@ -162,10 +191,13 @@ public class MatchStepTests : IDisposable
             },
         }));
 
-        var result = await _step.ExecuteAsync(MakeInput(archiveIndex, modScan), CancellationToken.None);
+        var result = await _step.ExecuteAsync(
+            MakeInput(matcher, modScan), CancellationToken.None);
 
         result.ModDirectives["SkyUI"].Should().HaveCount(1);
-        var directive = result.ModDirectives["SkyUI"][0].Should().BeOfType<FromArchiveDirective>().Subject;
+        var directive = result.ModDirectives["SkyUI"][0]
+            .Should().BeOfType<Firelink.Core.Models.Manifest.Directives.FromArchiveDirective>()
+            .Subject;
         directive.Archive.Should().Be("nexus_skyrimspecialedition_1_1");
         directive.Source.Should().Be("interface/iconmenu.swf");
         directive.Destination.Should().Be("interface/iconmenu.swf");
@@ -188,17 +220,16 @@ public class MatchStepTests : IDisposable
         WriteModFile("ModA", "file1.txt", content1);
         WriteModFile("ModB", "file2.txt", content2);
 
-        var archiveEntry = MakeArchiveEntry("nexus_skyrimspecialedition_4_4", "combined.zip");
-        var archiveIndex = new ArchiveIndex
-        {
-            Resolved = new[] { archiveEntry },
-            Unresolved = Array.Empty<UnresolvedArchive>(),
-        };
+        var archiveEntry = MakeArchiveEntry(
+            "nexus_skyrimspecialedition_4_4", "combined.zip");
+        var matcher = await MakeMatcherAsync(archiveEntry);
+
         var modScan = MakeModScan(
             ("ModA", new[] { new ScannedFile { RelativePath = "file1.txt", Hash = hash1, Size = content1.Length } }),
             ("ModB", new[] { new ScannedFile { RelativePath = "file2.txt", Hash = hash2, Size = content2.Length } }));
 
-        var result = await _step.ExecuteAsync(MakeInput(archiveIndex, modScan), CancellationToken.None);
+        var result = await _step.ExecuteAsync(
+            MakeInput(matcher, modScan), CancellationToken.None);
 
         result.ModDirectives.Should().HaveCount(2);
         result.ModDirectives["ModA"].Should().HaveCount(1);
@@ -209,14 +240,11 @@ public class MatchStepTests : IDisposable
     [Fact]
     public async Task Execute_EmptyModScan_ProducesEmptyResult()
     {
-        var archiveIndex = new ArchiveIndex
-        {
-            Resolved = Array.Empty<ArchiveEntry>(),
-            Unresolved = Array.Empty<UnresolvedArchive>(),
-        };
+        var matcher = await MakeMatcherAsync();
         var modScan = MakeModScan();
 
-        var result = await _step.ExecuteAsync(MakeInput(archiveIndex, modScan), CancellationToken.None);
+        var result = await _step.ExecuteAsync(
+            MakeInput(matcher, modScan), CancellationToken.None);
 
         result.ModDirectives.Should().BeEmpty();
         result.Unmatched.Should().BeEmpty();
@@ -226,7 +254,6 @@ public class MatchStepTests : IDisposable
     [Fact]
     public async Task Execute_MissingArchiveFile_SkipsGracefully()
     {
-        // ArchiveEntry указывает на несуществующий файл.
         var fakeEntry = new ArchiveEntry
         {
             Id = "nexus_skyrimspecialedition_99_99",
@@ -235,18 +262,17 @@ public class MatchStepTests : IDisposable
             Hash = new XxHash64Value(0),
             Sources = new ArchiveSourceRef[]
             {
-                new NexusSourceRef { ModId = 99, FileId = 99, Game = "skyrimspecialedition" },
+                new NexusSourceRef
+                {
+                    ModId = 99, FileId = 99, Game = "skyrimspecialedition",
+                },
             },
         };
 
         var content = new byte[] { 1, 2, 3 };
         WriteModFile("Mod", "file.txt", content);
 
-        var archiveIndex = new ArchiveIndex
-        {
-            Resolved = new[] { fakeEntry },
-            Unresolved = Array.Empty<UnresolvedArchive>(),
-        };
+        var matcher = await MakeMatcherAsync(fakeEntry);
         var modScan = MakeModScan(("Mod", new[]
         {
             new ScannedFile
@@ -257,9 +283,9 @@ public class MatchStepTests : IDisposable
             },
         }));
 
-        var result = await _step.ExecuteAsync(MakeInput(archiveIndex, modScan), CancellationToken.None);
+        var result = await _step.ExecuteAsync(
+            MakeInput(matcher, modScan), CancellationToken.None);
 
-        // Файл не найден → Unmatched, выгружен в __Firelink_Output.
         result.ModDirectives["Mod"].Should().BeEmpty();
         result.Unmatched.Should().HaveCount(1);
         result.Unmatched[0].ModName.Should().Be("Mod");
@@ -278,14 +304,12 @@ public class MatchStepTests : IDisposable
 
         WriteModFile("Mod", "file.txt", content);
 
-        var entry1 = MakeArchiveEntry("nexus_skyrimspecialedition_1_1", "first.zip");
-        var entry2 = MakeArchiveEntry("nexus_skyrimspecialedition_2_2", "second.zip");
+        var entry1 = MakeArchiveEntry(
+            "nexus_skyrimspecialedition_1_1", "first.zip");
+        var entry2 = MakeArchiveEntry(
+            "nexus_skyrimspecialedition_2_2", "second.zip");
 
-        var archiveIndex = new ArchiveIndex
-        {
-            Resolved = new[] { entry1, entry2 },
-            Unresolved = Array.Empty<UnresolvedArchive>(),
-        };
+        var matcher = await MakeMatcherAsync(entry1, entry2);
         var modScan = MakeModScan(("Mod", new[]
         {
             new ScannedFile
@@ -296,10 +320,12 @@ public class MatchStepTests : IDisposable
             },
         }));
 
-        var result = await _step.ExecuteAsync(MakeInput(archiveIndex, modScan), CancellationToken.None);
+        var result = await _step.ExecuteAsync(
+            MakeInput(matcher, modScan), CancellationToken.None);
 
-        var directive = result.ModDirectives["Mod"][0].Should().BeOfType<FromArchiveDirective>().Subject;
-        // Детерминизм: первый по алфавиту archiveId.
+        var directive = result.ModDirectives["Mod"][0]
+            .Should().BeOfType<Firelink.Core.Models.Manifest.Directives.FromArchiveDirective>()
+            .Subject;
         directive.Archive.Should().Be("nexus_skyrimspecialedition_1_1");
     }
 
@@ -310,19 +336,16 @@ public class MatchStepTests : IDisposable
     [Fact]
     public async Task Match_ByHashDifferentPath_ProducesFromArchive()
     {
-        // enbseries.ini.mohidden в моде, enbseries.ini в архиве. Хеши совпадают.
         var content = new byte[] { 10, 20, 30 };
         var hash = HashOf(content);
 
         CreateZip("enb.zip", ("enbseries.ini", content));
         WriteModFile("Mod", "enbseries.ini.mohidden", content);
 
-        var archiveEntry = MakeArchiveEntry("nexus_skyrimspecialedition_7_7", "enb.zip");
-        var archiveIndex = new ArchiveIndex
-        {
-            Resolved = new[] { archiveEntry },
-            Unresolved = Array.Empty<UnresolvedArchive>(),
-        };
+        var archiveEntry = MakeArchiveEntry(
+            "nexus_skyrimspecialedition_7_7", "enb.zip");
+        var matcher = await MakeMatcherAsync(archiveEntry);
+
         var modScan = MakeModScan(("Mod", new[]
         {
             new ScannedFile
@@ -333,9 +356,12 @@ public class MatchStepTests : IDisposable
             },
         }));
 
-        var result = await _step.ExecuteAsync(MakeInput(archiveIndex, modScan), CancellationToken.None);
+        var result = await _step.ExecuteAsync(
+            MakeInput(matcher, modScan), CancellationToken.None);
 
-        var directive = result.ModDirectives["Mod"][0].Should().BeOfType<FromArchiveDirective>().Subject;
+        var directive = result.ModDirectives["Mod"][0]
+            .Should().BeOfType<Firelink.Core.Models.Manifest.Directives.FromArchiveDirective>()
+            .Subject;
         directive.Source.Should().Be("enbseries.ini");
         directive.Destination.Should().Be("enbseries.ini.mohidden");
         result.Unmatched.Should().BeEmpty();
@@ -344,19 +370,16 @@ public class MatchStepTests : IDisposable
     [Fact]
     public async Task Match_ByHashDifferentPath_ReverseDirection()
     {
-        // Наоборот: в моде enbseries.ini, в архиве enbseries.ini.mohidden.
         var content = new byte[] { 10, 20, 30 };
         var hash = HashOf(content);
 
         CreateZip("enb.zip", ("enbseries.ini.mohidden", content));
         WriteModFile("Mod", "enbseries.ini", content);
 
-        var archiveEntry = MakeArchiveEntry("nexus_skyrimspecialedition_8_8", "enb.zip");
-        var archiveIndex = new ArchiveIndex
-        {
-            Resolved = new[] { archiveEntry },
-            Unresolved = Array.Empty<UnresolvedArchive>(),
-        };
+        var archiveEntry = MakeArchiveEntry(
+            "nexus_skyrimspecialedition_8_8", "enb.zip");
+        var matcher = await MakeMatcherAsync(archiveEntry);
+
         var modScan = MakeModScan(("Mod", new[]
         {
             new ScannedFile
@@ -367,9 +390,12 @@ public class MatchStepTests : IDisposable
             },
         }));
 
-        var result = await _step.ExecuteAsync(MakeInput(archiveIndex, modScan), CancellationToken.None);
+        var result = await _step.ExecuteAsync(
+            MakeInput(matcher, modScan), CancellationToken.None);
 
-        var directive = result.ModDirectives["Mod"][0].Should().BeOfType<FromArchiveDirective>().Subject;
+        var directive = result.ModDirectives["Mod"][0]
+            .Should().BeOfType<Firelink.Core.Models.Manifest.Directives.FromArchiveDirective>()
+            .Subject;
         directive.Source.Should().Be("enbseries.ini.mohidden");
         directive.Destination.Should().Be("enbseries.ini");
         result.Unmatched.Should().BeEmpty();
@@ -378,8 +404,6 @@ public class MatchStepTests : IDisposable
     [Fact]
     public async Task Match_ExactWinsOverByHash()
     {
-        // Два архива: в одном точное совпадение, в другом совпадение по хешу.
-        // Ожидание: берётся точное, source == destination.
         var content = new byte[] { 100, 101, 102 };
         var hash = HashOf(content);
 
@@ -388,16 +412,12 @@ public class MatchStepTests : IDisposable
 
         WriteModFile("Mod", "enbseries.ini", content);
 
-        // a-exact идёт по алфавиту первым, но это не важно — точное совпадение
-        // должно победить, даже если бы точный был вторым.
-        var exactEntry = MakeArchiveEntry("nexus_skyrimspecialedition_1_1", "a-exact.zip");
-        var byHashEntry = MakeArchiveEntry("nexus_skyrimspecialedition_2_2", "z-byhash.zip");
+        var exactEntry = MakeArchiveEntry(
+            "nexus_skyrimspecialedition_1_1", "a-exact.zip");
+        var byHashEntry = MakeArchiveEntry(
+            "nexus_skyrimspecialedition_2_2", "z-byhash.zip");
 
-        var archiveIndex = new ArchiveIndex
-        {
-            Resolved = new[] { exactEntry, byHashEntry },
-            Unresolved = Array.Empty<UnresolvedArchive>(),
-        };
+        var matcher = await MakeMatcherAsync(exactEntry, byHashEntry);
         var modScan = MakeModScan(("Mod", new[]
         {
             new ScannedFile
@@ -408,9 +428,12 @@ public class MatchStepTests : IDisposable
             },
         }));
 
-        var result = await _step.ExecuteAsync(MakeInput(archiveIndex, modScan), CancellationToken.None);
+        var result = await _step.ExecuteAsync(
+            MakeInput(matcher, modScan), CancellationToken.None);
 
-        var directive = result.ModDirectives["Mod"][0].Should().BeOfType<FromArchiveDirective>().Subject;
+        var directive = result.ModDirectives["Mod"][0]
+            .Should().BeOfType<Firelink.Core.Models.Manifest.Directives.FromArchiveDirective>()
+            .Subject;
         directive.Archive.Should().Be("nexus_skyrimspecialedition_1_1");
         directive.Source.Should().Be("enbseries.ini");
         directive.Destination.Should().Be("enbseries.ini");
@@ -419,20 +442,16 @@ public class MatchStepTests : IDisposable
     [Fact]
     public async Task Match_MohiddenFolder_Preserved()
     {
-        // Папка meshes.mohidden/ в моде. Файлы внутри — обычные.
-        // Хеш совпадает с файлом из meshes/ в архиве.
         var content = new byte[] { 7, 7, 7 };
         var hash = HashOf(content);
 
         CreateZip("meshes.zip", ("meshes/whatever.nif", content));
         WriteModFile("Mod", "meshes.mohidden/whatever.nif", content);
 
-        var archiveEntry = MakeArchiveEntry("nexus_skyrimspecialedition_9_9", "meshes.zip");
-        var archiveIndex = new ArchiveIndex
-        {
-            Resolved = new[] { archiveEntry },
-            Unresolved = Array.Empty<UnresolvedArchive>(),
-        };
+        var archiveEntry = MakeArchiveEntry(
+            "nexus_skyrimspecialedition_9_9", "meshes.zip");
+        var matcher = await MakeMatcherAsync(archiveEntry);
+
         var modScan = MakeModScan(("Mod", new[]
         {
             new ScannedFile
@@ -443,9 +462,12 @@ public class MatchStepTests : IDisposable
             },
         }));
 
-        var result = await _step.ExecuteAsync(MakeInput(archiveIndex, modScan), CancellationToken.None);
+        var result = await _step.ExecuteAsync(
+            MakeInput(matcher, modScan), CancellationToken.None);
 
-        var directive = result.ModDirectives["Mod"][0].Should().BeOfType<FromArchiveDirective>().Subject;
+        var directive = result.ModDirectives["Mod"][0]
+            .Should().BeOfType<Firelink.Core.Models.Manifest.Directives.FromArchiveDirective>()
+            .Subject;
         directive.Source.Should().Be("meshes/whatever.nif");
         directive.Destination.Should().Be("meshes.mohidden/whatever.nif");
     }
@@ -463,12 +485,10 @@ public class MatchStepTests : IDisposable
         CreateZip("other.zip", ("unrelated.txt", new byte[] { 9, 9, 9 }));
         WriteModFile("CustomMod", "custom.txt", modContent);
 
-        var archiveEntry = MakeArchiveEntry("nexus_skyrimspecialedition_2_2", "other.zip");
-        var archiveIndex = new ArchiveIndex
-        {
-            Resolved = new[] { archiveEntry },
-            Unresolved = Array.Empty<UnresolvedArchive>(),
-        };
+        var archiveEntry = MakeArchiveEntry(
+            "nexus_skyrimspecialedition_2_2", "other.zip");
+        var matcher = await MakeMatcherAsync(archiveEntry);
+
         var modScan = MakeModScan(("CustomMod", new[]
         {
             new ScannedFile
@@ -479,7 +499,8 @@ public class MatchStepTests : IDisposable
             },
         }));
 
-        var result = await _step.ExecuteAsync(MakeInput(archiveIndex, modScan), CancellationToken.None);
+        var result = await _step.ExecuteAsync(
+            MakeInput(matcher, modScan), CancellationToken.None);
 
         result.ModDirectives["CustomMod"].Should().BeEmpty();
         result.Unmatched.Should().HaveCount(1);
@@ -498,12 +519,10 @@ public class MatchStepTests : IDisposable
         CreateZip("empty-ish.zip", ("something-else.txt", new byte[] { 0 }));
         WriteModFile("Mod", "SKSE/Plugins/config.ini", content);
 
-        var archiveEntry = MakeArchiveEntry("nexus_skyrimspecialedition_3_3", "empty-ish.zip");
-        var archiveIndex = new ArchiveIndex
-        {
-            Resolved = new[] { archiveEntry },
-            Unresolved = Array.Empty<UnresolvedArchive>(),
-        };
+        var archiveEntry = MakeArchiveEntry(
+            "nexus_skyrimspecialedition_3_3", "empty-ish.zip");
+        var matcher = await MakeMatcherAsync(archiveEntry);
+
         var modScan = MakeModScan(("Mod", new[]
         {
             new ScannedFile
@@ -514,7 +533,8 @@ public class MatchStepTests : IDisposable
             },
         }));
 
-        var result = await _step.ExecuteAsync(MakeInput(archiveIndex, modScan), CancellationToken.None);
+        var result = await _step.ExecuteAsync(
+            MakeInput(matcher, modScan), CancellationToken.None);
 
         result.Unmatched.Should().HaveCount(1);
         OutputFileExists("Mod", "SKSE/Plugins/config.ini").Should().BeTrue();
@@ -524,7 +544,6 @@ public class MatchStepTests : IDisposable
     [Fact]
     public async Task Unmatched_LargeFile_StillWritten()
     {
-        // Раньше >2МБ шло в Orphans. Теперь — всё в __Firelink_Output.
         var largeContent = new byte[3 * 1024 * 1024];
         for (int i = 0; i < largeContent.Length; i++)
             largeContent[i] = (byte)(i & 0xFF);
@@ -532,12 +551,10 @@ public class MatchStepTests : IDisposable
         CreateZip("other.zip", ("unrelated.txt", new byte[] { 9 }));
         WriteModFile("BigMod", "large.bin", largeContent);
 
-        var archiveEntry = MakeArchiveEntry("nexus_skyrimspecialedition_3_3", "other.zip");
-        var archiveIndex = new ArchiveIndex
-        {
-            Resolved = new[] { archiveEntry },
-            Unresolved = Array.Empty<UnresolvedArchive>(),
-        };
+        var archiveEntry = MakeArchiveEntry(
+            "nexus_skyrimspecialedition_3_3", "other.zip");
+        var matcher = await MakeMatcherAsync(archiveEntry);
+
         var modScan = MakeModScan(("BigMod", new[]
         {
             new ScannedFile
@@ -548,7 +565,8 @@ public class MatchStepTests : IDisposable
             },
         }));
 
-        var result = await _step.ExecuteAsync(MakeInput(archiveIndex, modScan), CancellationToken.None);
+        var result = await _step.ExecuteAsync(
+            MakeInput(matcher, modScan), CancellationToken.None);
 
         result.Unmatched.Should().HaveCount(1);
         OutputFileExists("BigMod", "large.bin").Should().BeTrue();
@@ -557,23 +575,19 @@ public class MatchStepTests : IDisposable
     [Fact]
     public async Task FirelinkOutput_CleanedBeforeRun()
     {
-        // Кладём мусор в __Firelink_Output/mods/Garbage/...
-        var garbageDir = Path.Combine(_outputDir, "mods", "Garbage");
+        var garbageDir = Path.Combine(_outputDir, "MO2", "mods", "Garbage");
         Directory.CreateDirectory(garbageDir);
         File.WriteAllText(Path.Combine(garbageDir, "old.txt"), "old");
 
-        var archiveIndex = new ArchiveIndex
-        {
-            Resolved = Array.Empty<ArchiveEntry>(),
-            Unresolved = Array.Empty<UnresolvedArchive>(),
-        };
+        var matcher = await MakeMatcherAsync();
         var modScan = MakeModScan();
 
-        await _step.ExecuteAsync(MakeInput(archiveIndex, modScan), CancellationToken.None);
+        await _step.ExecuteAsync(
+            MakeInput(matcher, modScan), CancellationToken.None);
 
         File.Exists(Path.Combine(garbageDir, "old.txt")).Should().BeFalse();
         Directory.Exists(garbageDir).Should().BeFalse();
-        Directory.Exists(Path.Combine(_outputDir, "mods")).Should().BeTrue();
+        Directory.Exists(Path.Combine(_outputDir, "MO2", "mods")).Should().BeTrue();
     }
 
     // ------------------------------------------------------------------
@@ -594,11 +608,7 @@ public class MatchStepTests : IDisposable
 
         WriteModFile("Actor Limit Fix", "meta.ini", metaContent);
 
-        var archiveIndex = new ArchiveIndex
-        {
-            Resolved = Array.Empty<ArchiveEntry>(),
-            Unresolved = Array.Empty<UnresolvedArchive>(),
-        };
+        var matcher = await MakeMatcherAsync();
         var modScan = MakeModScan(("Actor Limit Fix", new[]
         {
             new ScannedFile
@@ -609,7 +619,8 @@ public class MatchStepTests : IDisposable
             },
         }));
 
-        var result = await _step.ExecuteAsync(MakeInput(archiveIndex, modScan), CancellationToken.None);
+        var result = await _step.ExecuteAsync(
+            MakeInput(matcher, modScan), CancellationToken.None);
 
         result.ModDirectives["Actor Limit Fix"].Should().BeEmpty();
         result.Unmatched.Should().BeEmpty();
@@ -620,23 +631,17 @@ public class MatchStepTests : IDisposable
         meta.Version.Should().Be("1.7.0");
         meta.Notes.Should().Be("my note");
 
-        // Не выгружен в __Firelink_Output.
         OutputFileExists("Actor Limit Fix", "meta.ini").Should().BeFalse();
     }
 
     [Fact]
     public async Task MetaIni_InSubfolder_TreatedAsRegularFile()
     {
-        // fomod/meta.ini — это не корневой meta.ini. Идёт как обычный файл.
         var content = new byte[] { 1, 2, 3 };
 
         WriteModFile("Mod", "fomod/meta.ini", content);
 
-        var archiveIndex = new ArchiveIndex
-        {
-            Resolved = Array.Empty<ArchiveEntry>(),
-            Unresolved = Array.Empty<UnresolvedArchive>(),
-        };
+        var matcher = await MakeMatcherAsync();
         var modScan = MakeModScan(("Mod", new[]
         {
             new ScannedFile
@@ -647,7 +652,8 @@ public class MatchStepTests : IDisposable
             },
         }));
 
-        var result = await _step.ExecuteAsync(MakeInput(archiveIndex, modScan), CancellationToken.None);
+        var result = await _step.ExecuteAsync(
+            MakeInput(matcher, modScan), CancellationToken.None);
 
         result.ModMetas.Should().BeEmpty();
         result.Unmatched.Should().HaveCount(1);
@@ -665,11 +671,7 @@ public class MatchStepTests : IDisposable
         WriteModFile("ModB", "meta.ini", meta2);
         WriteModFile("ModC", "readme.txt", "hello");
 
-        var archiveIndex = new ArchiveIndex
-        {
-            Resolved = Array.Empty<ArchiveEntry>(),
-            Unresolved = Array.Empty<UnresolvedArchive>(),
-        };
+        var matcher = await MakeMatcherAsync();
 
         ScannedFile MetaScanned(string path, string content) => new()
         {
@@ -683,14 +685,14 @@ public class MatchStepTests : IDisposable
             ("ModB", new[] { MetaScanned("meta.ini", meta2) }),
             ("ModC", new[] { MetaScanned("readme.txt", "hello") }));
 
-        var result = await _step.ExecuteAsync(MakeInput(archiveIndex, modScan), CancellationToken.None);
+        var result = await _step.ExecuteAsync(
+            MakeInput(matcher, modScan), CancellationToken.None);
 
         result.ModMetas.Should().HaveCount(2);
         result.ModMetas.Should().ContainKey("ModA");
         result.ModMetas.Should().ContainKey("ModB");
         result.ModMetas.Should().NotContainKey("ModC");
 
-        // ModC/readme.txt — обычный unmatched.
         result.Unmatched.Should().HaveCount(1);
         result.Unmatched[0].ModName.Should().Be("ModC");
     }
@@ -700,11 +702,7 @@ public class MatchStepTests : IDisposable
     {
         WriteModFile("Mod", "meta.ini", "");
 
-        var archiveIndex = new ArchiveIndex
-        {
-            Resolved = Array.Empty<ArchiveEntry>(),
-            Unresolved = Array.Empty<UnresolvedArchive>(),
-        };
+        var matcher = await MakeMatcherAsync();
         var modScan = MakeModScan(("Mod", new[]
         {
             new ScannedFile
@@ -715,11 +713,40 @@ public class MatchStepTests : IDisposable
             },
         }));
 
-        var result = await _step.ExecuteAsync(MakeInput(archiveIndex, modScan), CancellationToken.None);
+        var result = await _step.ExecuteAsync(
+            MakeInput(matcher, modScan), CancellationToken.None);
 
         result.ModMetas.Should().ContainKey("Mod");
         result.ModMetas["Mod"].IsEmpty.Should().BeTrue();
         result.Unmatched.Should().BeEmpty();
         OutputFileExists("Mod", "meta.ini").Should().BeFalse();
+    }
+
+    // ------------------------------------------------------------------
+    //  Matcher не передан
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task Execute_MatcherNotSet_Throws()
+    {
+        var modScan = MakeModScan();
+
+        var input = new MatchStep.Input
+        {
+            ArchiveIndex = new ArchiveIndex
+            {
+                Resolved = Array.Empty<ArchiveEntry>(),
+                Unresolved = Array.Empty<UnresolvedArchive>(),
+            },
+            ModScan = modScan,
+            DownloadsPath = _downloadsDir,
+            ModsPath = _modsDir,
+            FirelinkOutputPath = _outputDir,
+        };
+
+        var act = async () => await _step.ExecuteAsync(input, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Matcher must be set*");
     }
 }

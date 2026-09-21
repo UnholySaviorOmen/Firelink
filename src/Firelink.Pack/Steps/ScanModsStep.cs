@@ -7,12 +7,24 @@ using Microsoft.Extensions.Logging;
 namespace Firelink.Pack.Steps;
 
 /// <summary>
-/// Сканирует папку mods/ — считает хеши всех файлов включённых модов.
-/// Пропускает отключённые моды и моды с [NoDelete] в имени.
-/// Параллельно, с использованием FileHashCache.
+/// Сканирует папку mods/ — считает хеши всех файлов модов из modlist.txt.
+///
+/// Сканируются ВСЕ моды (и включённые, и отключённые), кроме модов
+/// с [NoDelete] в имени. Отключённые моды могут содержать опционально
+/// подключаемый контент — их файлы тоже нужны в манифесте, чтобы
+/// пользователь мог включить мод и получить его файлы.
+///
+/// Отсутствие папки для включённого мода — ОШИБКА (мод "битый").
+/// Отсутствие папки для отключённого мода — предупреждение
+/// (мод мог быть удалён вручную, но строчка в modlist.txt осталась).
+/// Отсутствие папки для сепаратора (#...) — debug (это ожидаемо,
+/// сепараторы — виртуальные записи, папок у них нет).
 /// </summary>
 public sealed class ScanModsStep : IStep<ScanModsStep.Input, ModScanResult>
 {
+    private const string NoDeleteMarker = "[NoDelete]";
+    private const char SeparatorPrefix = '#';
+
     private readonly FileHashCache _hashCache;
     private readonly ILogger<ScanModsStep> _logger;
 
@@ -26,25 +38,42 @@ public sealed class ScanModsStep : IStep<ScanModsStep.Input, ModScanResult>
     {
         var entries = input.Snapshot.Modlist.Entries;
 
-        // Фильтр: включённые, без [NoDelete]
         var toScan = entries
-            .Where(e => e.Enabled)
-            .Where(e => !e.Name.Contains("[NoDelete]", StringComparison.OrdinalIgnoreCase))
+            .Where(e => !e.Name.Contains(NoDeleteMarker, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
-        _logger.LogInformation(
-            "ScanModsStep: scanning {Count} enabled mods (out of {Total})",
-            toScan.Count, entries.Count);
+        var enabledCount = toScan.Count(e => e.Enabled);
+        var disabledCount = toScan.Count(e => !e.Enabled);
 
-        // Проверка, что папки существуют — заранее, до параллельного скана
+        _logger.LogInformation(
+            "ScanModsStep: scanning {Total} mods ({Enabled} enabled, {Disabled} disabled) out of {All}",
+            toScan.Count, enabledCount, disabledCount, entries.Count);
+
+        var existingEntries = new List<Firelink.Core.Models.Mo2.ModlistEntry>(toScan.Count);
         foreach (var entry in toScan)
         {
             var path = Path.Combine(input.Snapshot.ModsPath, entry.Name);
-            if (!Directory.Exists(path))
+            if (Directory.Exists(path))
+            {
+                existingEntries.Add(entry);
+            }
+            else if (entry.Enabled)
             {
                 throw new DirectoryNotFoundException(
                     $"Mod directory not found: {path} " +
                     $"(mod '{entry.Name}' is enabled in modlist.txt)");
+            }
+            else if (IsSeparator(entry.Name))
+            {
+                _logger.LogDebug(
+                    "Separator '{Name}' has no folder (expected) — skipping",
+                    entry.Name);
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "Mod directory not found for disabled mod (skipping): {Mod}",
+                    entry.Name);
             }
         }
 
@@ -52,7 +81,7 @@ public sealed class ScanModsStep : IStep<ScanModsStep.Input, ModScanResult>
             StringComparer.Ordinal);
 
         Parallel.ForEach(
-            toScan,
+            existingEntries,
             input.ParallelOptions,
             () => 0,
             (entry, _, _) =>
@@ -65,21 +94,20 @@ public sealed class ScanModsStep : IStep<ScanModsStep.Input, ModScanResult>
                 results[entry.Name] = files;
 
                 _logger.LogDebug(
-                    "Scanned mod '{Mod}': {Count} files",
-                    entry.Name, files.Count);
+                    "Scanned mod '{Mod}': {Count} files (enabled={Enabled})",
+                    entry.Name, files.Count, entry.Enabled);
 
                 return 0;
             },
             _ => { });
 
-        // Стабильный порядок ключей для детерминизма
         var ordered = results
             .OrderBy(kvp => kvp.Key, StringComparer.Ordinal)
             .ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.Ordinal);
 
         var totalFiles = ordered.Values.Sum(v => v.Count);
         _logger.LogInformation(
-            "ScanModsStep: {Mods} mods, {Files} files total",
+            "ScanModsStep: {Mods} mods scanned, {Files} files total",
             ordered.Count, totalFiles);
 
         return Task.FromResult(new ModScanResult
@@ -87,6 +115,9 @@ public sealed class ScanModsStep : IStep<ScanModsStep.Input, ModScanResult>
             Mods = ordered,
         });
     }
+
+    private static bool IsSeparator(string name)
+        => name.Length > 0 && name[0] == SeparatorPrefix;
 
     private IReadOnlyList<ScannedFile> ScanOneMod(string modPath, CancellationToken ct)
     {
@@ -118,7 +149,6 @@ public sealed class ScanModsStep : IStep<ScanModsStep.Input, ModScanResult>
             });
         }
 
-        // Детерминированный порядок файлов
         result.Sort((a, b) => string.CompareOrdinal(a.RelativePath, b.RelativePath));
 
         return result;

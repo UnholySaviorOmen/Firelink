@@ -1,20 +1,21 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/Firelink.Cli/Firelink.Cli.csproj" Id="dc3df7b9-060e-4849-b03a-73326885949c" />
     <Project Path="src/Firelink.Core/Firelink.Core.csproj" />
     <Project Path="src/Firelink.Install/Firelink.Install.csproj" />
     <Project Path="src/Firelink.Pack/Firelink.Pack.csproj" />
-    <Project Path="src/Firelink.Platform.GitHub/Firelink.Platform.GitHub.csproj" />
     <Project Path="src/Firelink.Platform.MO2/Firelink.Platform.MO2.csproj" />
     <Project Path="src/Firelink.Platform.Nexus/Firelink.Platform.Nexus.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Firelink.Core.Tests/Firelink.Core.Tests.csproj" />
+    <Project Path="tests/Firelink.Install.Tests/Firelink.Install.Tests.csproj" />
+    <Project Path="tests/Firelink.Integration.Tests/Firelink.Integration.Tests.csproj" Id="453e4164-1215-4415-9a5f-5c2ff85859fa" />
     <Project Path="tests/Firelink.Pack.Tests/Firelink.Pack.Tests.csproj" />
     <Project Path="tests/Firelink.Platform.MO2.Tests/Firelink.Platform.MO2.Tests.csproj" />
   </Folder>
   <Folder Name="/Элементы решения/">
     <File Path="DOC.md" />
-    <File Path="HANDOFF.md" />
-    <File Path="PROJECT-STATE.md" />
+    <File Path="FIRELINK.md" />
   </Folder>
 </Solution>

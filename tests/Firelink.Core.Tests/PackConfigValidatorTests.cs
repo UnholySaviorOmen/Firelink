@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Firelink.Core.Models.Hashing;
 using Firelink.Core.Models.Manifest.Sources;
 using Firelink.Core.Models.Pack;
 using Firelink.Core.Validation;
@@ -23,11 +24,10 @@ public class PackConfigValidatorTests
             Version = "2.5.2",
             Profile = "Default",
             Archive = "Mod.Organizer-2.5.2.7z",
-            Source = new GitHubSourceRef
+            Source = new MirrorSourceRef
             {
-                Repo = "ModOrganizer2/modorganizer",
-                Tag = "v2.5.2",
-                Asset = "Mod.Organizer-2.5.2.7z",
+                Url = "https://example.com/Mod.Organizer-2.5.2.7z",
+                Hash = new XxHash64Value(0xE574E05EB6C470AD),
             },
             Extensions = Array.Empty<string>(),
         },
@@ -63,7 +63,7 @@ public class PackConfigValidatorTests
                         new MirrorSourceRef
                         {
                             Url = "https://example.com/x.7z",
-                            Hash = new Firelink.Core.Models.Hashing.XxHash64Value(0xabc),
+                            Hash = new XxHash64Value(0xabc),
                         },
                     },
                 },
@@ -141,6 +141,28 @@ public class PackConfigValidatorTests
     }
 
     [Fact]
+    public void Validate_Mo2SourceNotMirror_Fails()
+    {
+        var config = MakeValidConfig() with
+        {
+            Mo2 = MakeValidConfig().Mo2 with
+            {
+                Source = new NexusSourceRef
+                {
+                    ModId = 1,
+                    FileId = 1,
+                    Game = "skyrimspecialedition",
+                },
+            },
+        };
+
+        var result = PackConfigValidator.Validate(config);
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.Contains("mo2.source"));
+        result.Errors.Should().Contain(e => e.Contains("mirror"));
+    }
+
+    [Fact]
     public void Validate_Mo2ArchiveWithPath_Fails()
     {
         var config = MakeValidConfig() with
@@ -181,7 +203,11 @@ public class PackConfigValidatorTests
                     Archive = "SomeMod.7z",
                     Sources = new ArchiveSourceRef[]
                     {
-                        new GitHubSourceRef { Repo = "a/b", Tag = "v1", Asset = "x.7z" },
+                        new MirrorSourceRef
+                        {
+                            Url = "https://example.com/x.7z",
+                            Hash = new XxHash64Value(0xabc),
+                        },
                     },
                 },
                 new PackArchiveSource
@@ -189,7 +215,11 @@ public class PackConfigValidatorTests
                     Archive = "somemod.7z",
                     Sources = new ArchiveSourceRef[]
                     {
-                        new GitHubSourceRef { Repo = "a/b", Tag = "v1", Asset = "x.7z" },
+                        new MirrorSourceRef
+                        {
+                            Url = "https://example.com/y.7z",
+                            Hash = new XxHash64Value(0xdef),
+                        },
                     },
                 },
             },

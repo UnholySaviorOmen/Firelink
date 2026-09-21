@@ -15,6 +15,18 @@ public static class ModlistWriter
 
     public static void WriteFile(string path, ModlistFile file)
     {
+        var content = Serialize(file);
+        File.WriteAllText(
+            path, content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+    }
+
+    /// <summary>
+    /// Сериализует содержимое modlist.txt в строку.
+    /// Verify использует этот метод, чтобы регенерировать файл в память
+    /// и сравнить с фактическим содержимым — без записи на диск.
+    /// </summary>
+    public static string Serialize(ModlistFile file)
+    {
         var sb = new StringBuilder();
         sb.Append(Header).Append("\r\n");
         foreach (var entry in file.Entries)
@@ -24,7 +36,6 @@ public static class ModlistWriter
             sb.Append("\r\n");
         }
 
-        // UTF-8 with BOM — так делает MO2
-        File.WriteAllText(path, sb.ToString(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+        return sb.ToString();
     }
 }

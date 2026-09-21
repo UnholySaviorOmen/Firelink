@@ -1,3 +1,4 @@
+using Firelink.Core.Models.Manifest.Sources;
 using Firelink.Core.Models.Pack;
 
 namespace Firelink.Core.Validation;
@@ -55,6 +56,21 @@ public static class PackConfigValidator
             errors.Add("mo2.archive must be non-empty.");
         else if (config.Mo2.Archive.Contains('/') || config.Mo2.Archive.Contains('\\'))
             errors.Add("mo2.archive must be a file name, not a path.");
+
+        // mo2.source — обязательно mirror (с hash).
+        // Packer берёт hash MO2-архива из source.hash, а не считает из файла
+        // (файла может не быть в downloads/). Значит, source должен уметь
+        // предоставить hash. У github/nexus source поля hash нет.
+        if (config.Mo2.Source is null)
+        {
+            errors.Add("mo2.source is required.");
+        }
+        else if (config.Mo2.Source is not MirrorSourceRef)
+        {
+            errors.Add(
+                "mo2.source must be a mirror source (with url and hash). " +
+                "github/nexus sources are not supported for MO2 archive.");
+        }
 
         // mo2.extensions
         for (int i = 0; i < config.Mo2.Extensions.Count; i++)

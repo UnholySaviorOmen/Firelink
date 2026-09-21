@@ -1,0 +1,26 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FluentAssertions" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Firelink.Core\Firelink.Core.csproj" />
+    <ProjectReference Include="..\..\src\Firelink.Platform.MO2\Firelink.Platform.MO2.csproj" />
+    <ProjectReference Include="..\..\src\Firelink.Pack\Firelink.Pack.csproj" />
+    <ProjectReference Include="..\..\src\Firelink.Install\Firelink.Install.csproj" />
+  </ItemGroup>
+</Project>

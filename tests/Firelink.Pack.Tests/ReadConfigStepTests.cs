@@ -43,10 +43,9 @@ public class ReadConfigStepTests : IDisposable
         "profile": "Default",
         "archive": "Mod.Organizer-2.5.2.7z",
         "source": {
-          "type": "github",
-          "repo": "ModOrganizer2/modorganizer",
-          "tag": "v2.5.2",
-          "asset": "Mod.Organizer-2.5.2.7z"
+          "type": "mirror",
+          "url": "https://example.com/Mod.Organizer-2.5.2.7z",
+          "hash": "xxh64:0000000000000001"
         },
         "extensions": []
       },

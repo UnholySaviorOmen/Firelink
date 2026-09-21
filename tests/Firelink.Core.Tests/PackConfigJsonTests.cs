@@ -2,6 +2,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Firelink.Core.Models.Pack;
 using Firelink.Core.Models.Manifest.Sources;
+using Firelink.Core.Models.Hashing;
 
 namespace Firelink.Core.Tests;
 
@@ -23,11 +24,10 @@ public class PackConfigJsonTests
             Version = "2.5.2",
             Profile = "Default",
             Archive = "Mod.Organizer-2.5.2.7z",
-            Source = new GitHubSourceRef
+            Source = new MirrorSourceRef
             {
-                Repo = "ModOrganizer2/modorganizer",
-                Tag = "v2.5.2",
-                Asset = "Mod.Organizer-2.5.2.7z",
+                Url = "https://github.com/ModOrganizer2/modorganizer/releases/download/v2.5.2/Mod.Organizer-2.5.2.7z",
+                Hash = new XxHash64Value(0x0000000000000001),
             },
             Extensions = Array.Empty<string>(),
         },
@@ -46,7 +46,7 @@ public class PackConfigJsonTests
         back.Meta.Name.Should().Be("Test Pack");
         back.Instance.Path.Should().Be("Test Pack");
         back.Mo2.Profile.Should().Be("Default");
-        back.Mo2.Source.Should().BeOfType<GitHubSourceRef>();
+        back.Mo2.Source.Should().BeOfType<MirrorSourceRef>();
         back.ArchiveSources.Should().BeEmpty();
     }
 
@@ -79,7 +79,7 @@ public class PackConfigJsonTests
                         new MirrorSourceRef
                         {
                             Url = "https://cdn.example.com/SomeMod.7z",
-                            Hash = new Firelink.Core.Models.Hashing.XxHash64Value(0xabc),
+                            Hash = new XxHash64Value(0xabc),
                         },
                         new NexusSourceRef
                         {
@@ -137,10 +137,9 @@ public class PackConfigJsonTests
             "profile": "NordicUI",
             "archive": "Mod.Organizer-2.5.2.7z",
             "source": {
-              "type": "github",
-              "repo": "ModOrganizer2/modorganizer",
-              "tag": "v2.5.2",
-              "asset": "Mod.Organizer-2.5.2.7z"
+              "type": "mirror",
+              "url": "https://github.com/ModOrganizer2/modorganizer/releases/download/v2.5.2/Mod.Organizer-2.5.2.7z",
+              "hash": "xxh64:0000000000000001"
             },
             "extensions": []
           },
@@ -156,7 +155,7 @@ public class PackConfigJsonTests
         config.Meta.Name.Should().Be("Nordic UI Overhaul");
         config.Instance.Path.Should().Be("NordicUI Overhaul");
         config.Mo2.Profile.Should().Be("NordicUI");
-        config.Mo2.Source.Should().BeOfType<GitHubSourceRef>();
+        config.Mo2.Source.Should().BeOfType<MirrorSourceRef>();
     }
 
     [Fact]

@@ -10,5 +10,6 @@
   <ItemGroup>
     <PackageReference Include="Octokit" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
   </ItemGroup>
 </Project>

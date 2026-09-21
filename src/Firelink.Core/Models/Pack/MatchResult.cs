@@ -1,3 +1,4 @@
+using Firelink.Core.Models.Manifest;
 using Firelink.Core.Models.Manifest.Directives;
 
 namespace Firelink.Core.Models.Pack;
