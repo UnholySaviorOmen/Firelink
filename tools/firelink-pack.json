@@ -1,0 +1,53 @@
+{
+  "meta": {
+    "name": "OmenRim 7",
+    "version": "0.1.0",
+    "author": "YourName",
+    "game": "skyrimspecialedition",
+    "gameVersion": "1.6.1170"
+  },
+  "instance": {
+    "path": "."
+  },
+  "mo2": {
+    "version": "2.5.2",
+    "profile": "Default",
+    "archive": "Mod.Organizer-2.5.2.7z",
+    "source": {
+      "type": "mirror",
+      "url": "https://github.com/ModOrganizer2/modorganizer/releases/download/v2.5.2/Mod.Organizer-2.5.2.7z",
+      "hash": "xxh64:E574E05EB6C470AD"
+    },
+	  "extensions": [
+		"plugins/curationclub"
+	]
+  },
+  "stockGame": {
+	"extras": [
+    "skse64_loader.exe",
+    "skse64_1_7_104.dll"
+	]
+  },
+  "archiveSources": [
+    {
+      "archive": "Effect 11-415-1.0.0-2026.08.24-[mod.pub].zip",
+      "sources": [
+        {
+          "type": "mirror",
+          "url": "https://mod.pub/skyrim-se/415/files/Effect-11-415-1.0.0-2026.08.24-[mod.pub].zip",
+          "hash": "xxh64:B48AA9BEA422799E"
+        }
+      ]
+    },
+    {
+      "archive": "NAT.ENB - ENB PRESET v3.1.1C-27141-3-1-1C-1685129135.zip",
+      "sources": [
+        {
+          "type": "mirror",
+          "url": "https://mod.pub/skyrim-se/415/files/NAT.ENB-ENB-PRESET-v3-1-1C-27141-3-1-1C-1685129135.zip",
+          "hash": "xxh64:763D3DB4CD3ED579"
+        }
+      ]
+    }
+  ]
+}
