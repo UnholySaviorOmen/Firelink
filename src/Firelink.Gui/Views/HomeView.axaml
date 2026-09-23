@@ -1,0 +1,27 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Firelink.Gui.Shared.ViewModels"
+             xmlns:controls="using:Firelink.Gui.Controls.Views"
+             x:Class="Firelink.Gui.Views.HomeView"
+             x:DataType="vm:HomeVM">
+    <Grid RowDefinitions="Auto,*">
+        <StackPanel Grid.Row="0"
+                    VerticalAlignment="Center"
+                    HorizontalAlignment="Center"
+                    Spacing="12"
+                    Margin="0,60,0,30">
+            <TextBlock Text="{Binding Title}"
+                       FontSize="36"
+                       FontWeight="Bold"
+                       HorizontalAlignment="Center" />
+            <TextBlock Text="{Binding Subtitle}"
+                       FontSize="14"
+                       Opacity="0.7"
+                       HorizontalAlignment="Center" />
+        </StackPanel>
+
+        <controls:LogView Grid.Row="1"
+                          DataContext="{Binding Log}"
+                          Margin="20,0,20,20" />
+    </Grid>
+</UserControl>

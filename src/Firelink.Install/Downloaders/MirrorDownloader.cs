@@ -1,4 +1,5 @@
 using Firelink.Core.Abstractions;
+using Firelink.Core.Archives;
 using Firelink.Core.Models.Hashing;
 using Firelink.Core.Models.Manifest.Sources;
 
@@ -7,16 +8,25 @@ namespace Firelink.Install.Downloaders;
 /// <summary>
 /// Скачивание архивов по прямой URL-ссылке (mirror).
 ///
-/// Если в источнике указан hash — downloader его проверяет.
-/// Если не указан — проверка на стороне SyncArchivesStep (по archive.Hash).
+/// HttpClient берётся из IHttpClientFactory по имени "mirror" (таймаут
+/// 10 минут). Это позволяет скачивать большие архивы без риска упасть
+/// по таймауту.
+///
+/// Скачивание идёт в TempFileStream (временный файл на диске), а не в
+/// MemoryStream: у Nexus есть моды на 3+ ГБ, MemoryStream такой размер
+/// не держит (лимит int.MaxValue).
+///
+/// Hash-проверку делает ArchiveDownloadHelper — не здесь.
 /// </summary>
 public sealed class MirrorDownloader : IArchiveDownloader
 {
-    private readonly HttpClient _http;
+    public const string HttpClientName = "mirror";
 
-    public MirrorDownloader(HttpClient http)
+    private readonly IHttpClientFactory _httpClientFactory;
+
+    public MirrorDownloader(IHttpClientFactory httpClientFactory)
     {
-        _http = http;
+        _httpClientFactory = httpClientFactory;
     }
 
     public string SourceType => "mirror";
@@ -31,7 +41,9 @@ public sealed class MirrorDownloader : IArchiveDownloader
                 nameof(source));
         }
 
-        using var response = await _http.GetAsync(
+        var http = _httpClientFactory.CreateClient(HttpClientName);
+
+        using var response = await http.GetAsync(
             mirror.Url, HttpCompletionOption.ResponseHeadersRead, ct);
 
         if (!response.IsSuccessStatusCode)
@@ -41,26 +53,37 @@ public sealed class MirrorDownloader : IArchiveDownloader
                 $"({response.ReasonPhrase}) for {mirror.Url}");
         }
 
-        var ms = new MemoryStream();
-        await using (var networkStream = await response.Content.ReadAsStreamAsync(ct))
+        var temp = new TempFileStream();
+
+        try
         {
-            await networkStream.CopyToAsync(ms, ct);
+            await using (var networkStream = await response.Content
+                .ReadAsStreamAsync(ct))
+            {
+                await networkStream.CopyToAsync(temp, ct);
+            }
+
+            temp.Position = 0;
+
+            // Проверяем hash сразу, если он указан в mirror-источнике.
+            // Это раннее обнаружение битой загрузки до записи в .part.
+            var actualHash = XxHash64Value.FromStream(temp);
+            temp.Position = 0;
+
+            if (actualHash != mirror.Hash)
+            {
+                await temp.DisposeAsync();
+                throw new InvalidOperationException(
+                    $"Mirror hash mismatch for {mirror.Url}: " +
+                    $"expected {mirror.Hash}, got {actualHash}.");
+            }
+
+            return temp;
         }
-
-        ms.Position = 0;
-
-        // Если в mirror-источнике указан hash — проверяем сразу.
-        // Это раннее обнаружение битой загрузки до записи на диск.
-        var actualHash = XxHash64Value.FromStream(ms);
-        ms.Position = 0;
-
-        if (actualHash != mirror.Hash)
+        catch
         {
-            throw new InvalidOperationException(
-                $"Mirror hash mismatch for {mirror.Url}: " +
-                $"expected {mirror.Hash}, got {actualHash}.");
+            await temp.DisposeAsync();
+            throw;
         }
-
-        return ms;
     }
 }

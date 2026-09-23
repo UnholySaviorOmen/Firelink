@@ -4,6 +4,7 @@ using Firelink.Core.Archives.Extraction;
 using Firelink.Install.Downloaders;
 using Firelink.Install.Steps;
 using Firelink.Install.Verify;
+using Firelink.Platform.Nexus;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -12,18 +13,25 @@ namespace Firelink.Install;
 /// <summary>
 /// DI-extension: регистрирует все сервисы installer-а.
 ///
-/// Вызывается из Firelink.Cli/Program.cs (и в будущем — из GUI).
-/// Использует TryAddSingleton, чтобы не плодить дубли: FileHashCache
-/// и IArchiveExtractor регистрируются и в AddFirelinkPack тоже.
+/// Скачивание:
+///   - MirrorDownloader и NexusDownloader регистрируются через
+///     TryAddEnumerable(ServiceDescriptor.Singleton&lt;IArchiveDownloader, TConcrete&gt;()).
+///     Это даёт: (а) обе реализации попадают в DownloaderRegistry;
+///     (б) повторный вызов AddFirelinkInstall не плодит дубликаты.
+///   - HttpClient-ы берутся downloader-ами из IHttpClientFactory по имени:
+///       "mirror"    — 10 минут.
+///       "nexus"     — 10 минут.
+///       "nexus-api" — 2 минуты.
 ///
-/// AddHttpClient<MirrorDownloader> требует пакет
-/// Microsoft.Extensions.Http — он явно добавлен в
-/// Firelink.Install.csproj.
+/// ВАЖНО: downloader-ы принимают IHttpClientFactory, а не HttpClient.
+/// Иначе DI создаёт их через активацию конструктора и подставит
+/// безымянный HttpClient с дефолтным таймаутом (100 секунд). Для
+/// гигабайтных архивов с Nexus это критично — 100 секунд не хватит.
 ///
 /// НЕ регистрирует:
 ///   - IAnsiConsole (это CLI/GUI);
 ///   - ParallelOptions (это клиент решает);
-///   - ILogger<T> (это AddLogging в клиенте).
+///   - ILogger&lt;T&gt; (это AddLogging в клиенте).
 /// </summary>
 public static class InstallServices
 {
@@ -33,14 +41,48 @@ public static class InstallServices
         services.TryAddSingleton<FileHashCache>();
         services.TryAddSingleton<IArchiveExtractor, SevenZipExtractor>();
 
-        // --- Downloaders ---
-        services.AddHttpClient<MirrorDownloader>(client =>
+        // --- Nexus ---
+        services.TryAddSingleton<INexusApiKeyProvider, NexusApiKeyProvider>();
+
+        // --- HttpClient-ы (именованные) ---
+        services.AddHttpClient(MirrorDownloader.HttpClientName, client =>
         {
             client.Timeout = TimeSpan.FromMinutes(10);
         });
 
-        services.TryAddSingleton<IArchiveDownloader>(sp =>
-            sp.GetRequiredService<MirrorDownloader>());
+        services.AddHttpClient(NexusDownloader.HttpClientName, client =>
+        {
+            client.Timeout = TimeSpan.FromMinutes(10);
+        });
+
+        services.AddHttpClient("nexus-api", client =>
+        {
+            client.Timeout = TimeSpan.FromMinutes(2);
+        });
+
+        // --- NexusClient (API) ---
+        services.TryAddSingleton<NexusClient>(sp =>
+        {
+            var factory = sp.GetRequiredService<IHttpClientFactory>();
+            return new NexusClient(
+                factory.CreateClient("nexus-api"),
+                sp.GetRequiredService<INexusApiKeyProvider>(),
+                sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<NexusClient>>());
+        });
+
+        // --- Downloaders в коллекции IArchiveDownloader ---
+        // TryAddEnumerable с явным ImplementationType — каждая пара
+        // (ServiceType, ImplementationType) регистрируется один раз,
+        // даже если AddFirelinkInstall вызывается дважды.
+        //
+        // DI создаст downloader-ы через активацию конструктора.
+        // Конструкторы принимают IHttpClientFactory — не HttpClient —
+        // чтобы получить именованный клиент с правильным таймаутом.
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<IArchiveDownloader, MirrorDownloader>());
+
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<IArchiveDownloader, NexusDownloader>());
 
         services.TryAddSingleton<DownloaderRegistry>();
 

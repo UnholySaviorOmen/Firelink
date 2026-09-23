@@ -1,0 +1,20 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Firelink.Gui.Shared.ViewModels"
+             x:Class="Firelink.Gui.Views.NavigationView"
+             x:DataType="vm:NavigationVM">
+  <Border Background="#1F2933">
+    <ListBox ItemsSource="{Binding Items}"
+             SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
+             Background="Transparent"
+             BorderThickness="0">
+      <ListBox.ItemTemplate>
+        <DataTemplate DataType="vm:NavigationItem">
+          <TextBlock Text="{Binding Title}"
+                     Padding="16,12"
+                     FontSize="14" />
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </Border>
+</UserControl>

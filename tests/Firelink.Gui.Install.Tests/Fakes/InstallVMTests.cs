@@ -1,0 +1,346 @@
+using FluentAssertions;
+using Firelink.Gui.Install.Tests.Fakes;
+using Firelink.Gui.Install.ViewModels;
+using Firelink.Gui.Shared.Logging;
+using Firelink.Gui.Shared.State;
+using Firelink.Gui.Shared.ViewModels;
+using Microsoft.Extensions.Logging.Abstractions;
+
+namespace Firelink.Gui.Install.Tests;
+
+public class InstallVMTests
+{
+    private static (InstallVM vm, FakeInstallRunner runner, FakeFilePickerService picker)
+        Make()
+    {
+        var runner = new FakeInstallRunner();
+        var picker = new FakeFilePickerService();
+        var sink = new ObservableLogSink();
+        var log = new LogVM(sink);
+
+        var vm = new InstallVM(
+            runner, picker, log,
+            NullLogger<InstallVM>.Instance);
+
+        return (vm, runner, picker);
+    }
+
+    private static string MakeTempJson()
+    {
+        var tmp = Path.GetTempFileName();
+        File.WriteAllText(tmp, "{}");
+        return tmp;
+    }
+
+    // ------------------------------------------------------------------
+    //  Configuration
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void InitialState_IsConfiguration()
+    {
+        var (vm, _, _) = Make();
+
+        vm.State.Should().Be(InstallState.Configuration);
+        vm.IsConfiguring.Should().BeTrue();
+        vm.IsInstalling.Should().BeFalse();
+        vm.IsSuccess.Should().BeFalse();
+        vm.IsFailure.Should().BeFalse();
+        vm.Summary.Should().BeNull();
+        vm.ErrorMessage.Should().BeNull();
+    }
+
+    [Fact]
+    public void InstallCommand_NoModlist_CannotExecute()
+    {
+        var (vm, _, _) = Make();
+
+        vm.InstallCommand.CanExecute(null).Should().BeFalse();
+    }
+
+    [Fact]
+    public void InstallCommand_InvalidModlist_CannotExecute()
+    {
+        var (vm, _, _) = Make();
+
+        vm.ModlistPicker.SetPath(@"C:\nope\does-not-exist.json");
+
+        vm.InstallCommand.CanExecute(null).Should().BeFalse();
+    }
+
+    [Fact]
+    public void InstallCommand_ValidModlist_CanExecute()
+    {
+        var tmp = MakeTempJson();
+        try
+        {
+            var (vm, _, _) = Make();
+            vm.ModlistPicker.SetPath(tmp);
+
+            vm.InstallCommand.CanExecute(null).Should().BeTrue();
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    //  Run — success
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task InstallAsync_Success_TransitionsToSuccess()
+    {
+        var tmp = MakeTempJson();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ResultToReturn = FakeInstallRunner.MakeSummary(
+                modsCreated: 5, archivesPresent: 3);
+
+            vm.ModlistPicker.SetPath(tmp);
+            await vm.InstallCommand.ExecuteAsync(null);
+
+            vm.State.Should().Be(InstallState.Success);
+            vm.IsSuccess.Should().BeTrue();
+            vm.Summary.Should().NotBeNull();
+            vm.Summary!.ModsCreated.Should().Be(5);
+            vm.Summary!.ArchivesAlreadyPresent.Should().Be(3);
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
+    }
+
+    [Fact]
+    public async Task InstallAsync_PassesManifestPathToRunner()
+    {
+        var tmp = MakeTempJson();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ResultToReturn = FakeInstallRunner.MakeSummary();
+
+            vm.ModlistPicker.SetPath(tmp);
+            await vm.InstallCommand.ExecuteAsync(null);
+
+            runner.LastManifestPath.Should().Be(tmp);
+            runner.LastTarget.Should().BeNull();
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
+    }
+
+    [Fact]
+    public async Task InstallAsync_WithTarget_PassesTargetToRunner()
+    {
+        var tmp = MakeTempJson();
+        var dir = Path.Combine(Path.GetTempPath(), "firelink-target-" + Guid.NewGuid());
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ResultToReturn = FakeInstallRunner.MakeSummary();
+
+            vm.ModlistPicker.SetPath(tmp);
+            vm.TargetPicker.SetPath(dir);
+            await vm.InstallCommand.ExecuteAsync(null);
+
+            runner.LastTarget.Should().Be(dir);
+        }
+        finally
+        {
+            File.Delete(tmp);
+            Directory.Delete(dir);
+        }
+    }
+
+    [Fact]
+    public async Task InstallAsync_WithoutTarget_PassesNullToRunner()
+    {
+        var tmp = MakeTempJson();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ResultToReturn = FakeInstallRunner.MakeSummary();
+
+            vm.ModlistPicker.SetPath(tmp);
+            await vm.InstallCommand.ExecuteAsync(null);
+
+            runner.LastTarget.Should().BeNull();
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
+    }
+
+    [Fact]
+    public async Task InstallAsync_ClearsLogOnStart()
+    {
+        var tmp = MakeTempJson();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ResultToReturn = FakeInstallRunner.MakeSummary();
+
+            vm.Log.Entries.Add(new LogEntry(
+                DateTimeOffset.Now, Microsoft.Extensions.Logging.LogLevel.Information,
+                "old entry"));
+
+            vm.ModlistPicker.SetPath(tmp);
+            await vm.InstallCommand.ExecuteAsync(null);
+
+            vm.Log.Entries.Should().BeEmpty();
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    //  Run — failure
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task InstallAsync_RunnerThrows_TransitionsToFailure()
+    {
+        var tmp = MakeTempJson();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ExceptionToThrow = new InvalidOperationException("boom");
+
+            vm.ModlistPicker.SetPath(tmp);
+            await vm.InstallCommand.ExecuteAsync(null);
+
+            vm.State.Should().Be(InstallState.Failure);
+            vm.IsFailure.Should().BeTrue();
+            vm.ErrorMessage.Should().Contain("boom");
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
+    }
+
+    [Fact]
+    public async Task InstallAsync_Cancelled_ReturnsToConfiguration()
+    {
+        var tmp = MakeTempJson();
+        try
+        {
+            var (vm, runner, _) = Make();
+
+            // Runner бросит OperationCanceledException.
+            runner.ExceptionToThrow = new OperationCanceledException();
+
+            vm.ModlistPicker.SetPath(tmp);
+            await vm.InstallCommand.ExecuteAsync(null);
+
+            vm.State.Should().Be(InstallState.Configuration);
+            vm.ErrorMessage.Should().Be("Cancelled.");
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    //  Cancel
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task CancelCommand_CancelsRunningInstall()
+    {
+        var tmp = MakeTempJson();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.Gate = new TaskCompletionSource();
+
+            vm.ModlistPicker.SetPath(tmp);
+
+            // Запускаем InstallAsync и не ждём его завершения.
+            var installTask = vm.InstallCommand.ExecuteAsync(null);
+
+            // Убеждаемся, что мы в Installing.
+            vm.State.Should().Be(InstallState.Installing);
+            vm.CancelCommand.CanExecute(null).Should().BeTrue();
+
+            // Отменяем.
+            vm.CancelCommand.Execute(null);
+
+            await installTask;
+
+            vm.State.Should().Be(InstallState.Configuration);
+            vm.ErrorMessage.Should().Be("Cancelled.");
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
+    }
+
+    [Fact]
+    public void CancelCommand_NotInstalling_CannotExecute()
+    {
+        var (vm, _, _) = Make();
+
+        vm.CancelCommand.CanExecute(null).Should().BeFalse();
+    }
+
+    // ------------------------------------------------------------------
+    //  Home
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void HomeCommand_InvokesNavigateHome()
+    {
+        var (vm, _, _) = Make();
+        var navigated = false;
+
+        vm.SetNavigateHome(() => navigated = true);
+        vm.HomeCommand.Execute(null);
+
+        navigated.Should().BeTrue();
+    }
+
+    // ------------------------------------------------------------------
+    //  Visibility
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task State_TransitionsUpdateVisibilityFlags()
+    {
+        var tmp = MakeTempJson();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ResultToReturn = FakeInstallRunner.MakeSummary();
+
+            // Configuration.
+            vm.IsConfiguring.Should().BeTrue();
+            vm.IsInstalling.Should().BeFalse();
+
+            vm.ModlistPicker.SetPath(tmp);
+            await vm.InstallCommand.ExecuteAsync(null);
+
+            // Success.
+            vm.IsConfiguring.Should().BeFalse();
+            vm.IsInstalling.Should().BeFalse();
+            vm.IsSuccess.Should().BeTrue();
+            vm.IsFailure.Should().BeFalse();
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
+    }
+}

@@ -13,4 +13,7 @@
     <PackageReference Include="Polly" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Firelink.Platform.Nexus.Tests" />
+  </ItemGroup>
 </Project>

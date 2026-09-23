@@ -2,6 +2,12 @@
   <Folder Name="/src/">
     <Project Path="src/Firelink.Cli/Firelink.Cli.csproj" Id="dc3df7b9-060e-4849-b03a-73326885949c" />
     <Project Path="src/Firelink.Core/Firelink.Core.csproj" />
+    <Project Path="src/Firelink.Gui.Controls/Firelink.Gui.Controls.csproj" Id="c1f23100-18d2-4fa1-bd28-c6580e24fee4" />
+    <Project Path="src/Firelink.Gui.Install/Firelink.Gui.Install.csproj" Id="f4ccb7e9-2b8b-4d11-86a8-baf149ca2dfd" />
+    <Project Path="src/Firelink.Gui.Pack/Firelink.Gui.Pack.csproj" Id="b971502a-8930-4d13-9cd6-00a4daed58ea" />
+    <Project Path="src/Firelink.Gui.Shared/Firelink.Gui.Shared.csproj" Id="8016ce84-c1e5-4557-9b31-88e51011778f" />
+    <Project Path="src/Firelink.Gui.Verify/Firelink.Gui.Verify.csproj" Id="2d880b18-9b59-4cad-98a2-0851dfff3bf0" />
+    <Project Path="src/Firelink.Gui/Firelink.Gui.csproj" Id="aa28b8ac-746c-4cfe-8ebd-425a17e60fcb" />
     <Project Path="src/Firelink.Install/Firelink.Install.csproj" />
     <Project Path="src/Firelink.Pack/Firelink.Pack.csproj" />
     <Project Path="src/Firelink.Platform.MO2/Firelink.Platform.MO2.csproj" />
@@ -9,10 +15,15 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Firelink.Core.Tests/Firelink.Core.Tests.csproj" />
+    <Project Path="tests/Firelink.Gui.Install.Tests/Firelink.Gui.Install.Tests.csproj" Id="52beb680-81e0-4132-bf13-e81072c95fdd" />
+    <Project Path="tests/Firelink.Gui.Pack.Tests/Firelink.Gui.Pack.Tests.csproj" Id="7f75fcc1-d630-49da-8bc0-7c77a42bdfb8" />
+    <Project Path="tests/Firelink.Gui.Shared.Tests/Firelink.Gui.Shared.Tests.csproj" Id="8ebc91a9-48e3-4aab-b1bd-73b1653b97a0" />
+    <Project Path="tests/Firelink.Gui.Verify.Tests/Firelink.Gui.Verify.Tests.csproj" Id="f86d3792-8379-498c-85d8-ba040cbb50bc" />
     <Project Path="tests/Firelink.Install.Tests/Firelink.Install.Tests.csproj" />
     <Project Path="tests/Firelink.Integration.Tests/Firelink.Integration.Tests.csproj" Id="453e4164-1215-4415-9a5f-5c2ff85859fa" />
     <Project Path="tests/Firelink.Pack.Tests/Firelink.Pack.Tests.csproj" />
     <Project Path="tests/Firelink.Platform.MO2.Tests/Firelink.Platform.MO2.Tests.csproj" />
+    <Project Path="tests/Firelink.Platform.Nexus.Tests/Firelink.Platform.Nexus.Tests.csproj" Id="1f1daaa4-9909-4d56-b89d-4c2f06f30aa1" />
   </Folder>
   <Folder Name="/Элементы решения/">
     <File Path="DOC.md" />

@@ -1,3182 +1,6 @@
 # Firelink -- repo dump
 
-**Generated:** 22.09.2026  0:47:55,19
-**Root:** C:\Code\Firelink
-
----
-
-## Directory.Build.props
-
-````xml
-﻿<Project>
-  <PropertyGroup>
-    <LangVersion>12.0</LangVersion>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
-    <GenerateDocumentationFile>false</GenerateDocumentationFile>
-    <InvariantGlobalization>true</InvariantGlobalization>
-  </PropertyGroup>
-</Project>
-````
-
-## Directory.Build.targets
-
-````xml
-<Project>
-
-  <!--
-    Копировать Assets/7z/* (7z.exe, 7z.dll, License.txt) в output
-    каждого проекта, который ссылается на Firelink.Core.
-
-    Причина: <Content> в Firelink.Core.csproj не копируется транзитивно
-    через ProjectReference. Приходится делать это глобально.
-  -->
-  <ItemGroup Condition="Exists('$(MSBuildThisFileDirectory)src\Firelink.Core\Assets\7z\7z.exe')">
-    <Content Include="$(MSBuildThisFileDirectory)src\Firelink.Core\Assets\7z\**\*">
-      <Link>Assets\7z\%(RecursiveDir)%(Filename)%(Extension)</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Visible>false</Visible>
-    </Content>
-  </ItemGroup>
-
-</Project>
-````
-
-## Directory.Packages.props
-
-````xml
-﻿<Project>
-  <PropertyGroup>
-    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
-  </PropertyGroup>
-  <ItemGroup>
-    <PackageVersion Include="Spectre.Console.Cli" Version="0.48.0" />
-    <PackageVersion Include="System.Text.Json" Version="8.0.5" />
-    <PackageVersion Include="System.IO.Hashing" Version="8.0.0" />
-    <PackageVersion Include="Microsoft.Data.Sqlite" Version="8.0.10" />
-    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" />
-    <PackageVersion Include="Microsoft.Extensions.Logging" Version="8.0.1" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="8.0.1" />
-    <PackageVersion Include="Microsoft.Extensions.Http" Version="8.0.1" />
-    <PackageVersion Include="Polly" Version="8.4.2" />
-    <PackageVersion Include="Octokit" Version="13.0.1" />
-    <PackageVersion Include="coverlet.collector" Version="6.0.2" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
-    <PackageVersion Include="xunit" Version="2.9.2" />
-    <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
-    <PackageVersion Include="FluentAssertions" Version="6.12.1" />
-  </ItemGroup>
-</Project>
-````
-
-## DOC.md
-
-````markdown
-# Firelink — Документация проекта
-
-**Версия документа:** 4.2
-**Обновлено:** 2026-09-21
-
-## Оглавление
-
-1. [Обзор](#обзор)
-2. [Основные принципы](#основные-принципы)
-3. [Глоссарий](#глоссарий)
-4. [Архитектура](#архитектура)
-5. [Структура папок](#структура-папок)
-6. [Форматы данных](#форматы-данных)
-    - 6.1. [firelink-pack.json](#firelink-packjson)
-    - 6.2. [modlist.json](#modlistjson)
-    - 6.3. [Директивы](#директивы)
-    - 6.4. [Источники архивов](#источники-архивов)
-    - 6.5. [Формат .meta](#формат-meta)
-    - 6.6. [Формат meta.ini мода](#формат-meta-ini-мода)
-    - 6.7. [__Firelink_Output](#__firelink_output)
-7. [Идентификация архивов](#идентификация-архивов)
-8. [Nexus game domain](#nexus-game-domain)
-9. [Формат modlist.txt / plugins.txt / loadorder.txt](#формат-файлов-mo2)
-10. [Пайплайн: создание сборки](#пайплайн-создание-сборки)
-11. [Пайплайн: установка сборки](#пайплайн-установка-сборки)
-12. [Пайплайн: обновление сборки](#пайплайн-обновление-сборки)
-13. [Работа с Nexus Mods](#работа-с-nexus-mods)
-14. [Глобальный реестр архивов](#глобальный-реестр-архивов)
-15. [CLI команды](#cli-команды)
-16. [Обработка ошибок](#обработка-ошибок)
-17. [Технологический стек](#технологический-стек)
-18. [Дорожная карта](#дорожная-карта)
-19. [Статус реализации](#статус-реализации)
-
----
-
-## Обзор
-
-**Firelink** — инструмент для создания и установки воспроизводимых
-сборок модов для Mod Organizer 2. Состоит из двух CLI-приложений:
-
-- **`Firelink.Pack`** — для автора сборки. Создаёт манифест
-  (`modlist.json`) на основе готового инстанса MO2.
-- **`Firelink.Install`** — для пользователя. Воспроизводит сборку по манифесту.
-
-**Ключевая идея:** манифест — единственный источник правды. Все файлы
-восстанавливаются по хешам (`xxHash64`). Firelink работает с **результатом**
-установки, а не с процессом. Как именно автор ставил моды — нас не интересует.
-
-**Философия packer-а:** снапшот инстанса. Автор готовит инстанс MO2
-любым способом. Packer индексирует, что получилось. Всё, что не
-восстановимо из архивов, честно складывается в `__Firelink_Output` —
-автор сам решает, делать ли из этого патч.
-
-**Философия installer-а:** тупой исполнитель директив. Не проверяет
-игру, версии, совместимость. Просто воссоздаёт структуру, которую
-сделал автор.
-
-**Целевая платформа:** Windows 10 1809+ / Windows 11.
-
-**Целевая версия MO2:** 2.5.2.
-
----
-
-## Основные принципы
-
-1. **Манифест — единственный источник правды.** Профиль MO2 генерируется
-   из манифеста, а не копируется.
-2. **Файлы восстанавливаются по хешам.** `xxHash64`, не по именам и путям.
-3. **Firelink работает с результатом, а не с процессом.** Никаких
-   FOMOD-парсеров, XML, `meta.ini` (читается только для метаданных).
-4. **Одна папка `downloads/` для всех архивов.** Моды, MO2, extras —
-   всё в одном месте.
-5. **Идентификация архивов — канонический id.** Не по имени файла:
-   `nexus_{game}_{modId}_{fileId}` для Nexus-модов, `local_{slug}` —
-   для архивов без `.meta`.
-6. **Глобальный реестр архивов.** SQLite в `%USERPROFILE%\.firelink\archives.db`
-   (v0.2.0). Переиспользование между сборками.
-7. **Ничего не удаляем.** Ни архивы, ни моды, кроме случаев, описанных
-   в reconcile.
-8. **Директивы выполняются последовательно.** `lastWins` при конфликтах.
-9. **`[NoDelete]` в имени папки** (`MO2/mods/[NoDelete]SkyUI`) защищает
-   пользовательские моды.
-10. **BSA/BA2 — единые файлы.** Не разбираем содержимое (принципиальное
-    отличие от Wabbajack; см. §Идентификация архивов).
-11. **Никаких исполняемых скриптов.** Только декларативные директивы.
-12. **Installer идемпотентен.** Можно запускать повторно.
-13. **Installer не работает с игрой.** Не ищет, не копирует, не проверяет.
-    `Stock Game/` — просто папка для extras.
-14. **Шаги pipeline изолированы.** Не вызывают друг друга. Pipeline —
-    единственный оркестратор.
-15. **Nexus — один источник, несколько стратегий доступа.** Не дублируем
-    в манифесте.
-16. **Параллелизм на уровне pipeline.** `Parallel.ForEach` в шагах.
-17. **Кеш хешей обязателен.** `FileHashCache` (in-memory; persist — v0.2.0).
-18. **Манифест самодостаточен.** Installer не ходит на Nexus за метаданными.
-19. **Unmatched → `__Firelink_Output`.** Не `InlineFile`, не base64.
-    Автор сам решает.
-20. **`.mohidden` — часть пути.** Файл `meshes.mohidden/foo.nif` — это
-    файл с относительным путём `meshes.mohidden/foo.nif`, не «mod с
-    суффиксом».
-21. **Инстансы в `<exeDir>/Instances/`.** Имя = `meta.name` (нормализованное).
-22. **Сепараторы (`#...`) — часть сборки.** Packer сохраняет, installer
-    пропускает, `RegenerateProfileStep` пишет.
-23. **Один extract архивов на pack pipeline.** `ArchiveMatcher.Build`
-    вызывается один раз (12.13.6).
-24. **Отмена — не ошибка.** `Ctrl+C` нормализуется в `Cancelled.` + exit 130.
-    `AggregateException`, все inner которого — отмены, трактуется как
-    отмена (`CancellationHelper.IsCancellation`).
-25. **Пути с пробелами — в кавычках.** CLI даёт hint, если `argv` разбит
-    пробелами и парсинг не удался.
-
----
-
-## Глоссарий
-
-| Термин | Определение |
-|---|---|
-| **Манифест** | `modlist.json` — единственный источник правды. |
-| **Инстанс** | Рабочая папка MO2 с подпапками `MO2/`, `Stock Game/`, `__Firelink_Output/` (у автора) или `modlist.json` (у пользователя). |
-| **Канонический id** | Идентификатор архива: `nexus_{game}_{modId}_{fileId}` или `local_{slug}`. |
-| **Директива** | Декларативное действие: `FromArchive`, `CreateDirectory`, `Delete`. |
-| **`FromArchive`** | Директива: взять файл из архива по hash, положить по destination. |
-| **Сепаратор** | Строка `#...` в `modlist.txt` — визуальный разделитель. Часть сборки. |
-| **`[NoDelete]`** | Маркер в имени мода: installer не трогает такие папки. |
-| **Unmatched** | Файл мода/extension/extra, не найденный в архивах. Кладётся в `__Firelink_Output`. |
-| **Extensions** | Файлы в корне `MO2/`, кроме модов: `plugins/*.dll`, `tools/*`. Задаются в `mo2.extensions[]`. |
-| **Extras** | Файлы в корне `Stock Game/`: `skse64_loader.exe`, `enbseries/`. Задаются в `stockGame.extras[]`. |
-| **`.mohidden`** | Часть пути, а не отдельный «скрытый» файл. `meshes.mohidden/foo.nif` — обычный файл. |
-| **`__Firelink_Output`** | Каталог автора. Складывается всё, что не восстановимо из архивов. |
-| **BSA/BA2** | Единые файлы. Firelink не разбирает содержимое. |
-| **Mirror** | Источник архива: прямая URL-ссылка + hash. |
-| **Nexus** | Источник архива: `modId` + `fileId` + `game`. API — блок 9. |
-| **`ArchiveMatcher`** | Распаковывает все архивы один раз, строит hash-индексы, матчит файлы. |
-| **`manifest.archives[]`** | Все mod-архивы. MO2-архив — отдельно в `manifest.mo2.archive`. |
-| **`ArchiveDownloadHelper`** | Общий helper скачивания с retry, `.part`, hash-check. |
-
----
-
-## Архитектура
-
-### Проекты solution
-
-Firelink.slnx
-src/
-Firelink.Core — ядро: модели, JSON, хеширование, абстракции
-Firelink.Platform.MO2 — чтение/запись modlist, plugins, loadorder, meta.ini
-Firelink.Platform.Nexus — Nexus API (пусто до Фазы 6)
-Firelink.Pack — class library: pipeline packer
-Firelink.Install — class library: pipeline installer
-Firelink.Cli — CLI (exe → Firelink.Cli.exe): единая точка входа
-tests/
-Firelink.Core.Tests
-Firelink.Platform.MO2.Tests
-Firelink.Pack.Tests
-Firelink.Install.Tests
-Firelink.Integration.Tests
-
-### Принципы архитектуры
-
-**Pipeline — единственный оркестратор.** Только pipeline знает порядок
-шагов. Шаги не знают друг о друге.
-
-**Шаги изолированы.** Каждый шаг — это `IStep<TInput, TOutput>`.
-Получает вход, возвращает выход. Не вызывает другие шаги.
-
-**Зависимости через DI.** Никаких `ServiceLocator`, никаких `static` классов.
-
-**Ошибки на уровне pipeline.** Шаг либо успешен, либо бросает исключение.
-Pipeline решает, что делать.
-
-### Интерфейсы
-
-```csharp
-public interface IStep<in TInput, TOutput>
-{
-    Task<TOutput> ExecuteAsync(TInput input, CancellationToken ct);
-}
-
-public interface IArchiveDownloader
-{
-    string SourceType { get; }
-    Task<Stream> DownloadAsync(ArchiveSourceRef source, CancellationToken ct);
-}
-
-public interface IArchiveExtractor
-{
-    bool CanExtract(string archivePath);
-    Task<IReadOnlyList<string>> ExtractAsync(
-        string archivePath, string destinationDirectory, CancellationToken ct);
-}
-```
-
-## Границы ответственности
-
-Firelink.Core: модели, JSON, хеширование, валидаторы, Slug,
-ArchiveId, абстракции, SevenZipExtractor, TempWorkspace,
-FileHashCache, ArchiveDownloadHelper, CancellationHelper,
-StepProgress.
-
-Firelink.Platform.MO2: чтение/запись MO2-файлов, MetaReader,
-MetaIniReader, MetaIniWriter, ModlistWriter, PluginsWriter,
-LoadorderWriter.
-
-Firelink.Platform.Nexus: пока пусто (блок 9 — NexusClient,
-NexusApiKeyProvider, NexusDownloader).
-
-Firelink.Pack: class library. PackPipeline + 13 шагов;
-Firelink.Pack.Matching (ArchiveMatcher, ArchiveIndexes,
-Mo2ArchiveBuilder) — построение индексов архивов и матчинг файлов
-по хешу. Один экземпляр ArchiveMatcher на весь pipeline. Используется
-шагами MatchStep, MatchExtensionsStep, MatchExtrasStep.
-PackInputFactory — сборка PackPipeline.Input.
-PackSummary + PackSummaryBuilder — плоская сводка результата.
-DI-extension: `AddFirelinkPack`.
-
-Firelink.Install: class library. InstallPipeline + 11 шагов;
-MirrorDownloader, DownloaderRegistry; VerifyPipeline.
-InstallInputFactory — сборка InstallPipeline.Input.
-InstallSummary + InstallSummaryBuilder — плоская сводка результата.
-DI-extension: `AddFirelinkInstall`.
-
-Firelink.Cli: exe. Единая точка входа: `Program.cs`,
-`Commands/` (PackCommand, InstallCommand, VerifyCommand,
-HashCommand, DoctorCommand), `Settings/`,
-`Infrastructure/TypeRegistrar`. Использует `AddFirelinkPack` и
-`AddFirelinkInstall`.
-
-## Общие API для клиентов (CLI + GUI)
-
-Библиотеки `Firelink.Pack` и `Firelink.Install` предоставляют
-унифицированный публичный API. CLI использует его сейчас, GUI
-будет использовать в Фазе 3. Логика не дублируется.
-
-### Фабрики Input
-
-```csharp
-// Packer:
-var input = PackInputFactory.Create(
-    configPath,
-    parallelOptions: opts);   // opts = null → Environment.ProcessorCount
-
-// Installer:
-var input = InstallInputFactory.Create(
-    manifestPath,
-    target: target,           // null → auto-resolve в <exeDir>/Instances/
-    parallelOptions: opts);
-```
-
-Фабрики — единственная точка, где:
-
-Path.GetFullPath нормализует user-facing пути;
-
-ParallelOptions получает дефолт при null.
-
-Прогресс
-csharp
-var progress = new Progress<StepProgress>(p =>
-    logger.LogInformation("Step {Index}/{Total}: {Name}",
-        p.StepIndex, p.TotalSteps, p.StepName));
-
-await pipeline.ExecuteAsync(input, ct, progress);
-StepProgress — record в Firelink.Core.Progress:
-(int StepIndex, int TotalSteps, string StepName). StepIndex — 1-based.
-Report вызывается перед шагом.
-
-Packer: 14 имён (включая WriteUnmatchedExtensionsExtras).
-
-Installer: 11 имён.
-
-StepName — стабильный контракт для GUI: имена не менять без причины.
-
-Сводки
-csharp
-// Packer:
-var summary = PackSummaryBuilder.Build(result);
-Console.WriteLine($"{summary.Name} v{summary.Version}: " +
-    $"{summary.DirectivesTotal} directives, " +
-    $"{summary.UnmatchedFiles} unmatched");
-
-// Installer:
-var summary = InstallSummaryBuilder.Build(output);
-Console.WriteLine($"{summary.ModsCreated} created, " +
-    $"{summary.ModsSkipped} skipped");
-Summary — плоский sealed record только из примитивов.
-Никаких ссылок на PackResult / InstallPipeline.Output /
-Manifest. GUI может получить Summary и не тащить за собой
-весь pipeline-контекст.
-
-Полные списки (Created, Recreated, Skipped, Deleted) — не в
-Summary. Кому нужно — берёт из Pipeline.Output напрямую.
-
-Порядок использования
-Собрать Input через фабрику.
-
-Вызвать pipeline.ExecuteAsync(input, ct, progress), где
-progress опционален.
-
-Построить Summary из результата.
-
-Отобразить Summary (CLI — таблица, GUI — ViewModel).
-
-Никаких Path.GetFullPath в клиентах. Никакой логики подсчёта
-директив в клиентах. Всё — в библиотеке.
-
-## Структура папок
-
-### Рабочая папка автора
-
-C:\Mods\Dev\
-  firelink-pack.json              ← конфиг packer-а
-  NordicUI Overhaul\              ← инстанс MO2
-    MO2\
-      ModOrganizer.exe
-      portable.txt
-      plugins\                    ← extensions (fomod_plus_installer.dll)
-      tools\                      ← extensions (BethINI)
-      downloads\                  ← архивы (моды + MO2 + extras)
-      mods\
-        SkyUI\
-          meta.ini
-        [NoDelete]UserMod\        ← пользовательский мод
-      profiles\NordicUI\          ← modlist.txt, plugins.txt, loadorder.txt
-    Stock Game\                   ← extras (SKSE, ENB)
-    __Firelink_Output\
-      modlist.json                ← манифест (WriteManifestStep)
-      MO2\
-        mods\<ModName>\<path>     ← unmatched модов
-        <path>                    ← unmatched extensions
-      Stock Game\
-        <path>                    ← unmatched extras
-
-### Рабочая папка пользователя (после установки)
-
-D:\Games\Firelink\
-  Firelink.Cli.exe
-  Firelink.Core.dll
-  Firelink.Pack.dll
-  Firelink.Install.dll
-  Firelink.Platform.MO2.dll
-  ...
-  Assets\7z\ (7z.exe, 7z.dll)
-  Instances\
-    Nordic UI Overhaul\           ← имя из meta.name
-      modlist.json                ← копия манифеста (ResolveTargetStep)
-      MO2\
-        ModOrganizer.exe
-        portable.txt
-        plugins\
-        tools\
-        downloads\
-          Mod.Organizer-2.5.2.7z
-          SkyUI.7z
-        mods\
-          SkyUI\
-            meta.ini
-          [NoDelete]UserMod\      ← пользовательский мод, installer не трогает
-        profiles\Default\
-          modlist.txt / plugins.txt / loadorder.txt
-      Stock Game\
-        skse64_loader.exe
-        enbseries\
-
-### Глобальные данные
-
-%USERPROFILE%\.firelink\
-  archives.db                     ← реестр + конфиг (v0.2.0)
-  nexus.key                       ← API-ключ (блок 9, plaintext; v0.2.0 — DPAPI)
-
-## Форматы данных
-
-### firelink-pack.json
-
-Конфиг автора сборки. Лежит рядом с инстансом MO2.
-
-```json
-{
-  "meta": {
-    "name": "OmenRim 7",
-    "version": "0.1.0",
-    "author": "YourName",
-    "game": "skyrimspecialedition",
-    "gameVersion": "1.6.1170"
-  },
-  "instance": {
-    "path": "."
-  },
-  "mo2": {
-    "version": "2.5.2",
-    "profile": "Default",
-    "archive": "Mod.Organizer-2.5.2.7z",
-    "source": {
-      "type": "mirror",
-      "url": "https://github.com/ModOrganizer2/modorganizer/releases/download/v2.5.2/Mod.Organizer-2.5.2.7z",
-      "hash": "xxh64:E574E05EB6C470AD"
-    },
-    "extensions": [
-      "plugins/curationclub"
-    ]
-  },
-  "stockGame": {
-    "extras": [
-      "skse64_loader.exe",
-      "skse64_1_7_104.dll"
-    ]
-  },
-  "archiveSources": [
-    {
-      "archive": "Effect 11-415-1.0.0-2026.08.24-[mod.pub].zip",
-      "sources": [
-        {
-          "type": "mirror",
-          "url": "https://mod.pub/skyrim-se/415/files/Effect-11-415-1.0.0-2026.08.24-[mod.pub].zip",
-          "hash": "xxh64:B48AA9BEA422799E"
-        }
-      ]
-    }
-  ]
-}
-```
-
-Поле	Описание
-meta.name	Имя сборки. Используется как имя папки инстанса. Проходит NameValidator.
-meta.version	Версия сборки. Semver 2.0.0. Проходит SemverValidator.
-meta.author	Автор.
-meta.game	Nexus game domain (skyrimspecialedition, fallout4, ...).
-meta.gameVersion	Целевая версия игры (информационное).
-instance.path	Относительный путь к корню инстанса от папки с конфигом. Проходит InstancePathValidator.
-mo2.version	Версия MO2.
-mo2.profile	Имя профиля MO2 в profiles/. Проходит NameValidator. Обязательно.
-mo2.archive	Имя архива MO2 в downloads/ (только имя, не путь).
-mo2.source	Источник MO2-архива. Обязательно MirrorSourceRef (с hash).
-mo2.extensions	Относительные пути от MO2/ (файлы или папки).
-stockGame.extras	Относительные пути от Stock Game/.
-archiveSources	Источники для архивов без .meta. Уникальные имена.
-
-**Валидация**: PackConfigValidator. Проверки:
-
-meta.name — NameValidator (запрещённые символы, reserved names).
-
-meta.version — SemverValidator.
-
-meta.author, meta.game — непустые.
-
-instance.path — InstancePathValidator (относительный, без ..).
-
-mo2.profile — NameValidator.
-
-mo2.archive — не путь.
-
-mo2.source — MirrorSourceRef.
-
-mo2.extensions[], stockGame.extras[] — RelativePathValidator.
-
-archiveSources[].archive — не путь, уникально.
-
-archiveSources[].sources — непустой.
-
-### modlist.json
-
-Манифест. Единственный источник правды для installer-а.
-
-```json
-{
-  "schemaVersion": "1.0.0",
-  "manifestVersion": "0.1.0",
-  "createdAt": "2026-09-20T21:41:13.000Z",
-  "createdBy": "firelink-pack/0.1.0",
-
-  "meta": {
-    "name": "OmenRim 7",
-    "version": "0.1.0",
-    "author": "YourName",
-    "game": "skyrimspecialedition",
-    "gameVersion": "1.6.1170"
-  },
-
-  "execution": {
-    "directives": "sequential",
-    "onConflict": "lastWins"
-  },
-
-  "mo2": {
-    "version": "2.5.2",
-    "profile": "Default",
-    "archive": {
-      "id": "local_mod-organizer-2-5-2",
-      "name": "Mod.Organizer-2.5.2.7z",
-      "size": 0,
-      "hash": "xxh64:e574e05eb6c470ad",
-      "sources": [
-        {
-          "type": "mirror",
-          "url": "https://github.com/ModOrganizer2/modorganizer/releases/download/v2.5.2/Mod.Organizer-2.5.2.7z",
-          "hash": "xxh64:e574e05eb6c470ad"
-        }
-      ]
-    },
-    "extensions": [
-      {
-        "name": "plugins/curationclub",
-        "directives": [
-          {
-            "type": "FromArchive",
-            "archive": "nexus_skyrimspecialedition_60552_123456",
-            "source": "curationclub.dll",
-            "destination": "plugins/curationclub/curationclub.dll",
-            "hash": "xxh64:...",
-            "size": 12345
-          }
-        ]
-      }
-    ]
-  },
-
-  "stockGame": {
-    "extras": [
-      {
-        "name": "skse64_loader.exe",
-        "directives": [
-          {
-            "type": "FromArchive",
-            "archive": "nexus_skyrimspecialedition_30379_456789",
-            "source": "skse64_loader.exe",
-            "destination": "skse64_loader.exe",
-            "hash": "xxh64:...",
-            "size": 67890
-          }
-        ]
-      }
-    ]
-  },
-
-  "archives": [
-    {
-      "id": "nexus_skyrimspecialedition_3863_1000172397",
-      "name": "SkyUI_5_1-3863-5-1.7z",
-      "size": 12345678,
-      "hash": "xxh64:...",
-      "sources": [
-        {
-          "type": "nexus",
-          "modId": 3863,
-          "fileId": 1000172397,
-          "game": "skyrimspecialedition"
-        }
-      ]
-    }
-  ],
-
-  "mods": [
-    {
-      "name": "SkyUI",
-      "enabled": true,
-      "order": 5,
-      "meta": {
-        "gameName": "Skyrim Special Edition",
-        "gameID": "skyrimspecialedition",
-        "modID": 3863,
-        "fileID": 1000172397,
-        "version": "5.1",
-        "repository": "Nexus",
-        "url": "https://www.nexusmods.com/skyrimspecialedition/mods/3863",
-        "comments": "",
-        "notes": ""
-      },
-      "directives": [
-        {
-          "type": "FromArchive",
-          "archive": "nexus_skyrimspecialedition_3863_1000172397",
-          "source": "interface/iconmenu.swf",
-          "destination": "interface/iconmenu.swf",
-          "hash": "xxh64:...",
-          "size": 4567
-        }
-      ]
-    }
-  ],
-
-  "plugins": [
-    { "name": "SkyUI.esp", "enabled": true, "order": 1 }
-  ],
-
-  "loadorder": [
-    "Skyrim.esm",
-    "Update.esm",
-    "SkyUI.esp"
-  ]
-}
-```
-
-Секция	Описание
-schemaVersion	Версия формата. ManifestSchema.IsSupported.
-manifestVersion	Версия сборки (= meta.version).
-createdAt	yyyy-MM-ddTHH:mm:ss.fffZ.
-createdBy	firelink-pack/0.1.0.
-meta	Метаданные сборки.
-execution	directives: "sequential", onConflict: "lastWins".
-mo2	Версия MO2, профиль, MO2-архив, extensions.
-stockGame	extras.
-archives	Все mod-архивы. MO2-архив сюда НЕ попадает.
-mods	Моды с директивами и ModMeta.
-plugins	Плагины с флагами.
-loadorder	Порядок загрузки.
-ModMeta (поле mods[].meta):
-
-Все поля опциональны.
-
-ModMeta.Empty — валидное состояние (meta.ini есть, [General] пустой).
-
-Поля: GameName, GameId, ModId, FileId, Version, Repository,
-Url, Comments, Notes. Без Category.
-
-### Директивы
-
-Полиморфизм: type — дискриминатор.
-
-FromArchive — взять файл из архива по hash:
-
-```json
-{
-  "type": "FromArchive",
-  "archive": "nexus_skyrimspecialedition_3863_1000172397",
-  "source": "interface/iconmenu.swf",
-  "destination": "interface/iconmenu.swf",
-  "hash": "xxh64:...",
-  "size": 4567
-}
-```
-
-archive — id из manifest.archives[] или manifest.mo2.archive.id.
-
-source — путь внутри архива.
-
-destination — путь относительно корня мода / MO2 / Stock Game.
-
-hash, size — проверка после распаковки.
-
-CreateDirectory — создать папку:
-
-```json
-{
-  "type": "CreateDirectory",
-  "destination": "meshes/empty/"
-}
-```
-
-Delete — удалить файл (не используется packer-ом, но модель есть):
-
-json
-{
-  "type": "Delete",
-  "destination": "interface/unwanted.swf"
-}
-InlineFile — модель удалена (решение №40). Packer не создаёт
-inline-файлов; всё, что не сматчилось, идёт в __Firelink_Output.
-
-### Источники архивов
-
-mirror — прямая URL-ссылка + hash:
-
-```json
-{
-  "type": "mirror",
-  "url": "https://cdn.example.com/skyui.7z",
-  "hash": "xxh64:..."
-}
-```
-
-url — HTTPS-ссылка.
-
-hash — обязателен.
-
-nexus — Nexus API:
-
-```json
-{
-  "type": "nexus",
-  "modId": 3863,
-  "fileId": 1000172397,
-  "game": "skyrimspecialedition"
-}
-```
-
-modId, fileId — положительные.
-
-game — Nexus game domain.
-
-GitHub source — удалён (cleanup, 12.10.1). Всё через mirror.
-
-### Формат .meta
-
-Файл рядом с архивом в downloads/: SkyUI.7z.meta.
-
-```
-[General]
-gameName=Skyrim
-modID=3863
-fileID=1000172397
-```
-
-Правила:
-
-Ключи modID / fileID — case-sensitive (заглавные ID).
-Так пишет Wabbajack и MO2.
-
-gameName — опционально (используется только в логе).
-
-Секция [General] — case-insensitive.
-
-.meta без modID/fileID (или с lowercase modid) →
-MetaReader.TryRead вернёт null → fallback на archiveSources[].
-
-.meta не считается архивом (ArchiveExtensions.IsArchive возвращает
-false для .meta).
-
-### Формат meta.ini мода
-
-Файл mods/<Name>/meta.ini. Создаётся MO2.
-
-```
-[General]
-gameName=Skyrim Special Edition
-gameID=skyrimspecialedition
-modID=32349
-fileID=795423
-version=1.7.0
-repository=Nexus
-url=https://www.nexusmods.com/skyrimspecialedition/mods/32349
-comments=
-notes=
-```
-
-Чтение (MetaIniReader):
-
-Секция [General]. Ключи case-insensitive (modID, modid,
-ModId — эквивалентны).
-
-[installedFiles] игнорируется.
-
-category, newestVersion, nexusFileStatus, timestamps — игнорируются.
-
-Если [General] пуста → ModMeta.Empty.
-
-Запись (MetaIniWriter):
-
-[General], camelCase (modID, fileID, gameID).
-
-UTF-8 без BOM, CRLF.
-
-Не пишет [installedFiles], category, newestVersion.
-
-Null-поля не пишутся. Пустые строки (comments="") — пишутся как key=.
-
-Порядок полей: gameName, gameID, modID, fileID, version,
-repository, url, comments, notes.
-
-### __Firelink_Output
-
-Каталог автора сборки. Создаётся packer-ом в корне инстанса. Не
-пересекается с MO2/ и не сканируется ScanModsStep.
-
-Назначение: сохранить всё, что не удалось восстановить из архивов,
-чтобы автор увидел свои ручные правки и решил, делать ли из них патч.
-
-Структура:
-
-```
-__Firelink_Output/
-  modlist.json                    ← манифест (WriteManifestStep)
-  MO2/
-    mods/
-      <ModName>/<path>            ← unmatched модов (MatchStep)
-    <path>                        ← unmatched extensions (плоско)
-  Stock Game/
-    <path>                        ← unmatched extras (плоско)
-```
-
-Три категории unmatched:
-
-Моды (MatchStep) — MO2/mods/<ModName>/<path>. Сохраняется имя
-мода, потому что для модов это осмысленный идентификатор. meta.ini
-в корне мода сюда не попадает — он уходит в mods[].meta манифеста.
-
-Extensions (MatchExtensionsStep) — MO2/<path>. Плоско,
-полный путь от корня MO2/. Пример: mo2.extensions = ["tools/BethINI"],
-внутри папки файл readme.txt →
-__Firelink_Output/MO2/tools/BethINI/readme.txt.
-
-Extras (MatchExtrasStep) — Stock Game/<path>. Плоско,
-полный путь от корня Stock Game/. Пример: stockGame.extras = ["enbseries"],
-внутри папки файл enbseries.ini →
-__Firelink_Output/Stock Game/enbseries/enbseries.ini.
-
-Почему плоско для extensions/extras: пути в __Firelink_Output
-совпадают с реальными путями в инстансе. Автор может сравнить «что
-лежит в инстансе» и «что не восстановилось», не переключаясь между
-двумя структурами папок.
-
-Поле EntryName (в UnmatchedEntry) используется для логов и
-диагностики, но на путь файла в __Firelink_Output не влияет.
-Путь строится только из RelativePath + корень (MO2/ или Stock Game/).
-
-#### Чистка:
-
-MatchStep перед своим прогоном удаляет __Firelink_Output/MO2/mods/
-целиком.
-
-PackPipeline перед write unmatched extensions удаляет содержимое
-__Firelink_Output/MO2/, кроме mods/.
-
-PackPipeline перед write unmatched extras удаляет содержимое
-__Firelink_Output/Stock Game/ целиком.
-
-modlist.json перезаписывается WriteManifestStep с предупреждением,
-если файл уже был.
-
-#### Создание папок:
-
-__Firelink_Output/MO2/mods/ — создаётся всегда
-(MatchStep.PrepareFirelinkOutput).
-
-__Firelink_Output/MO2/ (без mods/) — создаётся только если
-unmatched extensions непусты.
-
-__Firelink_Output/Stock Game/ — создаётся только если unmatched
-extras непусты.
-
-Т.е. если всё сматчилось — будут только modlist.json и MO2/mods/
-(возможно, с файлами unmatched модов).
-
-## Идентификация архивов
-
-Канонический id:
-
-nexus_{game_domain}_{modId}_{fileId} — для Nexus-архивов (есть .meta
-с modID/fileID).
-Пример: nexus_skyrimspecialedition_3863_1000172397.
-
-local_{slug} — для архивов без .meta.
-Slug от имени файла без расширения.
-Пример: SkyUI.7z → local_skyui, FomodTools.7z → local_fomodtools.
-
-Slug (Slug.From):
-
-ASCII-only, lowercase.
-
-Разделитель — дефис.
-
-Обрезка до 80 символов.
-
-.7z отрезается до slug-ификации (см. решение №116):
-Mod.Organizer-2.5.2.7z → mod-organizer-2-5-2.
-
-Дубликаты: IndexArchivesStep бросает InvalidOperationException
-при дубликате id (не имени файла).
-
-archives[] vs mo2.archive: MO2-архив никогда не попадает в
-manifest.archives[], даже если он есть в downloads/. Он живёт в
-manifest.mo2.archive.
-
-BSA/BA2. .bsa/.ba2 считаются архивами (ArchiveExtensions.IsArchive),
-но на практике они всегда упакованы внутри .7z/.zip, а не
-лежат в downloads/ отдельными файлами. Это означает:
-
-В downloads/ .bsa/.ba2 обычно не встречаются как отдельные
-файлы.
-
-Если .bsa лежит внутри .7z, ArchiveMatcher распаковывает
-.7z и находит .bsa как обычный файл. Матчинг файлов модов идёт
-по хешу целого .bsa.
-
-Если автор распаковал .bsa (ассеты отдельно) — ассеты уйдут
-в __Firelink_Output, автор сам решит, делать ли патч.
-
-Firelink не разбирает .bsa/.ba2 на содержимое — это
-принципиальное отличие от Wabbajack.
-
-## Nexus game domain
-
-meta.game — Nexus game domain, не человекочитаемое имя игры.
-
-Примеры: skyrimspecialedition, fallout4, starfield, skyrim.
-
-Не путать с gameName (Skyrim Special Edition) — это поле в
-meta.ini, не в firelink-pack.json.
-
-Используется в:
-
-ArchiveId.FromNexus(game, modId, fileId) — game domain попадает
-в id.
-
-NexusSourceRef.Game — при скачивании через Nexus API (блок 9).
-
-manifest.meta.game — для installer-а (сам installer значение
-не использует, но хранит для диагностики).
-
-При смене игры — meta.game меняется, id архивов становятся
-другими. Это сознательно: skyrimspecialedition_3863_1000172397 и
-fallout4_3863_1000172397 — разные архивы.
-
-## Формат файлов MO2
-
-modlist.txt (profiles/<Name>/modlist.txt):
-
-Строка: +Name (enabled) или -Name (disabled).
-
-Комментарии #... игнорируются (но сепараторы -# — данные, не
-комментарии: ModlistReader включает их в Entries с Enabled = false).
-
-UTF-8 с BOM, CRLF.
-
-Порядок строк сохраняется как есть.
-
-Заголовок # This file was automatically generated by Mod Organizer.
-пишется ModlistWriter.
-
-plugins.txt (profiles/<Name>/plugins.txt):
-
-Строка: *Name.esp (enabled) или Name.esp (disabled).
-
-Комментарии #... игнорируются.
-
-UTF-8 с BOM, CRLF.
-
-Заголовок пишется PluginsWriter.
-
-loadorder.txt (profiles/<Name>/loadorder.txt):
-
-Строка: имя плагина.
-
-Порядок = порядок загрузки.
-
-UTF-8 с BOM, CRLF.
-
-Заголовок пишется LoadorderWriter.
-
-Сепараторы — #... в modlist.txt. Packer сохраняет в манифесте;
-installer пропускает; RegenerateProfileStep пишет в modlist.txt.
-
-## Пайплайн: создание сборки
-
-### Этап 1.1. Подготовка окружения
-Автор:
-
-Ставит портативный MO2 2.5.2.
-
-Устанавливает моды через MO2 любым способом (FOMOD, вручную, через
-MO2 installer).
-
-Кладёт архивы модов в MO2/downloads/.
-
-Устанавливает плагины MO2 в MO2/plugins/, MO2/tools/.
-
-Устанавливает extras в Stock Game/.
-
-Настраивает профиль: порядок модов, плагинов, load order.
-
-Результат: рабочий инстанс MO2.
-
-### Этап 1.2. Конфиг и инстанс
-
-Автор кладёт `firelink-pack.json` рядом с инстансом MO2. `instance.path` в конфиге — относительный путь к корню инстанса.
-
-### Этап 1.3. Запуск packer-а
-firelink-pack pack firelink-pack.json
-
-text
-
-**Pipeline (12 шагов):**
-
-1. ReadConfigStep — читает и валидирует `firelink-pack.json`.
-2. ReadInstanceStep — читает `MO2/`, `profiles/<profile>/modlist.txt`, `plugins.txt`, `loadorder.txt`. Возвращает `InstanceSnapshot`.
-3. IndexArchivesStep — индексирует `MO2/downloads/`, для каждого архива определяет источник через `.meta` или `archiveSources[]`. Возвращает `ArchiveIndex`.
-4. ScanModsStep — сканирует все моды из `modlist.txt` (кроме `[NoDelete]`). Возвращает `ModScanResult` (`ModName → files`).
-5. ScanExtensionsStep — сканирует `config.Mo2.Extensions[]`. Каждый entry — относительный путь от корня `MO2/` (файл или папка). Возвращает `EntryScanResult` (`entryName → files`).
-6. ScanExtrasStep — симметричен `ScanExtensionsStep`, но читает `config.StockGame.Extras[]` и работает от корня `Stock Game/`. Возвращает `EntryScanResult`.
-7. MatchStep — сопоставляет файлы модов с архивами. Использует **общий** `ArchiveMatcher`. Unmatched модов выгружает в `__Firelink_Output/MO2/mods/<ModName>/<path>`. `meta.ini` мода уходит в `ModMetas`. Возвращает `MatchResult`.8. MatchExtensionsStep — сопоставляет файлы extensions с архивами. Принимает **общий** `ArchiveMatcher` через `Input`. Возвращает `MatchEntriesResult` (`Directives`, `Unmatched`). Unmatched **не пишет** — только возвращает.
-9. MatchExtrasStep — симметричен `MatchExtensionsStep`, но для extras.
-10. Write unmatched extensions/extras (private-хелпер `PackPipeline`) — пишет unmatched в `__Firelink_Output/MO2/<path>` и `__Firelink_Output/Stock Game/<path>` (плоско). Перед записью чистит соответствующие корни (`MO2/` — кроме `mods/`; `Stock Game/` — целиком).
-11. BuildManifestStep — собирает `ModlistManifest`. Заполняет `Mo2.Extensions[]` из `ExtensionsMatch.Directives` и `StockGame.Extras[]` из `ExtrasMatch.Directives`. Порядок entry — как в config.
-12. ValidateManifestStep — валидирует manifest: уникальность id/имён, ссылочная целостность директив, лимиты inline. WriteManifestStep — пишет `modlist.json` в `__Firelink_Output/`.
-
-**`ArchiveMatcher`:**
-
-- Один экземпляр создаётся в `PackPipeline.ExecuteAsync` перед `MatchExtensionsStep`, `BuildAsync(ct)` вызывается один раз (12.13.6, 12.11.7.1).
-- Передаётся в `MatchStep`, `MatchExtensionsStep` и `MatchExtrasStep` через `Input.Matcher` (`internal`).
-- `ArchiveMatcher` детерминирован: при дубликатах `(hash, path)` или `hash` между архивами побеждает минимальный `archiveId` (Ordinal).
-- Отмена: `BuildAsync` **пробрасывает** `OperationCanceledException` как есть, не «глотает» отмену. Прочие ошибки (битый архив, ошибка 7z) — skip с логированием.
-
-### Этап 1.4. Итог
-
-- `__Firelink_Output/modlist.json` — манифест.
-- `__Firelink_Output/MO2/mods/<ModName>/<path>` — unmatched модов.
-- `__Firelink_Output/MO2/<path>` — unmatched extensions.
-- `__Firelink_Output/Stock Game/<path>` — unmatched extras.
-
-### Этап 1.5. Публикация
-Автор публикует `modlist.json`. Зеркала для архивов (mirror) —
-опционально.
-
-## Пайплайн: установка сборки
-
-### Этап 2.1. Получение манифеста
-
-Пользователь кладёт `modlist.json` куда угодно.
-
-### Этап 2.2. Запуск installer-а
-
-```
-firelink-install install C:\Downloads\modlist.json
-```
-
-или с явным target:
-
-```
-firelink-install install C:\Downloads\modlist.json --target D:\Games\MyPack
-```
-
-**Расположение инстанса:** `<exeDir>/Instances/<normalize(meta.name)>/`.
-
-**Pipeline:**
-
-1. ReadManifestStep — читает modlist.json, валидирует schemaVersion.
-2. ResolveTargetStep — вычисляет instancePath, копирует манифест в `<instancePath>/modlist.json`.
-3. ValidateTargetStep — 4 проверки (корень диска, системные папки, папка exe, права записи).
-4. BootstrapInstanceStep — создаёт MO2/, MO2/downloads/, MO2/mods/, MO2/profiles/, MO2/plugins/, MO2/tools/, Stock Game/. Контрактные проверки.
-5. BootstrapMo2Step — самодостаточный: сам скачивает MO2-архив в MO2/downloads/ (если нет по хешу), сам распаковывает в MO2/ с заменой.
-6. SyncArchivesStep — сканирует downloads/ → hash → path, для каждого mod-архива скачивает или находит локально. Только manifest.Archives, без MO2.
-7. SyncModsStep — reconcile mods/ под манифест.
-8. GenerateMetaIniStep — reconcile meta.ini.
-9. RegenerateProfileStep — генерирует modlist.txt/plugins.txt/loadorder.txt.
-10. ExecuteExtensionsStep — [12.9].
-11. ExecuteExtrasStep — [12.9].
-12. ConfigureMo2Step — [техдолг, не делаем].
-
-**Разделение ответственности:**
-- **MO2-логика** полностью в `BootstrapMo2Step` (шаг 5).
-- **Логика mods/** полностью в `SyncArchivesStep` + `SyncModsStep` (6–7).
-- Никакой связи между ними.
-
-**MO2-логика** — в `BootstrapMo2Step` (шаг 5).
-**Логика mods/** — в `SyncArchivesStep` + `SyncModsStep` (6, 9).
-**Логика extensions** — в `ExecuteExtensionsStep` (7).
-**Логика extras** — в `ExecuteExtrasStep` (8).
-Никакой связи между ними.
-
-### Этап 2.3. Запуск игры
-
-Пользователь:
-Копирует игру в instance/Stock Game/ (вручную).
-Открывает instance/MO2/ModOrganizer.exe.
-Выбирает профиль.
-Запускает игру через SKSE.
-
-Решения:
-Firelink не работает с игрой. Не ищет, не копирует, не проверяет.
-Firelink не управляет порядком загрузки — он приходит из манифеста.
-Stock Game/ — просто папка для extras.
-
-## Пайплайн: обновление сборки
-
-Не реализовано. Команды update нет. Installer идемпотентен:
-повторный install поверх существующего инстанса даст то же состояние,
-что и первый (при том же манифесте).
-
-## Замысел (v0.2.0+)
-
-**Этап 3.1.** Автор выпускает новую версию:
-Меняет meta.version.
-Пересобирает modlist.json.
-Возможно, добавляет/удаляет моды, плагины, extras.
-Имя инстанса не содержит версию — обновление идёт «поверх».
-
-**Этап 3.2.** Пользователь:
-
-```
-firelink-install install C:\Mods\NordicUI\modlist.json
-```
-
-Installer видит, что инстанс есть. Верифицирует по новому манифесту.
-Докачивает новые архивы. Дописывает новые файлы. Удаляет моды, которых
-больше нет в манифесте. Перегенерирует профиль. Результат — инстанс
-обновлён без перекачки всего.
-
-Работа с Nexus Mods
-> **Примечание (2026-09-21):** ниже «блок 9» — то же самое, что
-> «Фаза 6 (12.8)» в `FIRELINK.md`. Нумерация блоков историческая.
-Не реализовано. Блок 9.
-
-Философия
-Nexus — один источник (type: "nexus"). Способы доступа — стратегии
-внутри NexusDownloader. Не дублируем в манифесте.
-
-План блока 9
-NexusClient — HTTP-клиент к https://api.nexusmods.com/v1/.
-
-GetDownloadLink(game, modId, fileId) — получить ссылку.
-
-Ключ API — заголовок apikey.
-
-NexusApiKeyProvider — читает ключ из %USERPROFILE%\.firelink\nexus.key.
-
-v0.2.0: SQLite + DPAPI.
-
-NexusDownloader : IArchiveDownloader — SourceType => "nexus".
-
-DownloadAsync: получить ссылку через NexusClient, скачать
-HttpClient-ом, вернуть MemoryStream.
-
-Проверка hash — на стороне SyncArchivesStep (как у MirrorDownloader).
-
-DI в Firelink.Install/Program.cs — регистрирует NexusDownloader
-как IArchiveDownloader. DownloaderRegistry подхватит.
-
-Что не делаем:
-
-Nexus Premium API (отдельная подписка).
-
-Кеширование ссылок (у них временный токен).
-
-nxm://, WebView2 (см. DOC v2.0, отменено).
-
-Глобальный реестр архивов
-Не реализовано. v0.2.0.
-
-Назначение
-Переиспользование архивов между сборками без повторной загрузки.
-
-Расположение
-text
-%USERPROFILE%\.firelink\archives.db
-Схема (черновик)
-sql
-CREATE TABLE CachedArchive (
-  hash TEXT PRIMARY KEY,      -- xxHash64 архива
-  path TEXT NOT NULL,         -- полный путь к файлу
-  size INTEGER NOT NULL,
-  last_seen TEXT NOT NULL     -- ISO 8601
-);
-
-CREATE TABLE Config (
-  key TEXT PRIMARY KEY,
-  value BLOB NOT NULL,
-  updated_at TEXT NOT NULL
-);
-Как работает
-При поиске архива:
-
-Проверить локальную instance/MO2/downloads/.
-
-Если нет — проверить реестр.
-
-Если файл найден — скопировать в локальную downloads/.
-
-Если файла нет — удалить запись, скачать заново.
-
-При сканировании downloads/:
-
-Просканировать папку, посчитать хеши.
-
-Добавить/обновить записи в реестре.
-
-При скачивании:
-
-Записать в реестр: (hash, path, size, now).
-
-При повреждении реестра:
-
-Пересоздать из сканирования папок downloads/ всех известных
-инстансов.
-
-## CLI команды
-
-Имя exe — `Firelink.Cli.exe`. Usage-строка — `firelink`
-(сознательное расхождение display name и file name).
-
-| Команда | Описание |
-|---|---|
-| `firelink pack <config>` | Создать манифест (`<config>` — путь к `firelink-pack.json`) |
-| `firelink install <manifest> [--target <dir>]` | Установка |
-| `firelink verify <target> [--verbose]` | Проверка целостности |
-| `firelink hash <file>` | xxHash64 (`xxh64:hex`) |
-| `firelink doctor` | Диагностика окружения (stub) |
-
-**Return codes:**
-
-- `pack`: 0 — OK, 2 — ошибка (включая CLI-parse), 130 — отменено (Ctrl+C).
-- `install`: 0 — OK, 2 — ошибка, 130 — отменено (Ctrl+C).
-- `verify`: 0 — OK, 1 — есть падения, 2 — ошибка, 130 — отменено (Ctrl+C).
-
-**Не делаем / отложено:**
-
-| Команда | Статус |
-|---|---|
-| `firelink index` | Не делаем (нет SQLite-индекса) |
-| `firelink repair` | Не делаем (install идемпотентен) |
-| `firelink cache list/prune/rebuild` | v0.2.0+ (глобальный реестр) |
-| `firelink config set/get/clear/list` | v0.2.0+ (API-ключ через конфиг) |
-
-Обработка ошибок
-Матрица packer-а
-Ситуация	Поведение
-firelink-pack.json не найден	FileNotFoundException
-Невалидный JSON	InvalidOperationException («Failed to parse»)
-meta.name не проходит NameValidator	InvalidOperationException
-meta.version не semver	InvalidOperationException
-instance.path не проходит InstancePathValidator	InvalidOperationException
-mo2.source не MirrorSourceRef	InvalidOperationException
-instance.path не существует	DirectoryNotFoundException
-MO2/ не существует	DirectoryNotFoundException
-downloads/ не существует	DirectoryNotFoundException
-mods/ не существует	DirectoryNotFoundException
-Профиль не найден	DirectoryNotFoundException
-Мод enabled, папки нет	DirectoryNotFoundException
-Мод disabled, папки нет	Warning, пропустить
-Сепаратор без папки	LogDebug, пропустить
-Дубликат archiveId	InvalidOperationException
-.meta без modID/fileID	Warning, fallback на archiveSources
-Архив без .meta и без archiveSources	UnresolvedArchive, warning
-mo2.archive не найден в downloads/	Size = 0, hash из mo2.source.hash
-Hash MO2-архива mismatch	InvalidOperationException
-Entry в mo2.extensions[] не найден	FileNotFoundException
-Entry в stockGame.extras[] не найден	FileNotFoundException
-Файл мода не найден в архивах	Unmatched → __Firelink_Output
-Файл extension/extra не найден в архивах	Unmatched → __Firelink_Output
-FromArchiveDirective.Archive не существует	InvalidOperationException
-Ctrl+C во время pack	Cancelled., exit 130
-Пути с пробелами без кавычек	CLI error + hint, exit 2
-
-Матрица installer-а
-Ситуация	Поведение
-schemaVersion не поддерживается	Ошибка
-meta.name не проходит NameValidator	Ошибка
---target — корень / системная папка / папка exe	Ошибка
-Нет прав записи	Ошибка
-Инстанс не существует	Создать
-Архив есть локально с нужным хешем	Пропустить
-Архив с другим именем, но тем же хешем	Использовать
-Архив отсутствует	Скачать по sources
-nexus (до блока 9)	Warning, Skipped, fallback
-nexus (после блока 9)	NexusDownloader — API, качает
-Hash не совпадает	Удалить .part, следующий источник
-Все источники провалились	Ошибка
-Мод [NoDelete]	Пропустить
-Мод-сепаратор (#...)	Пропустить
-mods[].meta != null	MetaIniWriter.WriteFile
-mods[].meta == null, файл есть	Удалить
-mods[].meta == null, файла нет	Ничего не делать
-MO2: локальный архив с нужным хешем	Использовать
-MO2: локальный архив с другим хешем	Перекачать
-MO2: архива нет	Скачать
-MO2: hash mismatch после скачивания	.part удалён, следующий источник
-MO2: все источники провалились	Ошибка
-MO2: распаковка	Всегда, с заменой (идемпотентно)
-Ctrl+C во время install / verify	Cancelled., exit 130
-Пути с пробелами без кавычек	CLI error + hint, exit 2
-
-Технологический стек
-Компонент	Технология
-Платформа	.NET 8 (net8.0), C# 12
-CLI	Spectre.Console.Cli
-JSON	System.Text.Json
-Хеширование	System.IO.Hashing (xxHash64)
-Распаковка	7z.exe + 7z.dll (Assets/7z/)
-База данных	Microsoft.Data.Sqlite (v0.2.0)
-Шифрование	System.Security.Cryptography.ProtectedData (DPAPI, v0.2.0)
-DI	Microsoft.Extensions.DependencyInjection
-Логирование	Microsoft.Extensions.Logging (+ .Console)
-Retry	Polly 8 (в Firelink.Core — блок 5)
-HTTP	Microsoft.Extensions.Http
-Тесты	xUnit + FluentAssertions
-Целевая ОС	Windows 10 1809+ / Windows 11
-Удалено: SharpCompress (заменён на 7z), Octokit (GitHub cleanup).
-
-Дорожная карта
-
-MVP (v0.1.0)
-
-Packer:
-
-☑ Скелет solution.
-☑ Core: модели, JSON, XxHash64Value, IStep.
-☑ MO2-файлы: чтение/запись.
-☑ MetaReader, MetaIniReader, MetaIniWriter.
-☑ Packer: 13 шагов, полный pipeline.
-☑ UtcDateTimeOffsetJsonConverter.
-☑ Mo2Section.Profile.
-☑ ScanExtensionsStep / ScanExtrasStep.
-☑ MatchExtensionsStep / MatchExtrasStep.
-☑ Унификация ArchiveMatcher (12.13.6).
-☑ ArchiveMatcher.Build → BuildAsync (12.11.7.1).
-
-Installer:
-
-☑ 12.1 — ReadManifestStep, ResolveTargetStep, ValidateTargetStep.
-☑ 12.2 — BootstrapInstanceStep.
-☑ 12.3 — SyncArchivesStep (локально + mirror).
-☑ 12.4 — SyncModsStep.
-☑ 12.5 — GenerateMetaIniStep + MetaIniWriter.
-☑ 12.6 — RegenerateProfileStep.
-☑ 12.7 — BootstrapMo2Step (самодостаточный).
-☑ 12.9 — ExecuteExtensionsStep + ExecuteExtrasStep.
-☑ 12.10 — InstallPipeline.
-☑ 12.11.1–12.11.3 — Verify (Pipeline + Tests + CLI).
-☑ 12.12 — интеграционный тест pack → install.
-
-**Хвосты MVP (перед 12.8):**
-
-- [x] 12.13.7 + 12.13.8 — таблицы CLI.
-- [x] 12.11.5 — `meta.ini` в verify.
-- [x] 12.11.6 — extensions/extras в verify.
-- [x] 13.1 — общий helper скачивания.
-- [x] 12.11.7 — Ctrl+C в CLI.
-- [x] 12.13.10 — error-msg для пробелов без кавычек.
-□ 12.8 — NexusDownloader.
-
-v0.2.0
-□ Nexus Premium API (расширение NexusDownloader).
-□ Глобальный реестр archives.db.
-□ Persist кеша хешей (SQLite).
-□ Прогресс-бар Spectre.
-□ File-logging (ротация).
-□ Команда firelink-install cache list/prune/rebuild.
-□ Команда firelink-install config set/get/clear/list.
-□ Механизм патчей для inline-файлов.
-
-v0.3.0
-□ NexusFreeStrategy (реальная реализация).
-□ Команда doctor — расширенная диагностика.
-□ Поддержка нескольких игр (проверка meta.game).
-□ Пайплайн обновления сборки.
-v1.0.0
-□ GUI.
-□ Hardlink-режим для кеша.
-□ Документация для авторов сборок.
-
-## Статус реализации
-
-**Обновлено:** 2026-09-21
-**Версия документа:** 4.0
-
-### Готово
-
-- Полный pipeline packer-а (13 шагов).
-- Installer: 12.1–12.7, 12.9.1, 12.10, 12.11.1–12.11.7, 12.12,
-  12.13.1–12.13.10, 13.1.
-- **Фаза 1 — единый CLI `Firelink.Cli.exe`** (шаги 1.1–1.7).
-  `Firelink.Pack` и `Firelink.Install` — class libraries.
-  DI-extension-методы `AddFirelinkPack` / `AddFirelinkInstall`.
-- **Фаза 2 — общие API для GUI** (шаги 2.1–2.4):
-  `StepProgress` + `IProgress`, `PackInputFactory` /
-  `InstallInputFactory`, `PackSummary` / `InstallSummary` +
-  Builder-ы. `PackPipeline.Input` введён.
-- **621 тест, все проходят.**
-
-### В работе
-
-Ничего. Фаза 2 закрыта. Следующая — Фаза 6 (Nexus Premium, 12.8).
-
-### Ключевые решения
-
-- `MatchStep` использует **общий** `ArchiveMatcher` через `Input.Matcher`.
-  Один extract на весь pipeline packer-а (12.13.6).
-- `ArchiveMatcher.BuildAsync` — async, отмена пробрасывается, не
-  глотается (12.11.7.1).
-- Unmatched extensions/extras → плоско в `__Firelink_Output/MO2/<path>`
-  и `__Firelink_Output/Stock Game/<path>`.
-- `entry` с пустым списком директив не попадает в
-  `manifest.Mo2.Extensions[]` и `manifest.StockGame.Extras[]`.
-- Папки `__Firelink_Output/MO2/` (без `mods/`) и
-  `__Firelink_Output/Stock Game/` создаются только при непустых unmatched.
-- `.bsa`/`.ba2` — единые файлы, не контейнеры.
-- `InlineFile` / `OrphanFile` — модель удалена.
-- `firelink index` / `firelink repair` — не делаем.
-- `firelink cache` / `firelink config` — v0.2.0+.
-- Verify сравнивает `meta.ini` **семантически**.
-- Verify проверяет `mo2.extensions[]`/`stockGame.extras[]`.
-- `ArchiveDownloadHelper` — общий helper для `SyncArchivesStep` и
-  `BootstrapMo2Step` (13.1).
-- `CancellationHelper.IsCancellation` — единая точка распознавания
-  «отмены» (включая `AggregateException`).
-- `config.PropagateExceptions()` в CLI — для того, чтобы
-  обрабатывать `CommandParseException` самим.
-- **Единый CLI:** `Firelink.Cli` (exe → `Firelink.Cli.exe`) +
-  `Firelink.Pack` и `Firelink.Install` как class libraries.
-- **DI:** `AddFirelinkPack` / `AddFirelinkInstall` в
-  `Firelink.Pack/PackServices.cs` и
-  `Firelink.Install/InstallServices.cs`.
-- **`Firelink.exe`** зарезервировано под GUI (Фаза 3).
-- **`StepProgress`** — общий тип в `Firelink.Core.Progress`.
-  `Report` перед шагом. Packer: 14, installer: 11 имён.
-- **Фабрики** — единственная точка нормализации путей и
-  `ParallelOptions`. Static-классы, не DI.
-- **Summary** — плоский DTO только из примитивов. Builder-ы
-  static. Полные списки — не в Summary.
-- **CLI рисует таблицы из Summary**, не из `Output`. Внешний
-  вид не изменился.
-
-````
-
-## FIRELINK.md
-
-````markdown
-# Firelink — состояние проекта и план работ
-
-**Обновлено:** 2026-09-22
-**Всего тестов:** 621, 0 failed
-**Текущий блок:** Legacy cleanup (HANDOFF/PROJECT-STATE удалены)
-**Следующий блок:** Фаза 6 — Nexus Premium (12.8)
-
-**Спутние документы:**
-- `DOC.md` (v4.2) — формальная документация: форматы, pipeline, CLI, обработка ошибок.
-- `repo-dump.md` — свежий дамп репозитория.
-
----
-
-## Что это
-
-Firelink — инструмент для создания и установки воспроизводимых сборок
-модов для Mod Organizer 2. C#/.NET 8.
-
-Ключевая идея: манифест `modlist.json` — единственный источник правды.
-Файлы восстанавливаются по хешам `xxHash64`. Firelink работает с
-**результатом** установки, а не с процессом.
-
-Один CLI (`Firelink.Cli`, exe → `Firelink.Cli.exe`) + в будущем один GUI
-(Avalonia, exe → `Firelink.exe`). Логика — в библиотеках, интерфейсы
-(CLI, GUI) — отдельные слои.
-
----
-
-## Как начать работу в новом чате
-
-**Скопируйте в первое сообщение:**
-
-1. **FIRELINK.md** (этот файл) — полностью.
-2. **DOC.md** — полностью.
-3. **repo-dump.md** — свежий.
-
-**Первое сообщение — шаблон:**
-
-> Продолжаем проект Firelink. Стиль — пошаговые блоки кода с тестами.
->
-> Прикладываю: FIRELINK.md, DOC.md (v4.2), repo-dump.md (свежий).
->
-> Текущее состояние: 621 тест, 0 failed. Закрыты: MVP (packer,
-> installer, verify), Фаза 1 (единый CLI `Firelink.Cli`),
-> Фаза 2 (общие API для GUI).
->
-> Следующая задача: [из раздела «План работ», актуальный блок].
->
-> Стиль ответов:
-> - Разбор задачи.
-> - Полный код файлов с путями.
-> - Инструкция по сборке/тестам.
-> - Ожидаемый вывод dotnet test.
-> - FIRELINK.md — только по запросу.
->
-> Не пиши код, пока я не подтвержу готовность.
-
----
-
-## Стиль работы
-
-- **Файлы давать целиком**, не патчами.
-- **Запускать `dotnet test` сразу** после каждого блока.
-- **Присылать полный вывод** тестов при падении (текст).
-- **FIRELINK.md** — обновлять по запросу.
-- **Не менять архитектурные решения без обсуждения.**
-- **Не отвечать на китайском.**
-- **Разбивать крупные блоки на 12.x.y** (или `<Фаза>.<шаг>.<подшаг>`).
-- **Не писать код, пока не подтверждена готовность.**
-
----
-
-## Стек
-
-- **.NET 8**, C# 12.
-- **xUnit + FluentAssertions**.
-- **Spectre.Console.Cli** 0.48.0 (с `PropagateExceptions`).
-- **System.Text.Json**.
-- **System.IO.Hashing (xxHash64)**.
-- **Microsoft.Data.Sqlite** (v0.2.0).
-- **Microsoft.Extensions.*** — DI, Logging, Http.
-- **Polly** (в `Firelink.Core`).
-- **7z.exe + 7z.dll**.
-- **SharpCompress удалён.**
-- **Octokit удалён.**
-
----
-
-## Текущий статус
-
-### Готово
-
-- **Полный pipeline packer-а (13 шагов).**
-- **Полный pipeline installer-а (11 шагов).**
-- **Verify** (pipeline + tests + CLI), включая `meta.ini`, extensions,
-  extras.
-- **Ctrl+C** в CLI, `Cancelled.`, exit 130.
-- **Error-msg для пробелов без кавычек.**
-- **593 теста, 0 failed.**
-- **Реальный прогон на `OmenRim 7`** (pack → install → verify,
-  4338 passed, 0 failed).
-- **Фаза 1 целиком — единый CLI `Firelink.Cli.exe`:**
-  - 1.1 — создан `Firelink.Cli`, pack-сторона перенесена.
-  - 1.2 — install-сторона перенесена, все 5 команд работают.
-  - 1.3 — `Firelink.Pack` стал class library.
-  - 1.4 — `Firelink.Install` стал class library.
-  - 1.5 — `AddFirelinkPack` / `AddFirelinkInstall`.
-  - 1.6 — ручной прогон на OmenRim 7: pack → install (TestInstance3)
-    → verify, 4338 passed, 0 failed. Идентично `TestInstance2`.
-  - 1.7 — Ctrl+C на pack/install/verify (`Cancelled.`, exit 130),
-    пробелы без кавычек (`CLI error` + hint, exit 2). Регрессий нет.
-  - **Фаза 2 — общие API для будущего GUI (шаги 2.1–2.4):**
-  - 2.1 — `StepProgress` + `IProgress<StepProgress>?` в обоих pipeline-ах.
-  - 2.2 — `PackInputFactory` / `InstallInputFactory`.
-    `PackPipeline.Input` введён (симметрично `InstallPipeline.Input`).
-  - 2.3 — `PackSummary` / `InstallSummary` + Builder-ы.
-  - 2.4 — реальный прогон на OmenRim 7 (TestInstance4) + verify.
-
-### В работе
-
-- Ничего. Фаза 2 закрыта.
-
-### Не начато
-
-- Фаза 6 — Nexus Premium (12.8).
-- Фаза 3 — GUI (Avalonia).
-- Фаза 5 — Nexus Free (WebView2).
-
-### Вычеркнуто
-
-- **Фаза 4 — вариации дистрибутивов.** Решение 2026-09-21: не делаем.
-  Один CLI, один GUI, один набор exe в дистрибутиве.
-- **E1 (прогон на большом инстансе 4370 модов)** — отменён, не критично.
-
----
-
-## Структура репозитория (после шагов 1.1–1.4)
-
-```
-C:\Code\Firelink
-  Firelink.slnx
-  Directory.Build.props
-  Directory.Build.targets
-  Directory.Packages.props
-  DOC.md                       ← v4.2
-  FIRELINK.md                  ← этот файл
-  repo-dump.md
-  samples/
-    firelink-pack.minimal.json
-    firelink-pack.full.json
-    firelink-pack.invalid-name.json
-    firelink-pack.invalid-path.json
-    firelink-pack.invalid-version.json
-  src/
-    Firelink.Core/             ← ядро: модели, JSON, хеширование,
-                                  валидаторы, абстракции,
-                                  SevenZipExtractor, TempWorkspace,
-                                  FileHashCache, ArchiveDownloadHelper,
-                                  CancellationHelper,
-                                  StepProgress
-    Firelink.Platform.MO2/     ← чтение/запись MO2-файлов
-    Firelink.Platform.Nexus/   ← пусто (Фаза 6)
-    Firelink.Pack/             ← class library: PackPipeline + Steps + Matching
-                                  + PackInputFactory + PackSummary
-                                  + PackSummaryBuilder
-    Firelink.Install/          ← class library: InstallPipeline + Steps +
-                                  Downloaders + Verify
-                                  + InstallInputFactory + InstallSummary
-                                  + InstallSummaryBuilder
-    Firelink.Cli/              ← exe (→ Firelink.Cli.exe):
-                                  Program.cs, Commands/, Settings/,
-                                  Infrastructure/TypeRegistrar.cs
-                                  Зависимости: Firelink.Pack,
-                                  Firelink.Install, Firelink.Core,
-                                  Firelink.Platform.*
-  tests/
-    Firelink.Core.Tests/
-    Firelink.Platform.MO2.Tests/
-    Firelink.Pack.Tests/
-    Firelink.Install.Tests/
-    Firelink.Integration.Tests/
-```
-
-После шага 1.4 — **только один exe** в solution: `Firelink.Cli.exe`.
-`Firelink.Pack.exe` и `Firelink.Install.exe` больше нет. Команды:
-`firelink pack`, `firelink install`, `firelink verify`, `firelink hash`,
-`firelink doctor` (usage-строка; имя exe — `Firelink.Cli.exe`).
-
----
-
-## Пайплайн packer-а (полный)
-
-```
-ReadConfigStep → ReadInstanceStep → IndexArchivesStep → ScanModsStep →
-ScanExtensionsStep → ScanExtrasStep →
-[build ArchiveMatcher via BuildAsync] →
-MatchStep → MatchExtensionsStep → MatchExtrasStep →
-[write unmatched extensions/extras] →
-BuildManifestStep → ValidateManifestStep → WriteManifestStep
-```
-
-## Пайплайн installer-а
-
-```
-ReadManifestStep → ResolveTargetStep → ValidateTargetStep →
-BootstrapInstanceStep → BootstrapMo2Step → SyncArchivesStep →
-ExecuteExtensionsStep → ExecuteExtrasStep → SyncModsStep →
-GenerateMetaIniStep → RegenerateProfileStep
-```
-
-**CLI:** `firelink install <manifest> [--target <dir>]`.
-**CLI:** `firelink verify <target> [--verbose]`.
-
----
-
-## Прогоны на реальных инстансах
-
-**`C:\Firelink\TestInstance\` (19.09.2026, до 12.13.x):**
-
-- Install: 82 мода, 68 архивов, 82 meta.ini, профиль `Default`.
-- Verify: 4337 passed (здоровый), 4310/2 (сломанный), install
-  восстанавливает.
-
-**`C:\Firelink\TestInstance2\` (20.09.2026, после 12.13.6, `OmenRim 7`):**
-
-- Pack: 82 мода, 4236 matched, 69 архивов, 49/49 extensions, 2/2 extras.
-- Install: 82 мода, 1 extension written, 2 extras written, 82 meta.ini.
-- Verify: **4338 passed, 0 failed**.
-
-**Перепроверка через `Firelink.Cli.exe install ... --target ...` (21.09.2026,
-после шага 1.2):**
-
-- Archives already present: 69.
-- Mods skipped: 82. meta.ini written: 82.
-- Extensions/extras: 0 written, 1/2 skipped.
-- Done.
-
-**Важно:** `install` без `--target` создаёт инстанс в
-`<exeDir>/Instances/<meta.name>/`, а не рядом с манифестом. Это
-архитектурное решение (см. решение №52). Для переустановки поверх
-существующего инстанса — всегда указывать `--target`.
-
----
-
-## Ключевые архитектурные решения (не переделывать)
-
-Ниже — накопленный список. Сгруппирован по темам, но **пункты
-сохранены все**. Нумерация — историческая, чтобы не сбиться при
-ссылках.
-
-### Общие принципы (1–19)
-
-1. **Манифест — единственный источник правды.** Профиль MO2
-   генерируется из манифеста, а не копируется.
-2. **Файлы восстанавливаются по хешам** (`xxHash64`), не по именам
-   и путям.
-3. **Firelink работает с результатом, а не с процессом.** Никаких
-   FOMOD-парсеров, XML, `meta.ini` (читается только для метаданных).
-4. **Одна папка `downloads/` для всех архивов.** Моды, MO2, extras —
-   всё в одном месте.
-5. **Идентификация архивов — канонический id.** Не по имени файла:
-   `nexus_{game}_{modId}_{fileId}` / `local_{slug}`.
-6. **Глобальный реестр архивов** — SQLite в `%USERPROFILE%\.firelink\archives.db`
-   (v0.2.0).
-7. **Ничего не удаляем** из `downloads/`.
-8. **Директивы выполняются последовательно.** `lastWins`.
-9. **`[NoDelete]` в имени папки** защищает пользовательские моды.
-10. **BSA/BA2 — единые файлы.** Не разбираем содержимое.
-11. **Никаких исполняемых скриптов.** Только декларативные директивы.
-12. **Installer идемпотентен.**
-13. **Installer не работает с игрой.** `Stock Game/` — просто папка.
-14. **Шаги pipeline изолированы.** Pipeline — единственный
-    оркестратор.
-15. **Nexus — один источник, несколько стратегий доступа.**
-16. **Параллелизм на уровне pipeline** (`Parallel.ForEach`).
-17. **Кеш хешей обязателен** (`FileHashCache`, in-memory; persist —
-    v0.2.0).
-18. **Манифест самодостаточен.** Installer не ходит на Nexus за
-    метаданными.
-19. **Unmatched → `__Firelink_Output`.** Не `InlineFile`, не base64.
-
-### Packer (20–51)
-
-20. **`meta.game` = Nexus game domain.**
-21. **`instance.path`** — относительный.
-22. **`mo2.profile`** — обязательный.
-23. **`mo2.source` — обязательно `MirrorSourceRef`.**
-24. **`mo2.archive.size/hash` — из `mo2.source.hash`** (size с диска,
-    если файл есть).
-25. **MO2-архив НЕ попадает в `manifest.Archives[]`.**
-26. **`mo2.extensions`** — от `MO2/`. **`stockGame.extras`** — от
-    `Stock Game/`.
-27. **`.meta`** — Nexus-формат. `MetaReader.TryRead`.
-28. **Канонический id:** `nexus_...` / `local_{slug}`.
-29. **`archiveSources`** вместо `mirrors`.
-30. **Slug** — ASCII-only.
-31. **Semver** — регулярка semver.org.
-32. **`Pack*`-модели** — `record`.
-33. **`ValidationResult`** — накапливает ошибки.
-34. **Trailing slash** разрешён.
-35. **Зарезервированные имена Windows** запрещены.
-36. **Модели MO2** — в `Core.Models.Mo2`.
-37. **CLI** — Spectre.Console.Cli + `TypeRegistrar` + `PropagateExceptions`.
-38. **CLI требует явной команды.**
-39. **Структура инстанса:** `MO2/`, `Stock Game/`, `__Firelink_Output/`.
-40. **`ModlistReader`** читает все строки.
-41. **`[NoDelete]`** — через `Contains`.
-42. **`.meta` не считается архивом.**
-43. **Невалидный `.meta`** → fallback.
-44. **`MirrorSourceRef.Hash` обязателен.**
-45. **`XxHash64Value`** — `xxh64:hex`, 16 символов.
-46. **`MatchStep`** делегирует матчинг `ArchiveMatcher`-у.
-47. **`meta.ini` в корне мода** → `ModMetas`.
-48. **Unmatched модов** → `__Firelink_Output/MO2/mods/<ModName>/<path>`.
-49. **`7z.exe` + `7z.dll`** через `Directory.Build.targets`.
-50. **`SevenZipExtractor`** — таймаут 10 минут.
-51. **`__Firelink_Output`** — каталог автора.
-
-### Pack-модели и валидация (52–73)
-
-52. **`MatchResult`** — `ModDirectives` + `Unmatched` + `ModMetas`.
-53. **`MetaIniReader`** — `[General]`. Ключи case-insensitive.
-54. **`MetaIniWriter`** — `[General]`, camelCase, без
-    `[installedFiles]`, без BOM, CRLF. Не пишет `category`.
-55. **`ModMeta` — без `Category`.**
-56. **`.mohidden` — часть пути.**
-57. **`mods[].meta` со всеми полями** (кроме `Category`).
-58. **`createdAt`** — `yyyy-MM-ddTHH:mm:ss.fffZ`.
-59. **`InlineFileContent` / `OrphanFile` / `InlineFile` удалены.**
-60. **`PackCommand`:** `Manifest archives`, `Manifest extensions`,
-    `Manifest extras`, `mo2.archive`, `Unmatched written to` при `> 0`.
-61. **Сепараторы** сохраняются в манифесте.
-62. **`ScanModsStep`:** сепаратор без папки → `LogDebug`.
-63. **Мод без восстановимых файлов остаётся в манифесте с пустыми
-    директивами.**
-64. **`ArchiveMatcher`** — в `Firelink.Pack.Matching`. Детерминизм
-    при дубликатах: минимальный `archiveId` (Ordinal).
-    `InternalsVisibleTo("Firelink.Pack.Tests")`. Принимает
-    `ILogger<ArchiveMatcher>`. Метод — `BuildAsync(ct)`.
-65. **`ScanExtensionsStep`/`ScanExtrasStep`** — тип результата
-    `EntryScanResult`. `RelativePath` файла — ОТ КОРНЯ `MO2/` или
-    `Stock Game/`. `Parallel.ForEach` + восстановление порядка
-    ключей. Отсутствие entry → `FileNotFoundException`.
-66. **`MatchExtensionsStep`/`MatchExtrasStep`** — тип результата
-    `MatchEntriesResult`. Принимают `ArchiveMatcher` через
-    `Input.Matcher` (`internal`, не `required`). Unmatched **не
-    пишут** на диск — это делает `PackPipeline`.
-67. **`Mo2ArchiveBuilder`** — статический класс в
-    `Firelink.Pack.Matching`. Один источник правды для построения
-    `ArchiveEntry` MO2-архива.
-68. **Unmatched extensions** → `__Firelink_Output/MO2/<relativePath>`
-    (плоско). **Unmatched extras** → `__Firelink_Output/Stock Game/<relativePath>`.
-    `EntryName` на путь не влияет — только `RelativePath`.
-69. **`PackPipeline`** перед write unmatched чистит
-    `__Firelink_Output/MO2/` (кроме `mods/`) и
-    `__Firelink_Output/Stock Game/`. Папки `MO2/` (без `mods/`) и
-    `Stock Game/` создаются **только** при `entries.Count > 0`.
-70. **`PackPipeline`** создаёт `ArchiveMatcher` один раз, `BuildAsync`,
-    передаёт в `MatchStep`, `MatchExtensions`, `MatchExtras`.
-71. **`BuildManifestStep.BuildExtensions`/`BuildExtras`** пропускают
-    entry с пустым списком директив.
-72. **`PackPipeline`** добавляет MO2-архив в `ArchiveIndex` перед
-    созданием `ArchiveMatcher`: `archiveIndexWithMo2 =
-    AddMo2ArchiveToResolved(...)`.
-73. **`Slug.FromFileName`** отрезает **последнее** расширение до
-    slug-ификации.
-
-### Installer (74–113)
-
-74. **Инстансы:** `<exeDir>/Instances/<normalize(meta.name)>/`.
-75. **Копирование манифеста** — `ResolveTargetStep`.
-76. **`--target <dir>`** — escape-hatch.
-77. **`meta.name` перепроверяется.**
-78. **`ValidateTargetStep`** — 4 проверки.
-79. **`[NoDelete]`** — уважаем.
-80. **Существующая папка** — рефлорация.
-81. **`verify` — да, `repair` — нет.**
-82. **File-logging — v0.3.0.**
-83. **Прогресс-бары — v0.2.0.**
-84. **`BootstrapInstanceStep`** — создаёт все папки.
-85. **`IArchiveDownloader`** — абстракция.
-86. **`DownloaderRegistry`** — map sourceType → downloader.
-87. **`SyncArchivesStep`** — только `manifest.Archives`, не трогает
-    MO2.
-88. **Hash — источник правды.**
-89. **Ничего не удаляем** из `downloads/`.
-90. **GitHub — удалён.** Всё через `mirror`.
-91. **Параллельная загрузка** — `ParallelOptions`.
-92. **3 попытки + Polly backoff (2 сек).**
-93. **Скачивание в `.part`**, `File.Move` после проверки.
-94. **Проверка хеша после скачивания обязательна.**
-95. **`nexus` до Фазы 6 — warning + `Skipped`.**
-96. **Глобальный реестр — v0.2.0.**
-97. **`IHttpClientFactory` через DI.**
-98. **`SyncModsStep`** — reconcile `mods/`.
-99. **Только `FromArchive` директивы.**
-100. **`TempWorkspace` на мод.**
-101. **Файлы, которых нет в директивах, — удаляются** (recreate).
-102. **Откат при ошибке — никакого.**
-103. **`SyncModsStep.Input.ArchivesById`.**
-104. **`SyncModsStep.Output`:** `Created`/`Recreated`/`Skipped`/`Deleted`.
-105. **Сепараторы в `SyncModsStep`:** pass 1 — `Skipped`; pass 2 —
-     не удаляются.
-106. **`GenerateMetaIniStep`:** reconcile `meta.ini`.
-107. **`RegenerateProfileStep`:** сортировка по `Order` ascending,
-     **без `Reverse()`**.
-108. **`BootstrapMo2Step` — самодостаточный.** Распаковка всегда,
-     с заменой.
-109. **`BootstrapMo2Step.Output = Input`.**
-110. **Порядок pipeline:** BootstrapInstance → BootstrapMo2 →
-     SyncArchives → ExecuteExtensions → ExecuteExtras → SyncMods →
-     GenerateMetaIni → RegenerateProfile.
-111. **`ConfigureMo2Step`** — не делаем.
-112. **`InstallPipeline`** — склейка шагов.
-113. **`InstallPipeline.BuildArchivesById`** — включая MO2-архив.
-
-### Verify (114–130)
-
-114. **Verify — read-only.**
-115. **Изоляция (вариант A).**
-116. **`VerifyPipeline.Execute` — синхронный.**
-117. **Проверки — приватные методы внутри `VerifyPipeline`.**
-118. **`VerifyContext`** — единый контекст.
-119. **`VerifyReport`** — `Checks`, `IsOk`, `PassedCount`, `FailedCount`.
-120. **`VerifyCheckResult`** — `Name`, `Passed`, `Message`.
-121. **Регенерация modlist.txt / plugins.txt / loadorder.txt в память**
-     через `Serialize`-методы writer-ов.
-122. **Сравнение `meta.ini`** — семантическое.
-123. **`schemaVersion`** — через `ManifestSchema.IsSupported`.
-124. **Пустые директивы у disabled-мода** — OK.
-125. **Return code CLI:** 0 — OK, 1 — есть падения, 2 — ошибка, 130 — Ctrl+C.
-126. **`ManifestJson.Load` / `Save` — sync-версии для verify.**
-127. **`VerifyCommand`** — summary + провалы; `--verbose` — все проверки.
-      `Markup.Escape`.
-128. **`VerifySettings`** — `<target>` + `--verbose`/`-v`.
-129. **`CheckMod` делает `yield break`** при отсутствии папки мода.
-130. **Verify проверяет extensions/extras.** Общий helper
-      `CheckDirectiveFile(displayPrefix, rootPath, directive)`.
-
-### Cancellation / CLI (131–136)
-
-131. **`CancellationHelper.IsCancellation`** в `Firelink.Core` —
-      распознаёт отмену, включая `AggregateException` со всеми
-      cancellation-inner.
-132. **`ArchiveMatcher.BuildAsync`** — async; `catch (OperationCanceledException)
-      { throw; }` **перед** `catch (Exception)`.
-133. **`PackCommand`/`InstallCommand`/`VerifyCommand`** — `catch (Exception ex)
-      when (CancellationHelper.IsCancellation(ex))` → `Cancelled.` + exit 130.
-      `Console.CancelKeyPress` подписывается на время выполнения команды,
-      `e.Cancel = true` + `cts.Cancel()`, отписка в `finally`.
-134. **`Program.cs` CLI** — `catch (Exception ex)
-      when (CancellationHelper.IsCancellation(ex))` → `Cancelled.` + exit 130
-      (fallback на случай отмены до подписки).
-135. **`config.PropagateExceptions()`** включено в CLI. Без него
-      Spectre перехватывает `CommandParseException` и
-      `OperationCanceledException` до нашего `try/catch`.
-136. **`catch (CommandParseException ex)`** в `Program.cs` — печатает
-      `CLI error: <msg>` + `Hint: paths with spaces must be quoted: ...`
-      (hint только если в `argv` нет строк с пробелами).
-
-### 12.13.x / 13.1 (137–143)
-
-137. **`MatchStep` использует общий `ArchiveMatcher` через
-     `Input.Matcher`.**
-138. **`.bsa`/`.ba2` — единые файлы, не контейнеры.**
-139. **CLI-таблицы `PackCommand`/`InstallCommand` включают
-     extensions/extras.**
-140. **`ArchiveDownloadHelper`** в `Firelink.Core.Archives` —
-     общий helper скачивания (`.part`, retry через Polly, hash-check).
-141. **`ExecuteExtensionsStep`** — раскладывает `manifest.Mo2.Extensions[]`
-     в `<target>/MO2/`. Группирует директивы по archiveId, extract
-     один раз на архив, `FileMatches`-skip для идемпотентности.
-142. **`ExecuteExtrasStep`** — симметричен `ExecuteExtensionsStep`,
-     корень `<target>/Stock Game/`.
-143. **`ExecuteExtensionsStep`/`ExecuteExtrasStep` — Skipped**, если
-     файлы уже на месте.
-
-### Фаза 1 — Единый CLI (144–152)
-
-Решения, принятые при рефакторинге CLI (шаги 1.1–1.7, 2026-09-21).
-
-144. **Один CLI-проект:** `Firelink.Cli`, exe → `Firelink.Cli.exe`.
-     `<AssemblyName>` не задаём — имя exe берётся из имени `.csproj`.
-145. **`Firelink.Pack` и `Firelink.Install` — class libraries.**
-     Не exe. Все `Program.cs`, `Commands/`, `Settings/`,
-     `Infrastructure/` переехали в `Firelink.Cli`.
-146. **Namespace `Firelink.Cli.*`.** Команды —
-     `Firelink.Cli.Commands`, настройки — `Firelink.Cli.Settings`,
-     `TypeRegistrar` — `Firelink.Cli.Infrastructure`.
-147. **`SetApplicationName("firelink")`** — usage-строка `firelink pack`,
-     `firelink install` и т.д. Имя exe — `Firelink.Cli.exe`. Это
-     сознательное расхождение display name и file name (как `dotnet`
-     vs `dotnet.exe`).
-148. **`Firelink.exe`** зарезервировано под GUI (Фаза 3).
-     `<AssemblyName>Firelink</AssemblyName>` будет у `Firelink.Gui.csproj`.
-     В дистрибутиве будут оба exe: `Firelink.Cli.exe` (CLI) и
-     `Firelink.exe` (GUI).
-149. **`TryAddSingleton` вместо `AddSingleton`** для
-     `FileHashCache`, `IArchiveExtractor` — эти регистрации
-     встречаются и в pack-, и в install-части. `TryAdd` не даёт
-     плодить дубли в DI-контейнере.
-150. **DI-extension-методы: `AddFirelinkPack` / `AddFirelinkInstall`.**
-     Регистрируют все сервисы своей библиотеки.
-     Файлы: `Firelink.Pack/PackServices.cs`,
-     `Firelink.Install/InstallServices.cs`.
-     Namespace'ы — `Firelink.Pack` / `Firelink.Install` (то есть
-     extension-метод виден из CLI без лишних using'ов).
-151. **`AddFirelinkInstall` регистрирует `MirrorDownloader`** через
-     `AddHttpClient<T>` (таймаут 10 минут). Требует
-     `Microsoft.Extensions.Http` — явная `<PackageReference>` в
-     `Firelink.Install.csproj`.
-152. **`Firelink.Cli/Program.cs` регистрирует только то, что
-     относится к CLI:** `AddLogging`, `IAnsiConsole`, `ParallelOptions`.
-     Всё остальное — через `AddFirelinkPack()` и `AddFirelinkInstall()`.
-
-### Фаза 2 — Общие API (153–160)
-
-Решения, принятые при подготовке общих API для GUI (шаги 2.1–2.4,
-2026-09-21).
-
-153. **`StepProgress` — общий тип в `Firelink.Core.Progress`.** Record
-     `(int StepIndex, int TotalSteps, string StepName)`. StepIndex
-     — 1-based. StepName — стабильный контракт для GUI: имена не
-     менять без причины.
-154. **`IProgress<StepProgress>? progress = null` — опциональный
-     последний параметр** в `PackPipeline.ExecuteAsync` и
-     `InstallPipeline.ExecuteAsync`. `Report` вызывается **перед**
-     шагом, не после. Packer: 14 имён шагов. Installer: 11.
-155. **`PackPipeline.Input` введён.** Симметрично
-     `InstallPipeline.Input`. `ExecuteAsync(Input, ct, progress?)`.
-     Все тесты packer-а обновлены.
-156. **`PackInputFactory` / `InstallInputFactory`** — статические
-     классы. Единственная точка, где `Path.GetFullPath` и
-     `ParallelOptions`. Принимают `ParallelOptions? = null`,
-     дефолт — `Environment.ProcessorCount`.
-157. **`PackSummary` / `InstallSummary`** — `sealed record` с
-     `required` полями. Только примитивы. Никаких ссылок на
-     `PackResult`/`InstallPipeline.Output`. Плоские DTO для
-     отображения.
-158. **`PackSummaryBuilder` / `InstallSummaryBuilder`** —
-     статические классы. Единственное место, где решается
-     «что показывать пользователю». Логика подсчёта
-     `DirectivesTotal`/`DirectivesFromArchive` (была в
-     `PackCommand`) ушла сюда.
-159. **CLI-таблицы строятся из Summary, не из Output.**
-     Внешний вид таблиц не изменился. Поменялся только источник
-     данных: `summary.X` вместо `output.Xxx.Yyy.Count`.
-160. **`ParallelOptions` остаётся в DI.** Фабрики принимают его
-     параметром. CLI передаёт `_parallelOptions` из DI. GUI
-     сможет передавать свой.
----
-
-## План работ
-
-### Фаза 1 — Единый CLI (`Firelink.Cli`) ✅ ЗАКРЫТА
-
-**Цель:** объединить `Firelink.Pack` и `Firelink.Install` в один exe.
-
-**Статус:** закрыта 2026-09-21.
-
-**Все шаги:**
-
-- ✅ 1.1 — создан `Firelink.Cli`, pack-сторона перенесена.
-- ✅ 1.2 — install-сторона перенесена, все 5 команд работают.
-- ✅ 1.3 — `Firelink.Pack` стал class library.
-- ✅ 1.4 — `Firelink.Install` стал class library. Один exe
-  (`Firelink.Cli.exe`).
-- ✅ 1.5 — `AddFirelinkPack` / `AddFirelinkInstall`. DI-регистрация
-  в библиотеках, `Firelink.Cli/Program.cs` сокращён.
-- ✅ 1.6 — ручной прогон на OmenRim 7: pack → install (TestInstance3)
-  → verify, **4338 passed, 0 failed**. Идентично `TestInstance2`
-  (modlist.txt, plugins.txt, loadorder.txt, ModOrganizer.exe).
-- ✅ 1.7 — Ctrl+C на pack/install/verify (`Cancelled.`, exit 130),
-  пробелы без кавычек (`CLI error` + hint, exit 2). Регрессий нет.
-
-**Итог Фазы 1:**
-
-- Один exe `Firelink.Cli.exe`, все 5 команд.
-- `Firelink.Pack` и `Firelink.Install` — чистые библиотеки.
-- Все 593 теста зелёные на каждом шаге.
-- Ручной прогон на OmenRim 7 подтверждает отсутствие регрессий.
-
----
-
-### Фаза 2 — Общие API для будущего GUI ✅ ЗАКРЫТА
-
-**Цель:** подготовить код так, чтобы GUI мог переиспользовать
-pipeline без дублирования логики.
-
-**Статус:** закрыта 2026-09-21.
-
-**Все шаги:**
-
-- ✅ 2.1 — `StepProgress` + `IProgress<StepProgress>?` в
-  `PackPipeline` и `InstallPipeline`.
-- ✅ 2.2 — `PackInputFactory` / `InstallInputFactory`.
-  `PackPipeline.Input` введён.
-- ✅ 2.3 — `PackSummary` / `InstallSummary` + Builder-ы.
-- ✅ 2.4 — ручной прогон на OmenRim 7 (pack → install →
-  verify), **4338 passed, 0 failed**.
-
-**Итог Фазы 2:**
-
-- Публичный API библиотек готов к использованию из GUI:
-  - `PackInputFactory.Create(...)` / `InstallInputFactory.Create(...)`.
-  - `pipeline.ExecuteAsync(input, ct, progress)`.
-  - `PackSummaryBuilder.Build(result)` / `InstallSummaryBuilder.Build(output)`.
-- CLI — первый потребитель этих API.
-- Все 621 тест зелёные на каждом шаге.
-
----
-
-### Фаза 6 — Nexus Premium (12.8)
-
-**Цель:** убрать warning `No downloader for source type 'nexus'` и
-дать возможность скачивать архивы с Nexus через Premium-API.
-
-**Статус:** не начата. Идёт **после Фазы 2** и **до Фазы 3** (GUI).
-
-**Разбиение:**
-
-- **12.8.1** — `NexusClient` + `NexusApiKeyProvider` + модели
-  ответов.
-  - HTTP к `https://api.nexusmods.com/v1/`.
-  - API-ключ из `%USERPROFILE%\.firelink\nexus.key`.
-- **12.8.2** — `NexusDownloader : IArchiveDownloader`
-  (`SourceType => "nexus"`).
-  - `DownloadAsync`: получить ссылку через `NexusClient`, скачать
-    `HttpClient`-ом.
-  - Hash — на стороне `SyncArchivesStep` (через
-    `ArchiveDownloadHelper`).
-- **12.8.3** — DI в `Firelink.Cli/Program.cs` (через
-  `AddFirelinkInstall`) + тесты с fake-`HttpMessageHandler`.
-- **12.8.4** — обновить `DOC.md` и `FIRELINK.md`.
-
-**Что НЕ делаем:**
-
-- Nexus Premium API (отдельная подписка) — это отдельная задача.
-- Кеширование ссылок.
-- `nxm://`, WebView2.
-
-**Проверка:**
-
-- Тесты: ~610 passed.
-- Ручной: скачать архив с Nexus через Premium-аккаунт.
-
-**Время:** ~1 неделя. **Риск:** низкий.
-
----
-
-### Фаза 3 — GUI (Avalonia)
-
-**Цель:** графический интерфейс поверх pipeline.
-
-**Статус:** не начата.
-
-**Архитектура (модульная):**
-
-```
-src/
-  Firelink.Gui.Shared/       ← MVVM-инфра, стили, DI-extension
-  Firelink.Gui.Install/      ← модуль installer (class library, Avalonia)
-  Firelink.Gui.Pack/         ← модуль packer (class library, Avalonia)
-  Firelink.Gui/              ← exe-оркестратор: Install + Pack
-                                 → <AssemblyName>Firelink</AssemblyName>
-                                 → Firelink.exe
-```
-
-**Контракт модуля:**
-
-```csharp
-public interface IGuiModule
-{
-    string Title { get; }
-    string Icon { get; }
-    int Order { get; }
-    object CreateViewModel();
-}
-```
-
-Главное окно — sidebar с модулями, content area.
-
-**Что в MVP GUI:**
-
-- Экран Install: выбор `modlist.json`, кнопка «Установить»,
-  прогресс-бар (шаг X из Y), лог-панель (живой), кнопка «Отмена»,
-  экран результата.
-- Экран Pack: выбор `firelink-pack.json`, кнопка «Создать манифест»,
-  тот же прогресс/лог, результат.
-- Экран Verify: выбор инстанса, кнопка «Проверить», результат
-  таблицей.
-- `ObservableLoggerProvider` — логи в `ObservableCollection<LogEntry>`.
-- `CancellationTokenSource` ← кнопка «Отмена».
-
-**Что НЕ в MVP:**
-
-- Настройки.
-- Интерактивные диалоги (конфликты, выбор источника).
-- Темы/иконки.
-- WebView2.
-
-**Проверка:**
-
-- Ручная: запустить GUI, установить сборку на `TestInstance3`, verify.
-- Сравнить с CLI-результатом — идентично.
-
-**Стек:** Avalonia 11.x, CommunityToolkit.Mvvm,
-Microsoft.Extensions.DependencyInjection.
-
-**Время:** ~3 недели. **Риск:** средний.
-
-**Важное:** `Firelink.exe` (GUI) — зарезервированное имя. В
-дистрибутиве оба: `Firelink.Cli.exe` + `Firelink.exe`.
-
----
-
-### Фаза 5 — Nexus Free (WebView2)
-
-**Цель:** скачивание модов с Nexus для Free-аккаунтов через
-WebView2.
-
-**Статус:** не начата. Технически — после Фазы 3.
-
-**Контекст:**
-
-- Nexus не отдаёт прямые ссылки для Free-аккаунтов через API.
-- Premium — через `download_link` API (Фаза 6).
-- Free — только через автоматизацию UI (как Wabbajack, Nolvus).
-
-**Задачи:**
-
-- Новый проект `Firelink.NexusHelper` — отдельное Avalonia-приложение
-  (не библиотека!).
-- WebView2.
-- Открывает `nexusmods.com`, пользователь логинится.
-- Кликает «Slow Download» для каждого мода из списка.
-- Скачанные файлы кладёт в `downloads/`.
-- CLI-команда `firelink nexus-helper` — запускает
-  `Firelink.NexusHelper.exe` как отдельный процесс.
-- В GUI — отдельный экран «Nexus Free Download».
-
-**Время:** ~2–3 недели. **Риск:** средний (юридические нюансы,
-хрупкость UI).
-
----
-
-### Порядок фаз
-
-**Строгая последовательность:**
-
-1. **Фаза 1** — единый CLI. ✅ закрыта.
-2. **Фаза 2** — общие API. ✅ закрыта.
-3. **Фаза 6** (12.8) — Nexus Premium. **← следующая**.
-4. **Фаза 3** — GUI. Основной UI.
-5. **Фаза 5** — Nexus Free. Расширение для Free.
-
-**Почему 12.8 (Фаза 6) перед GUI (Фаза 3):**
-
-- 12.8 быстрый и независимый. Даёт Premium-функционал.
-- После 12.8 можно сразу работать с Nexus-архивами — GUI уже будет
-  надстраивать UI над этой функциональностью.
-
-**Почему Free (Фаза 5) — последняя:**
-
-- Требует WebView2 — это уже GUI-стек.
-- Premium-путь проще и даёт работающий продукт для многих.
-- Free — расширение, не базис.
-
-**Фаза 4 — вариации дистрибутивов — вычеркнута.**
-
----
-
-## Ключевые принципы рефакторинга
-
-- Никаких больших изменений за один шаг. Каждый шаг компилируется.
-- 593 теста — зелёные на каждом шаге. Если упали — откат.
-- Ручной прогон на OmenRim 7 после каждой фазы.
-- Никаких изменений в pipeline, шагах, моделях. Только композиция.
-- `TryAddSingleton` в DI-extensions — защита от дублирования.
-- Никаких `Process.Start` для внутренних вызовов. Только прямые
-  вызовы pipeline.
-- GUI — отдельные проекты, ссылаются на pipeline. Обратных ссылок
-  нет.
-- CLI — первоклассный клиент. GUI — дополнение, не замена.
-
-## Что НЕ делать
-
-- Не делать «единый exe через `Process.Start` дочерних процессов».
-- Не выносить presentation в pipeline. Pipeline — оркестрация,
-  presentation — в клиентах.
-- Не делать GUI до Фазы 2 (общие API).
-- Не делать Free-стратегию (Фаза 5) до Premium (Фаза 6).
-- Не трогать `Firelink.Core`, `Firelink.Platform.*` — они не меняются.
-
----
-
-## Грабли и подводные камни
-
-Накопленные замечания. Актуальны при правках.
-
-### Про копипаст
-
-Были ошибки (`Pack.Steps` vs `Install.Steps`, пропущенные `Profile`,
-`params` vs named args, shadowing в тестах, `PluginsEntry` вместо
-`PluginEntry`). Если билд падает — вероятнее ошибка в коде ассистента.
-
-### Про BOM
-
-Файлы в репозитории часто с BOM (`\uFEFF`). При перезаписи файлов
-не копировать BOM из вывода dump. `firelink-pack.json` у автора тоже
-бывает с BOM — `PackConfigJson` читает его корректно, но лучше без.
-
-### Про samples
-
-`samples/*.json` копируются в output тестов через `PreserveNewest`.
-Если правите sample — обновите и исходник, и (при необходимости)
-очистите `bin/obj`.
-
-### Про пути
-
-Все проекты живут в `src/` и `tests/`. Новые проекты создавать
-**строго** в `tests/<Name>/`, иначе `..\..\src\...` в
-`ProjectReference` не разрешится.
-
-### Про пустой DisabledMod
-
-Мод без восстановимых файлов остаётся в манифесте с пустыми
-директивами. Installer создаёт папку, файлов нет. Это норма.
-
-### Про пустой extension/extra
-
-Entry с пустым списком директив **не попадает** в манифест.
-Unmatched уже выгружены в `__Firelink_Output`; entry без директив
-бессмысленна.
-
-### Про xUnit1031
-
-Не использовать `.GetAwaiter().GetResult()` в тестах. Если API
-async — тест `async Task`, `await`.
-
-### Про Spectre markup
-
-`[...]` — это разметка. Для имён файлов и мод-неймов (особенно
-`[NoDelete]`) — обязательно `Markup.Escape`.
-
-### Про verify-счётчики
-
-При отсутствии папки мода `CheckMod` делает `yield break` — одна
-fail-проверка вместо 10+ «file missing». Сознательное решение.
-
-### Про `Slug.FromFileName`
-
-`.7z` отрезается **до** slug-ификации. `FomodTools.7z` →
-`fomodtools`, `Mod.Organizer-2.5.2.7z` → `mod-organizer-2-5-2`.
-
-### Про `MatchStep.Input.Matcher`
-
-`internal`, не `required`. При создании `MatchStep` из тестов (не
-через DI) — **обязательно** задавать.
-`MatchExtensionsStep`/`MatchExtrasStep` — аналогично.
-
-### Про `Mod.Organizer-2.5.2.7z`
-
-Если файла нет в `OmenRim 7\MO2\downloads\`, pack пишет `Size = 0`
-для `manifest.Mo2.Archive`. **Не ошибка.** Hash берётся из
-`mo2.source.hash`.
-
-### Про runtime-файлы
-
-`.log`/`.ini` от SKSE-плагинов не восстанавливаются из архивов и
-уходят в `__Firelink_Output`. **Не пытаться «чинить»** — это
-правильное поведение.
-
-### Про `.bsa`/`.ba2`
-
-Единые файлы, не контейнеры для Firelink. Отдельных `.bsa` в
-`downloads/` не бывает на практике.
-
-### Про `meta.ini` в verify
-
-Сравнение **семантическое** (парсим через `MetaIniReader.Parse`,
-сравниваем `ModMeta` по полям). Нормализация: `null ≡ ""`.
-`mod.Meta == null` + файл есть → fail.
-
-### Про `ArchiveMatcher.BuildAsync`
-
-Async, отмена пробрасывается как есть
-(`catch (OperationCanceledException) { throw; }` **перед**
-`catch (Exception)`). В тестах хелпер называется
-`MakeMatcherAsync`, `await matcher.BuildAsync(ct)`.
-
-### Про `CancellationHelper`
-
-В `Firelink.Core`. Используется в `PackCommand`, `InstallCommand`,
-`VerifyCommand` и в `Program.cs` — `catch (Exception ex) when
-(CancellationHelper.IsCancellation(ex))`.
-
-### Про `config.PropagateExceptions()`
-
-Включено в CLI. Без него Spectre ловит `CommandParseException` сам
-и печатает свой формат без hint.
-
-### Про `install` без `--target` (Фаза 1)
-
-`firelink install <manifest>` без `--target` создаёт инстанс в
-`<exeDir>/Instances/<meta.name>/`, а **не рядом с манифестом**.
-Это архитектурное решение. Для переустановки поверх существующего
-инстанса — всегда указывать `--target`.
-
-### Про CS0104 при переезде CLI (Фаза 1)
-
-При переносе команд в `Firelink.Cli` возникли коллизии имён
-(`PackSettings`, `PackCommand` и т.д.) между `Firelink.Cli.*` и
-`Firelink.Pack.*`/`Firelink.Install.*`. Решались псевдонимами
-(`using X = Firelink.Cli.X;`). После шагов 1.3/1.4 псевдонимы убраны —
-коллизий больше нет, потому что `Firelink.Pack.Commands` и
-`Firelink.Install.Commands` больше не существуют.
-
----
-
-## Технический долг
-
-- Persist кеша хешей в SQLite (v0.2.0).
-- Глобальный реестр `archives.db` — v0.2.0.
-- Nexus API — **Фаза 6 (12.8)**.
-- Прогресс-бар Spectre — v0.2.0.
-- File-logging — v0.3.0.
-- `SyncModsStep` поддерживает только `FromArchive`.
-- `ConfigureMo2Step` — не делаем.
-- E1 (прогон на большом инстансе) — отменён по решению.
-- Механизм патчей для inline-файлов — v0.2.0+.
-
-## Сознательно не делаем
-
-- `ConfigureMo2Step` — автоконфигурация MO2.
-- Автопатчи / autoPack / inlinePatterns — отменены.
-- `repair` в CLI — install идемпотентен.
-- Обработка `.bsa`/`.ba2` как контейнеров — они единые файлы.
-- `firelink index`.
-- Фаза 4 — вариации дистрибутивов (2026-09-21).
-- Nexus Premium API как отдельная подписка (кроме Фазы 6).
-- Кеширование Nexus download-ссылок.
-
----
-
-## Окружение
-
-- Windows 10/11.
-- .NET 8 SDK (SDK 10 тоже).
-- Visual Studio 2022.
-- `C:\Firelink\TestInstance\` — MVP прогон (до 12.13.x), verify OK.
-- `C:\Firelink\TestInstance2\` — после 12.13.6, extensions/extras,
-  verify 0 failed.
-- `C:\Firelink\OmenRim 7\` — тестовый оригинал.
-- Большой инстанс — 4370 модов (не используется).
-
----
-
-## История изменений документа
-
-- **2026-09-21** — создан `FIRELINK.md`: объединены `HANDOFF.md`,
-  `PROJECT-STATE.md`, `ROADMAP.md`. Фаза 4 вычеркнута. Добавлен
-  раздел «Фаза 1 — Единый CLI» (решения 144–150). Обновлён план
-  работ с учётом закрытых шагов 1.1–1.4.
-- **2026-09-21** — Фаза 1 закрыта. Добавлены решения 150–152
-  (`AddFirelinkPack`/`AddFirelinkInstall`, `AddHttpClient<MirrorDownloader>`,
-  регистрация только CLI-специфики в `Program.cs`).
-  Раздел «План работ → Фаза 1» помечен как закрытый.
-- **2026-09-22** — legacy cleanup: удалены `HANDOFF.md` и
-  `PROJECT-STATE.md` (объединены в `FIRELINK.md` 2026-09-21).
-  Убраны записи из `Firelink.slnx`. Обновлена версия `DOC.md` до
-  v4.2 в шапке.
-
-````
-
-## Firelink.slnx
-
-````xml
-<Solution>
-  <Folder Name="/src/">
-    <Project Path="src/Firelink.Cli/Firelink.Cli.csproj" Id="dc3df7b9-060e-4849-b03a-73326885949c" />
-    <Project Path="src/Firelink.Core/Firelink.Core.csproj" />
-    <Project Path="src/Firelink.Install/Firelink.Install.csproj" />
-    <Project Path="src/Firelink.Pack/Firelink.Pack.csproj" />
-    <Project Path="src/Firelink.Platform.MO2/Firelink.Platform.MO2.csproj" />
-    <Project Path="src/Firelink.Platform.Nexus/Firelink.Platform.Nexus.csproj" />
-  </Folder>
-  <Folder Name="/tests/">
-    <Project Path="tests/Firelink.Core.Tests/Firelink.Core.Tests.csproj" />
-    <Project Path="tests/Firelink.Install.Tests/Firelink.Install.Tests.csproj" />
-    <Project Path="tests/Firelink.Integration.Tests/Firelink.Integration.Tests.csproj" Id="453e4164-1215-4415-9a5f-5c2ff85859fa" />
-    <Project Path="tests/Firelink.Pack.Tests/Firelink.Pack.Tests.csproj" />
-    <Project Path="tests/Firelink.Platform.MO2.Tests/Firelink.Platform.MO2.Tests.csproj" />
-  </Folder>
-  <Folder Name="/Элементы решения/">
-    <File Path="DOC.md" />
-    <File Path="FIRELINK.md" />
-  </Folder>
-</Solution>
-
-````
-
-## HANDOFF.md
-
-````markdown
-# Handoff — как продолжить проект Firelink в новом чате
-
-**Обновлено:** 2026-09-21
-**Последний закрытый блок:** 12.13.10 — error-msg для пробелов без кавычек
-**Следующий блок:** 12.8 — NexusDownloader
-**Всего тестов:** 593, 0 failed
-
----
-
-## Что это
-
-Firelink — C#/.NET 8 проект для создания и установки воспроизводимых
-сборок модов для Mod Organizer 2. Два CLI-приложения: `Firelink.Pack`
-(автор) и `Firelink.Install` (пользователь). Манифест `modlist.json` —
-единственный источник правды. Файлы восстанавливаются по хешам `xxHash64`.
-
----
-
-## Как начать работу в новом чате
-
-**Скопируйте в первое сообщение:**
-
-1. **HANDOFF.md** (этот файл) — полностью.
-2. **PROJECT-STATE.md** — полностью.
-3. **DOC.md** (v3.9) — полностью.
-4. **repo-dump.md** — свежий.
-
-**Первое сообщение — шаблон:**
-
-Продолжаем проект Firelink. Стиль — пошаговые блоки кода с тестами.
-
-Прикладываю: HANDOFF.md, PROJECT-STATE.md, DOC.md (v3.9), repo-dump.md (свежий).
-
-Текущее состояние: 593 теста, 0 failed. Закрыты блоки 10.7, 11,
-12.1–12.7, 12.10.1–12.10.3, 12.6.1, Packer fix, Meta.ini fix, GitHub cleanup,
-12.12, 12.11.1–12.11.7 (Verify + Ctrl+C), 12.13.1–12.13.10
-(extensions/extras + таблицы CLI + error-msg), 13.1 (общий helper скачивания).
-
-MVP работает end-to-end. Прогон на C:\Firelink\TestInstance2\ успешен.
-Verify 4338 passed на OmenRim 7, 0 failed. Остался только 12.8 (Nexus).
-
-Следующая задача: 12.8 — NexusDownloader.
-
-Стиль ответов:
-- Разбор задачи.
-- Полный код файлов с путями.
-- Инструкция по сборке/тестам.
-- Ожидаемый вывод dotnet test.
-- HANDOFF.md и PROJECT-STATE.md — только по запросу.
-
-Не пиши код, пока я не подтвержу готовность.
-
----
-
-## Стиль работы
-
-- **Файлы давать целиком**, не патчами.
-- **Запускать `dotnet test` сразу** после каждого блока.
-- **Присылать полный вывод** тестов при падении (текст).
-- **HANDOFF.md и PROJECT-STATE.md** — только по запросу.
-- **Не менять архитектурные решения без обсуждения.**
-- **Не отвечать на китайском.**
-- **Разбивать крупные блоки на 12.x.y.**
-- **Не писать код, пока не подтверждена готовность.**
-
-### Замечания (накопленные)
-
-- **Про копипаст:** были ошибки (`Pack.Steps` vs `Install.Steps`,
-  пропущенные `Profile`, `params` vs named args, shadowing в тестах,
-  `PluginsEntry` вместо `PluginEntry`).
-  Если билд падает — вероятнее ошибка в коде ассистента.
-- **Про BOM:** файлы в репозитории часто с BOM (`\uFEFF`).
-  При перезаписи файлов не копировать BOM из вывода `dump`.
-  `firelink-pack.json` у автора тоже бывает с BOM — `PackConfigJson`
-  читает его корректно, но лучше без.
-- **Про samples:** `samples/*.json` копируются в output
-  тестов через `PreserveNewest`. Если правите sample — обновите и
-  исходник, и (при необходимости) очистите `bin/obj`.
-- **Про пути:** все проекты живут в `src/` и `tests/`.
-  Новые проекты создавать **строго** в `tests/<Name>/`, иначе
-  `..\..\src\...` в ProjectReference не разрешится.
-- **Про пустой DisabledMod:** мод без восстановимых файлов
-  остаётся в манифесте с пустыми директивами. Installer создаёт
-  папку, файлов нет. Это норма.
-- **Про пустой extension/extra:** entry с пустым списком директив
-  **не попадает** в манифест (решение №114). Unmatched уже
-  выгружены в `__Firelink_Output`; entry без директив бессмысленна.
-- **Про xUnit1031:** не использовать `.GetAwaiter().GetResult()`
-  в тестах. Если API async — тест `async Task`, `await`.
-- **Про Spectre markup:** `[...]` — это разметка.
-  Для имён файлов и мод-неймов (особенно `[NoDelete]`) — обязательно
-  `Markup.Escape`.
-- **Про verify-счётчики:** при отсутствии папки мода
-  `CheckMod` делает `yield break` — одна fail-проверка вместо
-  10+ «file missing». Сознательное решение.
-- **Про `Slug.FromFileName`:** `.7z` отрезается **до**
-  slug-ификации. `FomodTools.7z` → `fomodtools`,
-  `Mod.Organizer-2.5.2.7z` → `mod-organizer-2-5-2`.
-- **Про `MatchStep.Input.Matcher`:** `internal`, не `required`.
-  При создании `MatchStep` из тестов (не через DI) — **обязательно**
-  задавать. `MatchExtensionsStep`/`MatchExtrasStep` — аналогично.
-- **Про `Mod.Organizer-2.5.2.7z`:** если файла нет
-  в `OmenRim 7\MO2\downloads\`, pack пишет `Size = 0` для
-  `manifest.Mo2.Archive`. **Не ошибка.** Hash берётся из `mo2.source.hash`.
-- **Про runtime-файлы:** `.log`/`.ini` от SKSE-плагинов
-  не восстанавливаются из архивов и уходят в `__Firelink_Output`.
-  **Не пытаться «чинить»** — это правильное поведение.
-- **Про `.bsa`/`.ba2`:** единые файлы, не контейнеры для Firelink.
-  Отдельных `.bsa` в `downloads/` не бывает на практике.
-- **Про `meta.ini` в verify:** сравнение **семантическое** (парсим
-  через `MetaIniReader.Parse`, сравниваем `ModMeta` по полям).
-  Нормализация: `null ≡ ""`. `mod.Meta == null` + файл есть → fail.
-- **Про `ArchiveMatcher.BuildAsync`:** async, отмена пробрасывается
-  как есть (`catch (OperationCanceledException) { throw; }` **перед**
-  `catch (Exception)`). В тестах хелпер называется `MakeMatcherAsync`,
-  `await matcher.BuildAsync(ct)`.
-- **Про `CancellationHelper`:** в `Firelink.Core`. Используется
-  в `PackCommand`, `InstallCommand`, `VerifyCommand` и в обоих
-  `Program.cs` — `catch (Exception ex) when (CancellationHelper.IsCancellation(ex))`.
-- **Про `config.PropagateExceptions()`:** включено в обоих CLI,
-  чтобы `CommandParseException` долетел до нашего `catch`. Без этого
-  Spectre ловит его сам и печатает свой формат без hint.
-
----
-
-## Стек
-
-- **.NET 8**, C# 12.
-- **xUnit + FluentAssertions**.
-- **Spectre.Console.Cli** 0.48.0 (с `PropagateExceptions`).
-- **System.Text.Json**.
-- **System.IO.Hashing (xxHash64)**.
-- **Microsoft.Data.Sqlite** (v0.2.0).
-- **Microsoft.Extensions.*** — DI, Logging, Http.
-- **Polly** (в `Firelink.Core` — блок 5).
-- **7z.exe + 7z.dll**.
-- **SharpCompress удалён.**
-- **Octokit удалён.**
-
----
-
-## Ключевые архитектурные решения (не переделывать)
-
-### Packer
-
-1. **`meta.game` = Nexus game domain.**
-2. **`instance.path`** — относительный.
-3. **`mo2.profile`** — обязательный.
-4. **`mo2.source` — обязательно `MirrorSourceRef`.**
-5. **`mo2.archive.size/hash` — из `mo2.source.hash`** (size с диска,
-   если файл есть).
-6. **MO2-архив НЕ попадает в `manifest.Archives[]`.**
-7. **`mo2.extensions`** — от `MO2/`. **`stockGame.extras`** — от `Stock Game/`.
-8. **`.meta`** — Nexus-формат. `MetaReader.TryRead`.
-9. **Канонический id:** `nexus_...` / `local_{slug}`.
-10. **`archiveSources`** вместо `mirrors`.
-11. **Slug** — ASCII-only.
-12. **Semver** — регулярка semver.org.
-13. **`Pack*`-модели** — `record`.
-14. **`ValidationResult`** — накапливает ошибки.
-15. **Trailing slash** разрешён.
-16. **Зарезервированные имена Windows** запрещены.
-17. **Модели MO2** — в `Core.Models.Mo2`.
-18. **CLI** — Spectre.Console.Cli + `TypeRegistrar` + `PropagateExceptions`.
-19. **CLI требует явной команды.**
-20. **Структура инстанса:** MO2/, Stock Game/, `__Firelink_Output/`.
-21. **`ModlistReader`** читает все строки.
-22. **`[NoDelete]`** — через `Contains`.
-23. **`.meta` не считается архивом.**
-24. **Невалидный `.meta`** → fallback.
-25. **`MirrorSourceRef.Hash` обязателен.**
-26. **`XxHash64Value`** — `xxh64:hex`, 16 символов.
-27. **`MatchStep`** делегирует матчинг `ArchiveMatcher`-у.
-28. **`meta.ini` в корне мода** → `ModMetas`.
-29. **Unmatched модов** → `__Firelink_Output/MO2/mods/<ModName>/<path>`.
-30. **`7z.exe` + `7z.dll`** через `Directory.Build.targets`.
-31. **`SevenZipExtractor`** — таймаут 10 минут.
-32. **`__Firelink_Output`** — каталог автора.
-33. **`MatchResult`** — `ModDirectives` + `Unmatched` + `ModMetas`.
-34. **`MetaIniReader`** — `[General]`. Ключи case-insensitive.
-35. **`MetaIniWriter`** — `[General]`, camelCase, без `[installedFiles]`,
-    без BOM, CRLF. Не пишет `category`.
-36. **`ModMeta` — без `Category`.**
-37. **`.mohidden` — часть пути.**
-38. **`mods[].meta` со всеми полями** (кроме `Category`).
-39. **`createdAt`** — `yyyy-MM-ddTHH:mm:ss.fffZ`.
-40. **`InlineFileContent` / `OrphanFile` / `InlineFile` удалены.**
-41. **`PackCommand`:** `Manifest archives`, `Manifest extensions`,
-    `Manifest extras`, `mo2.archive`, `Unmatched written to` при `> 0`.
-42. **Сепараторы** сохраняются в манифесте.
-43. **`ScanModsStep`:** сепаратор без папки → `LogDebug`.
-44. **Мод без восстановимых файлов остаётся в манифесте с пустыми
-    директивами.**
-45. **`ArchiveMatcher`** — в `Firelink.Pack.Matching`. Детерминизм
-    при дубликатах: минимальный `archiveId` (Ordinal).
-    `InternalsVisibleTo("Firelink.Pack.Tests")`. Принимает
-    `ILogger<ArchiveMatcher>`. Метод — `BuildAsync(ct)` (12.11.7.1).
-46. **`ScanExtensionsStep`/`ScanExtrasStep`** — тип результата
-    `EntryScanResult`. `RelativePath` файла — ОТ КОРНЯ MO2/ или
-    Stock Game/. `Parallel.ForEach` + восстановление порядка ключей.
-    Отсутствие entry → `FileNotFoundException`.
-47. **`MatchExtensionsStep`/`MatchExtrasStep`** — тип результата
-    `MatchEntriesResult`. Принимают `ArchiveMatcher` через
-    `Input.Matcher` (`internal`, не `required`). Unmatched **не пишут**
-    на диск — это делает `PackPipeline`.
-48. **`Mo2ArchiveBuilder`** — статический класс в `Firelink.Pack.Matching`.
-    Один источник правды для построения `ArchiveEntry` MO2-архива.
-49. **Unmatched extensions** → `__Firelink_Output/MO2/<relativePath>`
-    (плоско). **Unmatched extras** → `__Firelink_Output/Stock Game/<relativePath>`.
-    `EntryName` на путь не влияет — только `RelativePath`.
-50. **`PackPipeline`** перед write unmatched чистит
-    `__Firelink_Output/MO2/` (кроме `mods/`) и
-    `__Firelink_Output/Stock Game/`. Папки `MO2/` (без `mods/`) и
-    `Stock Game/` создаются **только** при `entries.Count > 0`.
-51. **`PackPipeline`** создаёт `ArchiveMatcher` один раз, `BuildAsync`,
-    передаёт в `MatchStep`, `MatchExtensions`, `MatchExtras` (12.13.6).
-
-### Installer
-
-52. **Инстансы:** `<exeDir>/Instances/<normalize(meta.name)>/`.
-53. **Копирование манифеста** — `ResolveTargetStep`.
-54. **`--target <dir>`** — escape-hatch.
-55. **`meta.name` перепроверяется.**
-56. **`ValidateTargetStep`** — 4 проверки.
-57. **`[NoDelete]`** — уважаем.
-58. **Существующая папка** — рефлорация.
-59. **`verify` — да, `repair` — нет.**
-60. **File-logging — v0.3.0.**
-61. **Прогресс-бары — v0.2.0.**
-62. **`BootstrapInstanceStep`** — создаёт все папки.
-63. **`IArchiveDownloader`** — абстракция.
-64. **`DownloaderRegistry`** — map sourceType → downloader.
-65. **`SyncArchivesStep`** — только `manifest.Archives`, не трогает MO2.
-66. **Hash — источник правды.**
-67. **Ничего не удаляем** из `downloads/`.
-68. **GitHub — удалён.** Всё через `mirror`.
-69. **Параллельная загрузка** — `ParallelOptions`.
-70. **3 попытки + Polly backoff (2 сек).**
-71. **Скачивание в `.part`**, `File.Move` после проверки.
-72. **Проверка хеша после скачивания обязательна.**
-73. **`nexus` до 12.8 — warning + `Skipped`.**
-74. **Глобальный реестр — v0.2.0.**
-75. **`IHttpClientFactory` через DI.**
-76. **`SyncModsStep`** — reconcile `mods/`.
-77. **Только `FromArchive` директивы.**
-78. **`TempWorkspace` на мод.**
-79. **Файлы, которых нет в директивах, — удаляются** (recreate).
-80. **Откат при ошибке — никакого.**
-81. **`SyncModsStep.Input.ArchivesById`.**
-82. **`SyncModsStep.Output`:** `Created`/`Recreated`/`Skipped`/`Deleted`.
-83. **Сепараторы в `SyncModsStep`:** pass 1 — `Skipped`; pass 2 —
-    не удаляются.
-84. **`GenerateMetaIniStep`:** reconcile `meta.ini`.
-85. **`RegenerateProfileStep`:** сортировка по `Order` ascending,
-    **без `Reverse()`**.
-86. **`BootstrapMo2Step` — самодостаточный.** Распаковка всегда, с заменой.
-87. **`BootstrapMo2Step.Output = Input`.**
-88. **Порядок pipeline:** BootstrapInstance → BootstrapMo2 → SyncArchives →
-    ExecuteExtensions → ExecuteExtras → SyncMods → GenerateMetaIni →
-    RegenerateProfile.
-89. **`ConfigureMo2Step`** — не делаем.
-90. **`InstallPipeline`** — склейка шагов.
-91. **`InstallPipeline.BuildArchivesById`** — включая MO2-архив.
-92. **`InstallCommand`** — печатает таблицу, включая extensions/extras.
-93. **DI:** шаги — синглтоны, `MirrorDownloader` — через `AddHttpClient<T>`,
-    регистрируется как `IArchiveDownloader`.
-94. **`ExecuteExtensionsStep`** — раскладывает `manifest.Mo2.Extensions[]`
-    в `<target>/MO2/`. Группирует директивы по archiveId, extract один
-    раз на архив, `FileMatches`-skip для идемпотентности.
-95. **`ExecuteExtrasStep`** — симметричен `ExecuteExtensionsStep`, корень
-    `<target>/Stock Game/`.
-96. **`ExecuteExtensionsStep`/`ExecuteExtrasStep` — Skipped**, если
-    файлы уже на месте.
-
-### Verify
-
-97. **Verify — read-only.**
-98. **Изоляция (вариант A).**
-99. **`VerifyPipeline.Execute` — синхронный.**
-100. **Проверки — приватные методы внутри `VerifyPipeline`.**
-101. **`VerifyContext`** — единый контекст.
-102. **`VerifyReport`** — `Checks`, `IsOk`, `PassedCount`, `FailedCount`.
-103. **`VerifyCheckResult`** — `Name`, `Passed`, `Message`.
-104. **Регенерация modlist.txt / plugins.txt / loadorder.txt в память**
-     через `Serialize`-методы writer-ов.
-105. **Сравнение `meta.ini`** — семантическое.
-106. **`schemaVersion`** — через `ManifestSchema.IsSupported`.
-107. **Пустые директивы у disabled-мода** — OK.
-108. **Return code CLI:** 0 — OK, 1 — есть падения, 2 — ошибка, 130 — Ctrl+C.
-109. **`ManifestJson.Load` / `Save` — sync-версии для verify.**
-110. **`VerifyCommand`** — summary + провалы; `--verbose` — все проверки.
-      `Markup.Escape`.
-111. **`VerifySettings`** — `<target>` + `--verbose`/`-v`.
-112. **`CheckMod` делает `yield break`** при отсутствии папки мода.
-113. **Verify проверяет extensions/extras.** Общий helper
-      `CheckDirectiveFile(displayPrefix, rootPath, directive)`.
-
-### Cancellation / CLI (12.11.7, 12.13.10)
-
-114. **`CancellationHelper.IsCancellation`** в `Firelink.Core` —
-      распознаёт отмену, включая `AggregateException` со всеми
-      cancellation-inner.
-115. **`ArchiveMatcher.BuildAsync`** — async; `catch (OperationCanceledException)
-      { throw; }` **перед** `catch (Exception)`.
-116. **`PackCommand`/`InstallCommand`/`VerifyCommand`** — `catch (Exception ex)
-      when (CancellationHelper.IsCancellation(ex))` → `Cancelled.` + exit 130.
-      `Console.CancelKeyPress` подписывается на время выполнения команды,
-      `e.Cancel = true` + `cts.Cancel()`, отписка в `finally`.
-117. **`Program.cs` обоих CLI** — `catch (Exception ex)
-      when (CancellationHelper.IsCancellation(ex))` → `Cancelled.` + exit 130
-      (fallback на случай отмены до подписки).
-118. **`config.PropagateExceptions()`** включено в обоих CLI. Без него
-      Spectre перехватывает `CommandParseException` и `OperationCanceledException`
-      до нашего `try/catch`.
-119. **`catch (CommandParseException ex)`** в `Program.cs` — печатает
-      `CLI error: <msg>` + `Hint: paths with spaces must be quoted: ...`
-      (hint только если в `argv` нет строк с пробелами — иначе проблема
-      не в кавычках).
-
-### 12.13.x
-
-120. **`BuildManifestStep.BuildExtensions`/`BuildExtras`** пропускают
-     entry с пустым списком директив.
-121. **`PackPipeline`** добавляет MO2-архив в `ArchiveIndex` перед
-     созданием `ArchiveMatcher`: `archiveIndexWithMo2 = AddMo2ArchiveToResolved(...)`.
-122. **`Slug.FromFileName`** отрезает **последнее** расширение до
-     slug-ификации.
-123. **`MatchStep` использует общий `ArchiveMatcher` через
-     `Input.Matcher`.**
-124. **`.bsa`/`.ba2` — единые файлы, не контейнеры.**
-125. **CLI-таблицы `PackCommand`/`InstallCommand` включают
-     extensions/extras.**
-126. **`ArchiveDownloadHelper`** в `Firelink.Core.Archives` —
-     общий helper скачивания (`.part`, retry через Polly, hash-check).
-
----
-
-## Что сделано (кратко)
-
-**Pipeline packer-а:**
-
-ReadConfigStep → ReadInstanceStep → IndexArchivesStep → ScanModsStep →
-ScanExtensionsStep → ScanExtrasStep →
-**[build ArchiveMatcher]** →
-MatchStep → MatchExtensionsStep → MatchExtrasStep →
-**[write unmatched extensions/extras]** →
-BuildManifestStep → ValidateManifestStep → WriteManifestStep
-
-**Pipeline installer-а:**
-
-ReadManifestStep → ResolveTargetStep → ValidateTargetStep →
-BootstrapInstanceStep → BootstrapMo2Step → SyncArchivesStep →
-ExecuteExtensionsStep → ExecuteExtrasStep → SyncModsStep →
-GenerateMetaIniStep → RegenerateProfileStep
-
-**Оркестратор:** `InstallPipeline`.
-**CLI:** `InstallCommand`, `VerifyCommand`.
-
-**MVP работает:**
-- Прогон на `C:\Firelink\TestInstance\` — успешно (до 12.13.x).
-- **Реальный прогон на `OmenRim 7` после 12.13.6:**
-  - Pack: 82 мода, 4236 matched-директив, 69 архивов,
-    49/49 extensions, 2/2 extras, 6 unmatched (runtime).
-  - Install: 82 мода, 82 meta.ini, 1 extension written, 2 extras written.
-  - Verify: **4338 passed, 0 failed**.
-
-**593 теста, 0 failed.**
-
----
-
-## План работы — оставшиеся блоки
-
-**Всё, кроме 12.8, закрыто.**
-
-### Блок 9 — 12.8: `NexusDownloader` ← **СЛЕДУЮЩИЙ**
-
-**Цель:** убрать warning `No downloader for source type 'nexus'`
-и дать возможность скачивать архивы с Nexus напрямую.
-
-**Разбиение:**
-
-- **12.8.1** — `NexusClient` + `NexusApiKeyProvider` + модели ответов.
-  HTTP к `https://api.nexusmods.com/v1/`. API-ключ из
-  `%USERPROFILE%\.firelink\nexus.key`.
-- **12.8.2** — `NexusDownloader : IArchiveDownloader` (`SourceType => "nexus"`).
-  `DownloadAsync`: получить ссылку через `NexusClient`, скачать
-  `HttpClient`-ом. Hash — на стороне `SyncArchivesStep` (через
-  `ArchiveDownloadHelper`).
-- **12.8.3** — DI в `Firelink.Install/Program.cs` + тесты с
-  fake-`HttpMessageHandler`.
-- **12.8.4** — обновить DOC/HANDOFF/PROJECT-STATE.
-
-**Что НЕ делаем:**
-- Nexus Premium API (отдельная подписка).
-- Кеширование ссылок.
-
-**Ожидаемый `dotnet test`:** ~610 passed.
-
----
-
-## Отложено на v0.2.0+
-
-- Глобальный реестр `archives.db` (SQLite).
-- Persist кеша хешей.
-- Прогресс-бар Spectre.
-- File-logging.
-- Механизм патчей для inline-файлов.
-- Nexus Premium API.
-
-## Сознательно не делаем
-
-- `ConfigureMo2Step` — автоконфигурация MO2.
-- Автопатчи / autoPack / inlinePatterns — отменены.
-- `repair` в CLI — install идемпотентен.
-- Обработка `.bsa`/`.ba2` как контейнеров — они единые файлы.
-- `firelink index`.
-
----
-
-## Окружение
-
-- Windows 10/11.
-- .NET 8 SDK (SDK 10 тоже).
-- Visual Studio 2022.
-- `C:\Firelink\TestInstance\` — MVP прогон (до 12.13.x).
-- `C:\Firelink\TestInstance2\` — после 12.13.6, extensions/extras,
-  verify 0 failed.
-- `C:\Firelink\OmenRim 7\` — тестовый оригинал.
-- Большой инстанс — 4370 модов (прогон E1 отменён, не критично).
-
-````
-
-## PROJECT-STATE.md
-
-````markdown
-# Firelink — состояние проекта
-
-**Обновлено:** 2026-09-21
-**Всего тестов:** 593, 0 failed
-**Текущий блок:** ничего (все хвосты закрыты)
-**Последний закрытый блок:** 12.13.10 — error-msg для пробелов без кавычек
-**Следующий блок:** 12.8 — NexusDownloader
-
----
-
-## Что это
-
-Firelink — инструмент для создания и установки воспроизводимых сборок
-модов для Mod Organizer 2. Два CLI: `Firelink.Pack` (автор) и
-`Firelink.Install` (пользователь). Манифест `modlist.json` — единственный
-источник правды. Файлы восстанавливаются по хешам `xxHash64`.
-
-Подробности — в `DOC.md` (v3.9). План — в `HANDOFF.md`.
-
----
-
-## Статус MVP
-
-**MVP работает end-to-end:**
-
-- Прогон `firelink-install install` на `C:\Firelink\TestInstance\`
-  (19.09.2026, до 12.13.x).
-- 82 мода разложены, 82 meta.ini записаны, профиль сгенерирован.
-- **12.11.1–12.11.3:** Verify (Pipeline + Tests + CLI).
-- **12.11.5:** `meta.ini` в verify (семантическое сравнение).
-- **12.11.6:** extensions/extras в verify.
-- **12.11.7:** Ctrl+C в CLI (Normalized cancellation + `CancellationHelper`).
-- **12.11.7.1:** `ArchiveMatcher.Build` → `BuildAsync`, отмена
-  пробрасывается.
-- **12.12:** integration pack → install.
-- **12.13.1:** ArchiveMatcher + фикс Unmatched root + InternalsVisibleTo.
-- **12.13.2:** ScanExtensionsStep + ScanExtrasStep + EntryScanResult.
-- **12.13.3:** MatchExtensionsStep + MatchExtrasStep + MatchEntriesResult.
-- **12.13.4:** BuildManifestStep + PackPipeline + DI + write unmatched.
-- **12.13.5:** integration test pack → install с extensions/extras.
-- **12.13.6:** унификация extract-а `MatchStep` через `ArchiveMatcher`.
-- **12.13.7 + 12.13.8:** таблицы CLI включают extensions/extras.
-- **12.13.10:** error-msg для пробелов без кавычек.
-- **13.1:** общий helper скачивания `ArchiveDownloadHelper`.
-
-**Реальный прогон на `OmenRim 7` после 12.13.6 (2026-09-20):**
-- Pack: 82 мода, 4236 matched-директив, 69 архивов.
-  - extensions (`plugins/curationclub`) — 49/49 matched.
-  - extras (`skse64_loader.exe`, `skse64_1_7_104.dll`) — 2/2 matched.
-  - 6 unmatched (runtime `.log`/`.ini` от SKSE) → `__Firelink_Output`.
-- Install: 82 мода, 82 meta.ini, 1 extension written, 2 extras written.
-- Verify: **4338 passed, 0 failed**.
-- `ArchiveMatcher` — **один** extract на 70 архивов (12.13.6).
-
----
-
-## Структура репозитория (после 12.13.10 + 13.1 + 12.11.7)
-C:\Code\Firelink
-Firelink.slnx
-Directory.Build.props
-Directory.Build.targets
-Directory.Packages.props
-DOC.md ← v3.9
-PROJECT-STATE.md
-HANDOFF.md
-repo-dump.md
-samples/
-firelink-pack.minimal.json
-firelink-pack.full.json
-firelink-pack.invalid-name.json
-firelink-pack.invalid-path.json
-firelink-pack.invalid-version.json
-src/
-Firelink.Core/
-Abstractions/ (IStep, IArchiveDownloader)
-CancellationHelper.cs ← блок 6
-Hashing/ (XxHash64Value, XxHash64ValueJsonConverter)
-Models/Manifest/
-ArchiveEntry, ModlistManifest, ManifestJson (Load/Save sync),
-ManifestSchema, UtcDateTimeOffsetJsonConverter, ModMeta,
-Directives/ (Directive, FromArchiveDirective,
-CreateDirectoryDirective, DeleteDirective),
-Sources/ (ArchiveSourceRef, NexusSourceRef, MirrorSourceRef)
-Models/Mo2/ (ModlistEntry, ModlistFile, PluginEntry, PluginsFile,
-LoadorderFile)
-Models/Pack/ (PackConfig, PackMeta, PackInstance, PackMo2,
-PackStockGame, PackArchiveSource, PackConfigJson,
-InstanceSnapshot, MatchResult, ModScanResult,
-UnmatchedFile, UnmatchedEntry, EntryScanResult,
-ArchiveIndex, MatchEntriesResult)
-Identity/ (Slug, ArchiveId)
-Validation/ (ValidationResult, NameValidator, SemverValidator,
-RelativePathValidator, InstancePathValidator,
-PackConfigValidator)
-Archives/ (ArchiveExtensions, FileHashCache,
-ArchiveDownloadHelper, ← блок 5
-Extraction/ (IArchiveExtractor, SevenZipExtractor,
-TempWorkspace))
-Assets/7z/ (7z.exe, 7z.dll, License.txt)
-Firelink.Platform.MO2/
-Models/MetaFile.cs
-Readers/ (ModlistReader, PluginsReader, LoadorderReader,
-MetaReader, MetaIniReader)
-Writers/ (ModlistWriter, PluginsWriter, LoadorderWriter,
-MetaIniWriter; + Serialize)
-Firelink.Platform.Nexus/ (пусто)
-Firelink.Pack/
-Commands/ (PackCommand, HashCommand, DoctorCommand)
-Settings/ (PackSettings, DoctorSettings)
-Infrastructure/TypeRegistrar.cs
-Matching/ (ArchiveMatcher, ArchiveIndexes, Mo2ArchiveBuilder)
-Steps/ (ReadConfigStep, ReadInstanceStep, IndexArchivesStep,
-ScanModsStep, ScanExtensionsStep, ScanExtrasStep,
-MatchStep, MatchExtensionsStep, MatchExtrasStep,
-BuildManifestStep, ValidateManifestStep, WriteManifestStep)
-PackPipeline.cs
-Program.cs (с PropagateExceptions + CommandParseException catch)
-Firelink.Install/
-Commands/ (InstallCommand, VerifyCommand, DoctorCommand)
-Settings/ (InstallSettings, VerifySettings, DoctorSettings)
-Infrastructure/TypeRegistrar.cs
-Downloaders/ (MirrorDownloader, DownloaderRegistry)
-Steps/ (ReadManifestStep, ResolveTargetStep, ValidateTargetStep,
-BootstrapInstanceStep, BootstrapMo2Step, SyncArchivesStep,
-ExecuteExtensionsStep, ExecuteExtrasStep, SyncModsStep,
-GenerateMetaIniStep, RegenerateProfileStep)
-Verify/ (VerifyContext, VerifyCheckResult, VerifyReport, VerifyPipeline)
-InstallPipeline.cs
-Program.cs (с PropagateExceptions + CommandParseException catch)
-tests/
-Firelink.Core.Tests/
-Firelink.Platform.MO2.Tests/
-Firelink.Pack.Tests/
-ArchiveMatcherTests.cs
-ScanExtensionsStepTests.cs
-ScanExtrasStepTests.cs
-MatchExtensionsStepTests.cs
-MatchExtrasStepTests.cs
-Firelink.Install.Tests/
-Verify/ (VerifyPipelineTests)
-Firelink.Integration.Tests/
-PackInstallRoundtripTests.cs
-PackInstallExtensionsExtrasTests.cs
-
-text
-
-Реальные инстансы:
-
-- `C:\Firelink\TestInstance\` — MVP прогон (до 12.13.x), verify OK.
-- `C:\Firelink\TestInstance2\` — после 12.13.6, 82 мода,
-  extensions/extras, verify 0 failed.
-- `C:\Firelink\OmenRim 7\` — тестовый оригинал.
-- Большой инстанс — 4370 модов (прогон E1 отменён).
-
----
-
-## Пайплайн packer-а (полный)
-ReadConfigStep → ReadInstanceStep → IndexArchivesStep → ScanModsStep →
-ScanExtensionsStep → ScanExtrasStep →
-[build ArchiveMatcher via BuildAsync] →
-MatchStep → MatchExtensionsStep → MatchExtrasStep →
-[write unmatched extensions/extras] →
-BuildManifestStep → ValidateManifestStep → WriteManifestStep
-
-text
-
----
-
-## Пайплайн installer-а
-ReadManifestStep → ResolveTargetStep → ValidateTargetStep →
-BootstrapInstanceStep → BootstrapMo2Step → SyncArchivesStep →
-ExecuteExtensionsStep → ExecuteExtrasStep → SyncModsStep →
-GenerateMetaIniStep → RegenerateProfileStep
-
-text
-
-**CLI:** `firelink-install install <manifest> [--target <dir>]`.
-**CLI:** `firelink-install verify <target> [--verbose]`.
-
----
-
-## Прогоны на реальных инстансах
-
-**`C:\Firelink\TestInstance\` (19.09.2026, до 12.13.x):**
-
-- Install: 82 мода, 68 архивов, 82 meta.ini, профиль `Default`.
-- Verify: 4337 passed (здоровый), 4310/2 (сломанный), install
-  восстанавливает.
-
-**`C:\Firelink\TestInstance2\` (20.09.2026, после 12.13.6, `OmenRim 7`):**
-
-- Pack: 82 мода, 4236 matched, 69 архивов, 49/49 extensions, 2/2 extras.
-- Install: 82 мода, 1 extension written, 2 extras written, 82 meta.ini.
-- Verify: **4338 passed, 0 failed**.
-
----
-
-## CLI: сценарии и exit codes
-
-| Сценарий | Вывод | Exit code |
-|---|---|---|
-| `pack` OK | таблица, `Done.` | 0 |
-| `pack` с пробелами без кавычек | `CLI error` + hint | 2 |
-| `pack` без `<config>` | `ERROR: Command 'pack' is missing required argument 'config'.` | 2 |
-| `pack` + Ctrl+C | `Cancelled.` | 130 |
-| `install` OK | таблица, `Done.` | 0 |
-| `install` + Ctrl+C | `Cancelled.` | 130 |
-| `verify` OK | `All checks passed.` | 0 |
-| `verify` с падениями | summary + failures | 1 |
-
----
-
-## Что в работе
-
-Ничего. Все хвосты MVP закрыты.
-
----
-
-## Следующий блок
-
-**12.8 — NexusDownloader.** Подробное описание — в `HANDOFF.md`,
-раздел «План работы».
-
----
-
-## Технический долг
-
-- Persist кеша хешей в SQLite (v0.2.0).
-- Глобальный реестр `archives.db` — v0.2.0.
-- Nexus API — **12.8**.
-- Прогресс-бар Spectre — v0.2.0.
-- `Firelink.Platform.Nexus` пуст — до 12.8.
-- `SyncModsStep` поддерживает только `FromArchive`.
-- `ConfigureMo2Step` — не делаем.
-- E1 (прогон на большом инстансе) — отменён по решению.
-
----
-
-## Окружение
-
-- Windows 10/11.
-- .NET 8 SDK (SDK 10 тоже).
-- Visual Studio 2022.
-- `C:\Firelink\TestInstance\` — MVP прогон (до 12.13.x).
-- `C:\Firelink\TestInstance2\` — после 12.13.6, extensions/extras,
-  verify 0 failed.
-- `C:\Firelink\OmenRim 7\` — тестовый оригинал.
-- Большой инстанс — 4370 модов (не используется).
-
-````
-
-## repo-dump-extra.md
-
-````markdown
-# Firelink -- repo dump
-
-**Generated:** 22.09.2026  0:26:29,26
+**Generated:** 24.09.2026  0:31:15,81
 **Root:** C:\Code\Firelink
 
 ---
@@ -3466,3832 +290,6 @@ firelink-*.log
   },
   "archiveSources": []
 }
-````
-
-## src/Firelink.Core/Assets/7z/License.txt
-
-````text
-  7-Zip
-  ~~~~~
-  License for use and distribution
-  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-  7-Zip Copyright (C) 1999-2026 Igor Pavlov.
-
-  The licenses for files are:
-
-    - 7z.dll:
-         - The "GNU LGPL" as main license for most of the code
-         - The "GNU LGPL" with "unRAR license restriction" for some code
-         - The "BSD 3-clause License" for some code
-         - The "BSD 2-clause License" for some code
-    - All other files: the "GNU LGPL".
-
-  Redistributions in binary form must reproduce related license information from this file.
-
-  Note:
-    You can use 7-Zip on any computer, including a computer in a commercial
-    organization. You don't need to register or pay for 7-Zip.
-
-
-GNU LGPL information
---------------------
-
-    This library is free software; you can redistribute it and/or
-    modify it under the terms of the GNU Lesser General Public
-    License as published by the Free Software Foundation; either
-    version 2.1 of the License, or (at your option) any later version.
-
-    This library is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-    Lesser General Public License for more details.
-
-    You can receive a copy of the GNU Lesser General Public License from
-    http://www.gnu.org/
-
-
-
-
-BSD 3-clause License in 7-Zip code
-----------------------------------
-
-  The "BSD 3-clause License" is used for the following code in 7z.dll
-    1) LZFSE data decompression.
-       That code was derived from the code in the "LZFSE compression library" developed by Apple Inc,
-       that also uses the "BSD 3-clause License".
-    2) ZSTD data decompression.
-       that code was developed using original zstd decoder code as reference code.
-       The original zstd decoder code was developed by Facebook Inc,
-       that also uses the "BSD 3-clause License".
-
-  Copyright (c) 2015-2016, Apple Inc. All rights reserved.
-  Copyright (c) Facebook, Inc. All rights reserved.
-  Copyright (c) 2023-2026 Igor Pavlov.
-
-Text of the "BSD 3-clause License"
-----------------------------------
-
-Redistribution and use in source and binary forms, with or without modification,
-are permitted provided that the following conditions are met:
-
-1. Redistributions of source code must retain the above copyright notice, this
-   list of conditions and the following disclaimer.
-
-2. Redistributions in binary form must reproduce the above copyright notice,
-   this list of conditions and the following disclaimer in the documentation
-   and/or other materials provided with the distribution.
-
-3. Neither the name of the copyright holder nor the names of its contributors may
-   be used to endorse or promote products derived from this software without
-   specific prior written permission.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
-ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
-ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
----
-
-
-
-
-BSD 2-clause License in 7-Zip code
-----------------------------------
-
-  The "BSD 2-clause License" is used for the XXH64 code in 7-Zip.
-
-  XXH64 code in 7-Zip was derived from the original XXH64 code developed by Yann Collet.
-
-  Copyright (c) 2012-2021 Yann Collet.
-  Copyright (c) 2023-2026 Igor Pavlov.
-
-Text of the "BSD 2-clause License"
-----------------------------------
-
-Redistribution and use in source and binary forms, with or without modification,
-are permitted provided that the following conditions are met:
-
-1. Redistributions of source code must retain the above copyright notice, this
-   list of conditions and the following disclaimer.
-
-2. Redistributions in binary form must reproduce the above copyright notice,
-   this list of conditions and the following disclaimer in the documentation
-   and/or other materials provided with the distribution.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
-ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
-ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
----
-
-
-
-
-unRAR license restriction
--------------------------
-
-The decompression engine for RAR archives was developed using source
-code of unRAR program.
-All copyrights to original unRAR code are owned by Alexander Roshal.
-
-The license for original unRAR code has the following restriction:
-
-  The unRAR sources cannot be used to re-create the RAR compression algorithm,
-  which is proprietary. Distribution of modified unRAR sources in separate form
-  or as a part of other software is permitted, provided that it is clearly
-  stated in the documentation and source comments that the code may
-  not be used to develop a RAR (WinRAR) compatible archiver.
-
---
-
-````
-
-
-````
-
-## repo-dump.md
-
-````markdown
-# Firelink -- repo dump
-
-**Generated:** 22.09.2026  0:47:55,19
-**Root:** C:\Code\Firelink
-
----
-
-## Directory.Build.props
-
-````xml
-﻿<Project>
-  <PropertyGroup>
-    <LangVersion>12.0</LangVersion>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
-    <GenerateDocumentationFile>false</GenerateDocumentationFile>
-    <InvariantGlobalization>true</InvariantGlobalization>
-  </PropertyGroup>
-</Project>
-````
-
-## Directory.Build.targets
-
-````xml
-<Project>
-
-  <!--
-    Копировать Assets/7z/* (7z.exe, 7z.dll, License.txt) в output
-    каждого проекта, который ссылается на Firelink.Core.
-
-    Причина: <Content> в Firelink.Core.csproj не копируется транзитивно
-    через ProjectReference. Приходится делать это глобально.
-  -->
-  <ItemGroup Condition="Exists('$(MSBuildThisFileDirectory)src\Firelink.Core\Assets\7z\7z.exe')">
-    <Content Include="$(MSBuildThisFileDirectory)src\Firelink.Core\Assets\7z\**\*">
-      <Link>Assets\7z\%(RecursiveDir)%(Filename)%(Extension)</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Visible>false</Visible>
-    </Content>
-  </ItemGroup>
-
-</Project>
-````
-
-## Directory.Packages.props
-
-````xml
-﻿<Project>
-  <PropertyGroup>
-    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
-  </PropertyGroup>
-  <ItemGroup>
-    <PackageVersion Include="Spectre.Console.Cli" Version="0.48.0" />
-    <PackageVersion Include="System.Text.Json" Version="8.0.5" />
-    <PackageVersion Include="System.IO.Hashing" Version="8.0.0" />
-    <PackageVersion Include="Microsoft.Data.Sqlite" Version="8.0.10" />
-    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" />
-    <PackageVersion Include="Microsoft.Extensions.Logging" Version="8.0.1" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="8.0.1" />
-    <PackageVersion Include="Microsoft.Extensions.Http" Version="8.0.1" />
-    <PackageVersion Include="Polly" Version="8.4.2" />
-    <PackageVersion Include="Octokit" Version="13.0.1" />
-    <PackageVersion Include="coverlet.collector" Version="6.0.2" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
-    <PackageVersion Include="xunit" Version="2.9.2" />
-    <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
-    <PackageVersion Include="FluentAssertions" Version="6.12.1" />
-  </ItemGroup>
-</Project>
-````
-
-## DOC.md
-
-````markdown
-# Firelink — Документация проекта
-
-**Версия документа:** 4.2
-**Обновлено:** 2026-09-21
-
-## Оглавление
-
-1. [Обзор](#обзор)
-2. [Основные принципы](#основные-принципы)
-3. [Глоссарий](#глоссарий)
-4. [Архитектура](#архитектура)
-5. [Структура папок](#структура-папок)
-6. [Форматы данных](#форматы-данных)
-    - 6.1. [firelink-pack.json](#firelink-packjson)
-    - 6.2. [modlist.json](#modlistjson)
-    - 6.3. [Директивы](#директивы)
-    - 6.4. [Источники архивов](#источники-архивов)
-    - 6.5. [Формат .meta](#формат-meta)
-    - 6.6. [Формат meta.ini мода](#формат-meta-ini-мода)
-    - 6.7. [__Firelink_Output](#__firelink_output)
-7. [Идентификация архивов](#идентификация-архивов)
-8. [Nexus game domain](#nexus-game-domain)
-9. [Формат modlist.txt / plugins.txt / loadorder.txt](#формат-файлов-mo2)
-10. [Пайплайн: создание сборки](#пайплайн-создание-сборки)
-11. [Пайплайн: установка сборки](#пайплайн-установка-сборки)
-12. [Пайплайн: обновление сборки](#пайплайн-обновление-сборки)
-13. [Работа с Nexus Mods](#работа-с-nexus-mods)
-14. [Глобальный реестр архивов](#глобальный-реестр-архивов)
-15. [CLI команды](#cli-команды)
-16. [Обработка ошибок](#обработка-ошибок)
-17. [Технологический стек](#технологический-стек)
-18. [Дорожная карта](#дорожная-карта)
-19. [Статус реализации](#статус-реализации)
-
----
-
-## Обзор
-
-**Firelink** — инструмент для создания и установки воспроизводимых
-сборок модов для Mod Organizer 2. Состоит из двух CLI-приложений:
-
-- **`Firelink.Pack`** — для автора сборки. Создаёт манифест
-  (`modlist.json`) на основе готового инстанса MO2.
-- **`Firelink.Install`** — для пользователя. Воспроизводит сборку по манифесту.
-
-**Ключевая идея:** манифест — единственный источник правды. Все файлы
-восстанавливаются по хешам (`xxHash64`). Firelink работает с **результатом**
-установки, а не с процессом. Как именно автор ставил моды — нас не интересует.
-
-**Философия packer-а:** снапшот инстанса. Автор готовит инстанс MO2
-любым способом. Packer индексирует, что получилось. Всё, что не
-восстановимо из архивов, честно складывается в `__Firelink_Output` —
-автор сам решает, делать ли из этого патч.
-
-**Философия installer-а:** тупой исполнитель директив. Не проверяет
-игру, версии, совместимость. Просто воссоздаёт структуру, которую
-сделал автор.
-
-**Целевая платформа:** Windows 10 1809+ / Windows 11.
-
-**Целевая версия MO2:** 2.5.2.
-
----
-
-## Основные принципы
-
-1. **Манифест — единственный источник правды.** Профиль MO2 генерируется
-   из манифеста, а не копируется.
-2. **Файлы восстанавливаются по хешам.** `xxHash64`, не по именам и путям.
-3. **Firelink работает с результатом, а не с процессом.** Никаких
-   FOMOD-парсеров, XML, `meta.ini` (читается только для метаданных).
-4. **Одна папка `downloads/` для всех архивов.** Моды, MO2, extras —
-   всё в одном месте.
-5. **Идентификация архивов — канонический id.** Не по имени файла:
-   `nexus_{game}_{modId}_{fileId}` для Nexus-модов, `local_{slug}` —
-   для архивов без `.meta`.
-6. **Глобальный реестр архивов.** SQLite в `%USERPROFILE%\.firelink\archives.db`
-   (v0.2.0). Переиспользование между сборками.
-7. **Ничего не удаляем.** Ни архивы, ни моды, кроме случаев, описанных
-   в reconcile.
-8. **Директивы выполняются последовательно.** `lastWins` при конфликтах.
-9. **`[NoDelete]` в имени папки** (`MO2/mods/[NoDelete]SkyUI`) защищает
-   пользовательские моды.
-10. **BSA/BA2 — единые файлы.** Не разбираем содержимое (принципиальное
-    отличие от Wabbajack; см. §Идентификация архивов).
-11. **Никаких исполняемых скриптов.** Только декларативные директивы.
-12. **Installer идемпотентен.** Можно запускать повторно.
-13. **Installer не работает с игрой.** Не ищет, не копирует, не проверяет.
-    `Stock Game/` — просто папка для extras.
-14. **Шаги pipeline изолированы.** Не вызывают друг друга. Pipeline —
-    единственный оркестратор.
-15. **Nexus — один источник, несколько стратегий доступа.** Не дублируем
-    в манифесте.
-16. **Параллелизм на уровне pipeline.** `Parallel.ForEach` в шагах.
-17. **Кеш хешей обязателен.** `FileHashCache` (in-memory; persist — v0.2.0).
-18. **Манифест самодостаточен.** Installer не ходит на Nexus за метаданными.
-19. **Unmatched → `__Firelink_Output`.** Не `InlineFile`, не base64.
-    Автор сам решает.
-20. **`.mohidden` — часть пути.** Файл `meshes.mohidden/foo.nif` — это
-    файл с относительным путём `meshes.mohidden/foo.nif`, не «mod с
-    суффиксом».
-21. **Инстансы в `<exeDir>/Instances/`.** Имя = `meta.name` (нормализованное).
-22. **Сепараторы (`#...`) — часть сборки.** Packer сохраняет, installer
-    пропускает, `RegenerateProfileStep` пишет.
-23. **Один extract архивов на pack pipeline.** `ArchiveMatcher.Build`
-    вызывается один раз (12.13.6).
-24. **Отмена — не ошибка.** `Ctrl+C` нормализуется в `Cancelled.` + exit 130.
-    `AggregateException`, все inner которого — отмены, трактуется как
-    отмена (`CancellationHelper.IsCancellation`).
-25. **Пути с пробелами — в кавычках.** CLI даёт hint, если `argv` разбит
-    пробелами и парсинг не удался.
-
----
-
-## Глоссарий
-
-| Термин | Определение |
-|---|---|
-| **Манифест** | `modlist.json` — единственный источник правды. |
-| **Инстанс** | Рабочая папка MO2 с подпапками `MO2/`, `Stock Game/`, `__Firelink_Output/` (у автора) или `modlist.json` (у пользователя). |
-| **Канонический id** | Идентификатор архива: `nexus_{game}_{modId}_{fileId}` или `local_{slug}`. |
-| **Директива** | Декларативное действие: `FromArchive`, `CreateDirectory`, `Delete`. |
-| **`FromArchive`** | Директива: взять файл из архива по hash, положить по destination. |
-| **Сепаратор** | Строка `#...` в `modlist.txt` — визуальный разделитель. Часть сборки. |
-| **`[NoDelete]`** | Маркер в имени мода: installer не трогает такие папки. |
-| **Unmatched** | Файл мода/extension/extra, не найденный в архивах. Кладётся в `__Firelink_Output`. |
-| **Extensions** | Файлы в корне `MO2/`, кроме модов: `plugins/*.dll`, `tools/*`. Задаются в `mo2.extensions[]`. |
-| **Extras** | Файлы в корне `Stock Game/`: `skse64_loader.exe`, `enbseries/`. Задаются в `stockGame.extras[]`. |
-| **`.mohidden`** | Часть пути, а не отдельный «скрытый» файл. `meshes.mohidden/foo.nif` — обычный файл. |
-| **`__Firelink_Output`** | Каталог автора. Складывается всё, что не восстановимо из архивов. |
-| **BSA/BA2** | Единые файлы. Firelink не разбирает содержимое. |
-| **Mirror** | Источник архива: прямая URL-ссылка + hash. |
-| **Nexus** | Источник архива: `modId` + `fileId` + `game`. API — блок 9. |
-| **`ArchiveMatcher`** | Распаковывает все архивы один раз, строит hash-индексы, матчит файлы. |
-| **`manifest.archives[]`** | Все mod-архивы. MO2-архив — отдельно в `manifest.mo2.archive`. |
-| **`ArchiveDownloadHelper`** | Общий helper скачивания с retry, `.part`, hash-check. |
-
----
-
-## Архитектура
-
-### Проекты solution
-
-Firelink.slnx
-src/
-Firelink.Core — ядро: модели, JSON, хеширование, абстракции
-Firelink.Platform.MO2 — чтение/запись modlist, plugins, loadorder, meta.ini
-Firelink.Platform.Nexus — Nexus API (пусто до Фазы 6)
-Firelink.Pack — class library: pipeline packer
-Firelink.Install — class library: pipeline installer
-Firelink.Cli — CLI (exe → Firelink.Cli.exe): единая точка входа
-tests/
-Firelink.Core.Tests
-Firelink.Platform.MO2.Tests
-Firelink.Pack.Tests
-Firelink.Install.Tests
-Firelink.Integration.Tests
-
-### Принципы архитектуры
-
-**Pipeline — единственный оркестратор.** Только pipeline знает порядок
-шагов. Шаги не знают друг о друге.
-
-**Шаги изолированы.** Каждый шаг — это `IStep<TInput, TOutput>`.
-Получает вход, возвращает выход. Не вызывает другие шаги.
-
-**Зависимости через DI.** Никаких `ServiceLocator`, никаких `static` классов.
-
-**Ошибки на уровне pipeline.** Шаг либо успешен, либо бросает исключение.
-Pipeline решает, что делать.
-
-### Интерфейсы
-
-```csharp
-public interface IStep<in TInput, TOutput>
-{
-    Task<TOutput> ExecuteAsync(TInput input, CancellationToken ct);
-}
-
-public interface IArchiveDownloader
-{
-    string SourceType { get; }
-    Task<Stream> DownloadAsync(ArchiveSourceRef source, CancellationToken ct);
-}
-
-public interface IArchiveExtractor
-{
-    bool CanExtract(string archivePath);
-    Task<IReadOnlyList<string>> ExtractAsync(
-        string archivePath, string destinationDirectory, CancellationToken ct);
-}
-```
-
-## Границы ответственности
-
-Firelink.Core: модели, JSON, хеширование, валидаторы, Slug,
-ArchiveId, абстракции, SevenZipExtractor, TempWorkspace,
-FileHashCache, ArchiveDownloadHelper, CancellationHelper,
-StepProgress.
-
-Firelink.Platform.MO2: чтение/запись MO2-файлов, MetaReader,
-MetaIniReader, MetaIniWriter, ModlistWriter, PluginsWriter,
-LoadorderWriter.
-
-Firelink.Platform.Nexus: пока пусто (блок 9 — NexusClient,
-NexusApiKeyProvider, NexusDownloader).
-
-Firelink.Pack: class library. PackPipeline + 13 шагов;
-Firelink.Pack.Matching (ArchiveMatcher, ArchiveIndexes,
-Mo2ArchiveBuilder) — построение индексов архивов и матчинг файлов
-по хешу. Один экземпляр ArchiveMatcher на весь pipeline. Используется
-шагами MatchStep, MatchExtensionsStep, MatchExtrasStep.
-PackInputFactory — сборка PackPipeline.Input.
-PackSummary + PackSummaryBuilder — плоская сводка результата.
-DI-extension: `AddFirelinkPack`.
-
-Firelink.Install: class library. InstallPipeline + 11 шагов;
-MirrorDownloader, DownloaderRegistry; VerifyPipeline.
-InstallInputFactory — сборка InstallPipeline.Input.
-InstallSummary + InstallSummaryBuilder — плоская сводка результата.
-DI-extension: `AddFirelinkInstall`.
-
-Firelink.Cli: exe. Единая точка входа: `Program.cs`,
-`Commands/` (PackCommand, InstallCommand, VerifyCommand,
-HashCommand, DoctorCommand), `Settings/`,
-`Infrastructure/TypeRegistrar`. Использует `AddFirelinkPack` и
-`AddFirelinkInstall`.
-
-## Общие API для клиентов (CLI + GUI)
-
-Библиотеки `Firelink.Pack` и `Firelink.Install` предоставляют
-унифицированный публичный API. CLI использует его сейчас, GUI
-будет использовать в Фазе 3. Логика не дублируется.
-
-### Фабрики Input
-
-```csharp
-// Packer:
-var input = PackInputFactory.Create(
-    configPath,
-    parallelOptions: opts);   // opts = null → Environment.ProcessorCount
-
-// Installer:
-var input = InstallInputFactory.Create(
-    manifestPath,
-    target: target,           // null → auto-resolve в <exeDir>/Instances/
-    parallelOptions: opts);
-```
-
-Фабрики — единственная точка, где:
-
-Path.GetFullPath нормализует user-facing пути;
-
-ParallelOptions получает дефолт при null.
-
-Прогресс
-csharp
-var progress = new Progress<StepProgress>(p =>
-    logger.LogInformation("Step {Index}/{Total}: {Name}",
-        p.StepIndex, p.TotalSteps, p.StepName));
-
-await pipeline.ExecuteAsync(input, ct, progress);
-StepProgress — record в Firelink.Core.Progress:
-(int StepIndex, int TotalSteps, string StepName). StepIndex — 1-based.
-Report вызывается перед шагом.
-
-Packer: 14 имён (включая WriteUnmatchedExtensionsExtras).
-
-Installer: 11 имён.
-
-StepName — стабильный контракт для GUI: имена не менять без причины.
-
-Сводки
-csharp
-// Packer:
-var summary = PackSummaryBuilder.Build(result);
-Console.WriteLine($"{summary.Name} v{summary.Version}: " +
-    $"{summary.DirectivesTotal} directives, " +
-    $"{summary.UnmatchedFiles} unmatched");
-
-// Installer:
-var summary = InstallSummaryBuilder.Build(output);
-Console.WriteLine($"{summary.ModsCreated} created, " +
-    $"{summary.ModsSkipped} skipped");
-Summary — плоский sealed record только из примитивов.
-Никаких ссылок на PackResult / InstallPipeline.Output /
-Manifest. GUI может получить Summary и не тащить за собой
-весь pipeline-контекст.
-
-Полные списки (Created, Recreated, Skipped, Deleted) — не в
-Summary. Кому нужно — берёт из Pipeline.Output напрямую.
-
-Порядок использования
-Собрать Input через фабрику.
-
-Вызвать pipeline.ExecuteAsync(input, ct, progress), где
-progress опционален.
-
-Построить Summary из результата.
-
-Отобразить Summary (CLI — таблица, GUI — ViewModel).
-
-Никаких Path.GetFullPath в клиентах. Никакой логики подсчёта
-директив в клиентах. Всё — в библиотеке.
-
-## Структура папок
-
-### Рабочая папка автора
-
-C:\Mods\Dev\
-  firelink-pack.json              ← конфиг packer-а
-  NordicUI Overhaul\              ← инстанс MO2
-    MO2\
-      ModOrganizer.exe
-      portable.txt
-      plugins\                    ← extensions (fomod_plus_installer.dll)
-      tools\                      ← extensions (BethINI)
-      downloads\                  ← архивы (моды + MO2 + extras)
-      mods\
-        SkyUI\
-          meta.ini
-        [NoDelete]UserMod\        ← пользовательский мод
-      profiles\NordicUI\          ← modlist.txt, plugins.txt, loadorder.txt
-    Stock Game\                   ← extras (SKSE, ENB)
-    __Firelink_Output\
-      modlist.json                ← манифест (WriteManifestStep)
-      MO2\
-        mods\<ModName>\<path>     ← unmatched модов
-        <path>                    ← unmatched extensions
-      Stock Game\
-        <path>                    ← unmatched extras
-
-### Рабочая папка пользователя (после установки)
-
-D:\Games\Firelink\
-  Firelink.Cli.exe
-  Firelink.Core.dll
-  Firelink.Pack.dll
-  Firelink.Install.dll
-  Firelink.Platform.MO2.dll
-  ...
-  Assets\7z\ (7z.exe, 7z.dll)
-  Instances\
-    Nordic UI Overhaul\           ← имя из meta.name
-      modlist.json                ← копия манифеста (ResolveTargetStep)
-      MO2\
-        ModOrganizer.exe
-        portable.txt
-        plugins\
-        tools\
-        downloads\
-          Mod.Organizer-2.5.2.7z
-          SkyUI.7z
-        mods\
-          SkyUI\
-            meta.ini
-          [NoDelete]UserMod\      ← пользовательский мод, installer не трогает
-        profiles\Default\
-          modlist.txt / plugins.txt / loadorder.txt
-      Stock Game\
-        skse64_loader.exe
-        enbseries\
-
-### Глобальные данные
-
-%USERPROFILE%\.firelink\
-  archives.db                     ← реестр + конфиг (v0.2.0)
-  nexus.key                       ← API-ключ (блок 9, plaintext; v0.2.0 — DPAPI)
-
-## Форматы данных
-
-### firelink-pack.json
-
-Конфиг автора сборки. Лежит рядом с инстансом MO2.
-
-```json
-{
-  "meta": {
-    "name": "OmenRim 7",
-    "version": "0.1.0",
-    "author": "YourName",
-    "game": "skyrimspecialedition",
-    "gameVersion": "1.6.1170"
-  },
-  "instance": {
-    "path": "."
-  },
-  "mo2": {
-    "version": "2.5.2",
-    "profile": "Default",
-    "archive": "Mod.Organizer-2.5.2.7z",
-    "source": {
-      "type": "mirror",
-      "url": "https://github.com/ModOrganizer2/modorganizer/releases/download/v2.5.2/Mod.Organizer-2.5.2.7z",
-      "hash": "xxh64:E574E05EB6C470AD"
-    },
-    "extensions": [
-      "plugins/curationclub"
-    ]
-  },
-  "stockGame": {
-    "extras": [
-      "skse64_loader.exe",
-      "skse64_1_7_104.dll"
-    ]
-  },
-  "archiveSources": [
-    {
-      "archive": "Effect 11-415-1.0.0-2026.08.24-[mod.pub].zip",
-      "sources": [
-        {
-          "type": "mirror",
-          "url": "https://mod.pub/skyrim-se/415/files/Effect-11-415-1.0.0-2026.08.24-[mod.pub].zip",
-          "hash": "xxh64:B48AA9BEA422799E"
-        }
-      ]
-    }
-  ]
-}
-```
-
-Поле	Описание
-meta.name	Имя сборки. Используется как имя папки инстанса. Проходит NameValidator.
-meta.version	Версия сборки. Semver 2.0.0. Проходит SemverValidator.
-meta.author	Автор.
-meta.game	Nexus game domain (skyrimspecialedition, fallout4, ...).
-meta.gameVersion	Целевая версия игры (информационное).
-instance.path	Относительный путь к корню инстанса от папки с конфигом. Проходит InstancePathValidator.
-mo2.version	Версия MO2.
-mo2.profile	Имя профиля MO2 в profiles/. Проходит NameValidator. Обязательно.
-mo2.archive	Имя архива MO2 в downloads/ (только имя, не путь).
-mo2.source	Источник MO2-архива. Обязательно MirrorSourceRef (с hash).
-mo2.extensions	Относительные пути от MO2/ (файлы или папки).
-stockGame.extras	Относительные пути от Stock Game/.
-archiveSources	Источники для архивов без .meta. Уникальные имена.
-
-**Валидация**: PackConfigValidator. Проверки:
-
-meta.name — NameValidator (запрещённые символы, reserved names).
-
-meta.version — SemverValidator.
-
-meta.author, meta.game — непустые.
-
-instance.path — InstancePathValidator (относительный, без ..).
-
-mo2.profile — NameValidator.
-
-mo2.archive — не путь.
-
-mo2.source — MirrorSourceRef.
-
-mo2.extensions[], stockGame.extras[] — RelativePathValidator.
-
-archiveSources[].archive — не путь, уникально.
-
-archiveSources[].sources — непустой.
-
-### modlist.json
-
-Манифест. Единственный источник правды для installer-а.
-
-```json
-{
-  "schemaVersion": "1.0.0",
-  "manifestVersion": "0.1.0",
-  "createdAt": "2026-09-20T21:41:13.000Z",
-  "createdBy": "firelink-pack/0.1.0",
-
-  "meta": {
-    "name": "OmenRim 7",
-    "version": "0.1.0",
-    "author": "YourName",
-    "game": "skyrimspecialedition",
-    "gameVersion": "1.6.1170"
-  },
-
-  "execution": {
-    "directives": "sequential",
-    "onConflict": "lastWins"
-  },
-
-  "mo2": {
-    "version": "2.5.2",
-    "profile": "Default",
-    "archive": {
-      "id": "local_mod-organizer-2-5-2",
-      "name": "Mod.Organizer-2.5.2.7z",
-      "size": 0,
-      "hash": "xxh64:e574e05eb6c470ad",
-      "sources": [
-        {
-          "type": "mirror",
-          "url": "https://github.com/ModOrganizer2/modorganizer/releases/download/v2.5.2/Mod.Organizer-2.5.2.7z",
-          "hash": "xxh64:e574e05eb6c470ad"
-        }
-      ]
-    },
-    "extensions": [
-      {
-        "name": "plugins/curationclub",
-        "directives": [
-          {
-            "type": "FromArchive",
-            "archive": "nexus_skyrimspecialedition_60552_123456",
-            "source": "curationclub.dll",
-            "destination": "plugins/curationclub/curationclub.dll",
-            "hash": "xxh64:...",
-            "size": 12345
-          }
-        ]
-      }
-    ]
-  },
-
-  "stockGame": {
-    "extras": [
-      {
-        "name": "skse64_loader.exe",
-        "directives": [
-          {
-            "type": "FromArchive",
-            "archive": "nexus_skyrimspecialedition_30379_456789",
-            "source": "skse64_loader.exe",
-            "destination": "skse64_loader.exe",
-            "hash": "xxh64:...",
-            "size": 67890
-          }
-        ]
-      }
-    ]
-  },
-
-  "archives": [
-    {
-      "id": "nexus_skyrimspecialedition_3863_1000172397",
-      "name": "SkyUI_5_1-3863-5-1.7z",
-      "size": 12345678,
-      "hash": "xxh64:...",
-      "sources": [
-        {
-          "type": "nexus",
-          "modId": 3863,
-          "fileId": 1000172397,
-          "game": "skyrimspecialedition"
-        }
-      ]
-    }
-  ],
-
-  "mods": [
-    {
-      "name": "SkyUI",
-      "enabled": true,
-      "order": 5,
-      "meta": {
-        "gameName": "Skyrim Special Edition",
-        "gameID": "skyrimspecialedition",
-        "modID": 3863,
-        "fileID": 1000172397,
-        "version": "5.1",
-        "repository": "Nexus",
-        "url": "https://www.nexusmods.com/skyrimspecialedition/mods/3863",
-        "comments": "",
-        "notes": ""
-      },
-      "directives": [
-        {
-          "type": "FromArchive",
-          "archive": "nexus_skyrimspecialedition_3863_1000172397",
-          "source": "interface/iconmenu.swf",
-          "destination": "interface/iconmenu.swf",
-          "hash": "xxh64:...",
-          "size": 4567
-        }
-      ]
-    }
-  ],
-
-  "plugins": [
-    { "name": "SkyUI.esp", "enabled": true, "order": 1 }
-  ],
-
-  "loadorder": [
-    "Skyrim.esm",
-    "Update.esm",
-    "SkyUI.esp"
-  ]
-}
-```
-
-Секция	Описание
-schemaVersion	Версия формата. ManifestSchema.IsSupported.
-manifestVersion	Версия сборки (= meta.version).
-createdAt	yyyy-MM-ddTHH:mm:ss.fffZ.
-createdBy	firelink-pack/0.1.0.
-meta	Метаданные сборки.
-execution	directives: "sequential", onConflict: "lastWins".
-mo2	Версия MO2, профиль, MO2-архив, extensions.
-stockGame	extras.
-archives	Все mod-архивы. MO2-архив сюда НЕ попадает.
-mods	Моды с директивами и ModMeta.
-plugins	Плагины с флагами.
-loadorder	Порядок загрузки.
-ModMeta (поле mods[].meta):
-
-Все поля опциональны.
-
-ModMeta.Empty — валидное состояние (meta.ini есть, [General] пустой).
-
-Поля: GameName, GameId, ModId, FileId, Version, Repository,
-Url, Comments, Notes. Без Category.
-
-### Директивы
-
-Полиморфизм: type — дискриминатор.
-
-FromArchive — взять файл из архива по hash:
-
-```json
-{
-  "type": "FromArchive",
-  "archive": "nexus_skyrimspecialedition_3863_1000172397",
-  "source": "interface/iconmenu.swf",
-  "destination": "interface/iconmenu.swf",
-  "hash": "xxh64:...",
-  "size": 4567
-}
-```
-
-archive — id из manifest.archives[] или manifest.mo2.archive.id.
-
-source — путь внутри архива.
-
-destination — путь относительно корня мода / MO2 / Stock Game.
-
-hash, size — проверка после распаковки.
-
-CreateDirectory — создать папку:
-
-```json
-{
-  "type": "CreateDirectory",
-  "destination": "meshes/empty/"
-}
-```
-
-Delete — удалить файл (не используется packer-ом, но модель есть):
-
-json
-{
-  "type": "Delete",
-  "destination": "interface/unwanted.swf"
-}
-InlineFile — модель удалена (решение №40). Packer не создаёт
-inline-файлов; всё, что не сматчилось, идёт в __Firelink_Output.
-
-### Источники архивов
-
-mirror — прямая URL-ссылка + hash:
-
-```json
-{
-  "type": "mirror",
-  "url": "https://cdn.example.com/skyui.7z",
-  "hash": "xxh64:..."
-}
-```
-
-url — HTTPS-ссылка.
-
-hash — обязателен.
-
-nexus — Nexus API:
-
-```json
-{
-  "type": "nexus",
-  "modId": 3863,
-  "fileId": 1000172397,
-  "game": "skyrimspecialedition"
-}
-```
-
-modId, fileId — положительные.
-
-game — Nexus game domain.
-
-GitHub source — удалён (cleanup, 12.10.1). Всё через mirror.
-
-### Формат .meta
-
-Файл рядом с архивом в downloads/: SkyUI.7z.meta.
-
-```
-[General]
-gameName=Skyrim
-modID=3863
-fileID=1000172397
-```
-
-Правила:
-
-Ключи modID / fileID — case-sensitive (заглавные ID).
-Так пишет Wabbajack и MO2.
-
-gameName — опционально (используется только в логе).
-
-Секция [General] — case-insensitive.
-
-.meta без modID/fileID (или с lowercase modid) →
-MetaReader.TryRead вернёт null → fallback на archiveSources[].
-
-.meta не считается архивом (ArchiveExtensions.IsArchive возвращает
-false для .meta).
-
-### Формат meta.ini мода
-
-Файл mods/<Name>/meta.ini. Создаётся MO2.
-
-```
-[General]
-gameName=Skyrim Special Edition
-gameID=skyrimspecialedition
-modID=32349
-fileID=795423
-version=1.7.0
-repository=Nexus
-url=https://www.nexusmods.com/skyrimspecialedition/mods/32349
-comments=
-notes=
-```
-
-Чтение (MetaIniReader):
-
-Секция [General]. Ключи case-insensitive (modID, modid,
-ModId — эквивалентны).
-
-[installedFiles] игнорируется.
-
-category, newestVersion, nexusFileStatus, timestamps — игнорируются.
-
-Если [General] пуста → ModMeta.Empty.
-
-Запись (MetaIniWriter):
-
-[General], camelCase (modID, fileID, gameID).
-
-UTF-8 без BOM, CRLF.
-
-Не пишет [installedFiles], category, newestVersion.
-
-Null-поля не пишутся. Пустые строки (comments="") — пишутся как key=.
-
-Порядок полей: gameName, gameID, modID, fileID, version,
-repository, url, comments, notes.
-
-### __Firelink_Output
-
-Каталог автора сборки. Создаётся packer-ом в корне инстанса. Не
-пересекается с MO2/ и не сканируется ScanModsStep.
-
-Назначение: сохранить всё, что не удалось восстановить из архивов,
-чтобы автор увидел свои ручные правки и решил, делать ли из них патч.
-
-Структура:
-
-```
-__Firelink_Output/
-  modlist.json                    ← манифест (WriteManifestStep)
-  MO2/
-    mods/
-      <ModName>/<path>            ← unmatched модов (MatchStep)
-    <path>                        ← unmatched extensions (плоско)
-  Stock Game/
-    <path>                        ← unmatched extras (плоско)
-```
-
-Три категории unmatched:
-
-Моды (MatchStep) — MO2/mods/<ModName>/<path>. Сохраняется имя
-мода, потому что для модов это осмысленный идентификатор. meta.ini
-в корне мода сюда не попадает — он уходит в mods[].meta манифеста.
-
-Extensions (MatchExtensionsStep) — MO2/<path>. Плоско,
-полный путь от корня MO2/. Пример: mo2.extensions = ["tools/BethINI"],
-внутри папки файл readme.txt →
-__Firelink_Output/MO2/tools/BethINI/readme.txt.
-
-Extras (MatchExtrasStep) — Stock Game/<path>. Плоско,
-полный путь от корня Stock Game/. Пример: stockGame.extras = ["enbseries"],
-внутри папки файл enbseries.ini →
-__Firelink_Output/Stock Game/enbseries/enbseries.ini.
-
-Почему плоско для extensions/extras: пути в __Firelink_Output
-совпадают с реальными путями в инстансе. Автор может сравнить «что
-лежит в инстансе» и «что не восстановилось», не переключаясь между
-двумя структурами папок.
-
-Поле EntryName (в UnmatchedEntry) используется для логов и
-диагностики, но на путь файла в __Firelink_Output не влияет.
-Путь строится только из RelativePath + корень (MO2/ или Stock Game/).
-
-#### Чистка:
-
-MatchStep перед своим прогоном удаляет __Firelink_Output/MO2/mods/
-целиком.
-
-PackPipeline перед write unmatched extensions удаляет содержимое
-__Firelink_Output/MO2/, кроме mods/.
-
-PackPipeline перед write unmatched extras удаляет содержимое
-__Firelink_Output/Stock Game/ целиком.
-
-modlist.json перезаписывается WriteManifestStep с предупреждением,
-если файл уже был.
-
-#### Создание папок:
-
-__Firelink_Output/MO2/mods/ — создаётся всегда
-(MatchStep.PrepareFirelinkOutput).
-
-__Firelink_Output/MO2/ (без mods/) — создаётся только если
-unmatched extensions непусты.
-
-__Firelink_Output/Stock Game/ — создаётся только если unmatched
-extras непусты.
-
-Т.е. если всё сматчилось — будут только modlist.json и MO2/mods/
-(возможно, с файлами unmatched модов).
-
-## Идентификация архивов
-
-Канонический id:
-
-nexus_{game_domain}_{modId}_{fileId} — для Nexus-архивов (есть .meta
-с modID/fileID).
-Пример: nexus_skyrimspecialedition_3863_1000172397.
-
-local_{slug} — для архивов без .meta.
-Slug от имени файла без расширения.
-Пример: SkyUI.7z → local_skyui, FomodTools.7z → local_fomodtools.
-
-Slug (Slug.From):
-
-ASCII-only, lowercase.
-
-Разделитель — дефис.
-
-Обрезка до 80 символов.
-
-.7z отрезается до slug-ификации (см. решение №116):
-Mod.Organizer-2.5.2.7z → mod-organizer-2-5-2.
-
-Дубликаты: IndexArchivesStep бросает InvalidOperationException
-при дубликате id (не имени файла).
-
-archives[] vs mo2.archive: MO2-архив никогда не попадает в
-manifest.archives[], даже если он есть в downloads/. Он живёт в
-manifest.mo2.archive.
-
-BSA/BA2. .bsa/.ba2 считаются архивами (ArchiveExtensions.IsArchive),
-но на практике они всегда упакованы внутри .7z/.zip, а не
-лежат в downloads/ отдельными файлами. Это означает:
-
-В downloads/ .bsa/.ba2 обычно не встречаются как отдельные
-файлы.
-
-Если .bsa лежит внутри .7z, ArchiveMatcher распаковывает
-.7z и находит .bsa как обычный файл. Матчинг файлов модов идёт
-по хешу целого .bsa.
-
-Если автор распаковал .bsa (ассеты отдельно) — ассеты уйдут
-в __Firelink_Output, автор сам решит, делать ли патч.
-
-Firelink не разбирает .bsa/.ba2 на содержимое — это
-принципиальное отличие от Wabbajack.
-
-## Nexus game domain
-
-meta.game — Nexus game domain, не человекочитаемое имя игры.
-
-Примеры: skyrimspecialedition, fallout4, starfield, skyrim.
-
-Не путать с gameName (Skyrim Special Edition) — это поле в
-meta.ini, не в firelink-pack.json.
-
-Используется в:
-
-ArchiveId.FromNexus(game, modId, fileId) — game domain попадает
-в id.
-
-NexusSourceRef.Game — при скачивании через Nexus API (блок 9).
-
-manifest.meta.game — для installer-а (сам installer значение
-не использует, но хранит для диагностики).
-
-При смене игры — meta.game меняется, id архивов становятся
-другими. Это сознательно: skyrimspecialedition_3863_1000172397 и
-fallout4_3863_1000172397 — разные архивы.
-
-## Формат файлов MO2
-
-modlist.txt (profiles/<Name>/modlist.txt):
-
-Строка: +Name (enabled) или -Name (disabled).
-
-Комментарии #... игнорируются (но сепараторы -# — данные, не
-комментарии: ModlistReader включает их в Entries с Enabled = false).
-
-UTF-8 с BOM, CRLF.
-
-Порядок строк сохраняется как есть.
-
-Заголовок # This file was automatically generated by Mod Organizer.
-пишется ModlistWriter.
-
-plugins.txt (profiles/<Name>/plugins.txt):
-
-Строка: *Name.esp (enabled) или Name.esp (disabled).
-
-Комментарии #... игнорируются.
-
-UTF-8 с BOM, CRLF.
-
-Заголовок пишется PluginsWriter.
-
-loadorder.txt (profiles/<Name>/loadorder.txt):
-
-Строка: имя плагина.
-
-Порядок = порядок загрузки.
-
-UTF-8 с BOM, CRLF.
-
-Заголовок пишется LoadorderWriter.
-
-Сепараторы — #... в modlist.txt. Packer сохраняет в манифесте;
-installer пропускает; RegenerateProfileStep пишет в modlist.txt.
-
-## Пайплайн: создание сборки
-
-### Этап 1.1. Подготовка окружения
-Автор:
-
-Ставит портативный MO2 2.5.2.
-
-Устанавливает моды через MO2 любым способом (FOMOD, вручную, через
-MO2 installer).
-
-Кладёт архивы модов в MO2/downloads/.
-
-Устанавливает плагины MO2 в MO2/plugins/, MO2/tools/.
-
-Устанавливает extras в Stock Game/.
-
-Настраивает профиль: порядок модов, плагинов, load order.
-
-Результат: рабочий инстанс MO2.
-
-### Этап 1.2. Конфиг и инстанс
-
-Автор кладёт `firelink-pack.json` рядом с инстансом MO2. `instance.path` в конфиге — относительный путь к корню инстанса.
-
-### Этап 1.3. Запуск packer-а
-firelink-pack pack firelink-pack.json
-
-text
-
-**Pipeline (12 шагов):**
-
-1. ReadConfigStep — читает и валидирует `firelink-pack.json`.
-2. ReadInstanceStep — читает `MO2/`, `profiles/<profile>/modlist.txt`, `plugins.txt`, `loadorder.txt`. Возвращает `InstanceSnapshot`.
-3. IndexArchivesStep — индексирует `MO2/downloads/`, для каждого архива определяет источник через `.meta` или `archiveSources[]`. Возвращает `ArchiveIndex`.
-4. ScanModsStep — сканирует все моды из `modlist.txt` (кроме `[NoDelete]`). Возвращает `ModScanResult` (`ModName → files`).
-5. ScanExtensionsStep — сканирует `config.Mo2.Extensions[]`. Каждый entry — относительный путь от корня `MO2/` (файл или папка). Возвращает `EntryScanResult` (`entryName → files`).
-6. ScanExtrasStep — симметричен `ScanExtensionsStep`, но читает `config.StockGame.Extras[]` и работает от корня `Stock Game/`. Возвращает `EntryScanResult`.
-7. MatchStep — сопоставляет файлы модов с архивами. Использует **общий** `ArchiveMatcher`. Unmatched модов выгружает в `__Firelink_Output/MO2/mods/<ModName>/<path>`. `meta.ini` мода уходит в `ModMetas`. Возвращает `MatchResult`.8. MatchExtensionsStep — сопоставляет файлы extensions с архивами. Принимает **общий** `ArchiveMatcher` через `Input`. Возвращает `MatchEntriesResult` (`Directives`, `Unmatched`). Unmatched **не пишет** — только возвращает.
-9. MatchExtrasStep — симметричен `MatchExtensionsStep`, но для extras.
-10. Write unmatched extensions/extras (private-хелпер `PackPipeline`) — пишет unmatched в `__Firelink_Output/MO2/<path>` и `__Firelink_Output/Stock Game/<path>` (плоско). Перед записью чистит соответствующие корни (`MO2/` — кроме `mods/`; `Stock Game/` — целиком).
-11. BuildManifestStep — собирает `ModlistManifest`. Заполняет `Mo2.Extensions[]` из `ExtensionsMatch.Directives` и `StockGame.Extras[]` из `ExtrasMatch.Directives`. Порядок entry — как в config.
-12. ValidateManifestStep — валидирует manifest: уникальность id/имён, ссылочная целостность директив, лимиты inline. WriteManifestStep — пишет `modlist.json` в `__Firelink_Output/`.
-
-**`ArchiveMatcher`:**
-
-- Один экземпляр создаётся в `PackPipeline.ExecuteAsync` перед `MatchExtensionsStep`, `BuildAsync(ct)` вызывается один раз (12.13.6, 12.11.7.1).
-- Передаётся в `MatchStep`, `MatchExtensionsStep` и `MatchExtrasStep` через `Input.Matcher` (`internal`).
-- `ArchiveMatcher` детерминирован: при дубликатах `(hash, path)` или `hash` между архивами побеждает минимальный `archiveId` (Ordinal).
-- Отмена: `BuildAsync` **пробрасывает** `OperationCanceledException` как есть, не «глотает» отмену. Прочие ошибки (битый архив, ошибка 7z) — skip с логированием.
-
-### Этап 1.4. Итог
-
-- `__Firelink_Output/modlist.json` — манифест.
-- `__Firelink_Output/MO2/mods/<ModName>/<path>` — unmatched модов.
-- `__Firelink_Output/MO2/<path>` — unmatched extensions.
-- `__Firelink_Output/Stock Game/<path>` — unmatched extras.
-
-### Этап 1.5. Публикация
-Автор публикует `modlist.json`. Зеркала для архивов (mirror) —
-опционально.
-
-## Пайплайн: установка сборки
-
-### Этап 2.1. Получение манифеста
-
-Пользователь кладёт `modlist.json` куда угодно.
-
-### Этап 2.2. Запуск installer-а
-
-```
-firelink-install install C:\Downloads\modlist.json
-```
-
-или с явным target:
-
-```
-firelink-install install C:\Downloads\modlist.json --target D:\Games\MyPack
-```
-
-**Расположение инстанса:** `<exeDir>/Instances/<normalize(meta.name)>/`.
-
-**Pipeline:**
-
-1. ReadManifestStep — читает modlist.json, валидирует schemaVersion.
-2. ResolveTargetStep — вычисляет instancePath, копирует манифест в `<instancePath>/modlist.json`.
-3. ValidateTargetStep — 4 проверки (корень диска, системные папки, папка exe, права записи).
-4. BootstrapInstanceStep — создаёт MO2/, MO2/downloads/, MO2/mods/, MO2/profiles/, MO2/plugins/, MO2/tools/, Stock Game/. Контрактные проверки.
-5. BootstrapMo2Step — самодостаточный: сам скачивает MO2-архив в MO2/downloads/ (если нет по хешу), сам распаковывает в MO2/ с заменой.
-6. SyncArchivesStep — сканирует downloads/ → hash → path, для каждого mod-архива скачивает или находит локально. Только manifest.Archives, без MO2.
-7. SyncModsStep — reconcile mods/ под манифест.
-8. GenerateMetaIniStep — reconcile meta.ini.
-9. RegenerateProfileStep — генерирует modlist.txt/plugins.txt/loadorder.txt.
-10. ExecuteExtensionsStep — [12.9].
-11. ExecuteExtrasStep — [12.9].
-12. ConfigureMo2Step — [техдолг, не делаем].
-
-**Разделение ответственности:**
-- **MO2-логика** полностью в `BootstrapMo2Step` (шаг 5).
-- **Логика mods/** полностью в `SyncArchivesStep` + `SyncModsStep` (6–7).
-- Никакой связи между ними.
-
-**MO2-логика** — в `BootstrapMo2Step` (шаг 5).
-**Логика mods/** — в `SyncArchivesStep` + `SyncModsStep` (6, 9).
-**Логика extensions** — в `ExecuteExtensionsStep` (7).
-**Логика extras** — в `ExecuteExtrasStep` (8).
-Никакой связи между ними.
-
-### Этап 2.3. Запуск игры
-
-Пользователь:
-Копирует игру в instance/Stock Game/ (вручную).
-Открывает instance/MO2/ModOrganizer.exe.
-Выбирает профиль.
-Запускает игру через SKSE.
-
-Решения:
-Firelink не работает с игрой. Не ищет, не копирует, не проверяет.
-Firelink не управляет порядком загрузки — он приходит из манифеста.
-Stock Game/ — просто папка для extras.
-
-## Пайплайн: обновление сборки
-
-Не реализовано. Команды update нет. Installer идемпотентен:
-повторный install поверх существующего инстанса даст то же состояние,
-что и первый (при том же манифесте).
-
-## Замысел (v0.2.0+)
-
-**Этап 3.1.** Автор выпускает новую версию:
-Меняет meta.version.
-Пересобирает modlist.json.
-Возможно, добавляет/удаляет моды, плагины, extras.
-Имя инстанса не содержит версию — обновление идёт «поверх».
-
-**Этап 3.2.** Пользователь:
-
-```
-firelink-install install C:\Mods\NordicUI\modlist.json
-```
-
-Installer видит, что инстанс есть. Верифицирует по новому манифесту.
-Докачивает новые архивы. Дописывает новые файлы. Удаляет моды, которых
-больше нет в манифесте. Перегенерирует профиль. Результат — инстанс
-обновлён без перекачки всего.
-
-Работа с Nexus Mods
-> **Примечание (2026-09-21):** ниже «блок 9» — то же самое, что
-> «Фаза 6 (12.8)» в `FIRELINK.md`. Нумерация блоков историческая.
-Не реализовано. Блок 9.
-
-Философия
-Nexus — один источник (type: "nexus"). Способы доступа — стратегии
-внутри NexusDownloader. Не дублируем в манифесте.
-
-План блока 9
-NexusClient — HTTP-клиент к https://api.nexusmods.com/v1/.
-
-GetDownloadLink(game, modId, fileId) — получить ссылку.
-
-Ключ API — заголовок apikey.
-
-NexusApiKeyProvider — читает ключ из %USERPROFILE%\.firelink\nexus.key.
-
-v0.2.0: SQLite + DPAPI.
-
-NexusDownloader : IArchiveDownloader — SourceType => "nexus".
-
-DownloadAsync: получить ссылку через NexusClient, скачать
-HttpClient-ом, вернуть MemoryStream.
-
-Проверка hash — на стороне SyncArchivesStep (как у MirrorDownloader).
-
-DI в Firelink.Install/Program.cs — регистрирует NexusDownloader
-как IArchiveDownloader. DownloaderRegistry подхватит.
-
-Что не делаем:
-
-Nexus Premium API (отдельная подписка).
-
-Кеширование ссылок (у них временный токен).
-
-nxm://, WebView2 (см. DOC v2.0, отменено).
-
-Глобальный реестр архивов
-Не реализовано. v0.2.0.
-
-Назначение
-Переиспользование архивов между сборками без повторной загрузки.
-
-Расположение
-text
-%USERPROFILE%\.firelink\archives.db
-Схема (черновик)
-sql
-CREATE TABLE CachedArchive (
-  hash TEXT PRIMARY KEY,      -- xxHash64 архива
-  path TEXT NOT NULL,         -- полный путь к файлу
-  size INTEGER NOT NULL,
-  last_seen TEXT NOT NULL     -- ISO 8601
-);
-
-CREATE TABLE Config (
-  key TEXT PRIMARY KEY,
-  value BLOB NOT NULL,
-  updated_at TEXT NOT NULL
-);
-Как работает
-При поиске архива:
-
-Проверить локальную instance/MO2/downloads/.
-
-Если нет — проверить реестр.
-
-Если файл найден — скопировать в локальную downloads/.
-
-Если файла нет — удалить запись, скачать заново.
-
-При сканировании downloads/:
-
-Просканировать папку, посчитать хеши.
-
-Добавить/обновить записи в реестре.
-
-При скачивании:
-
-Записать в реестр: (hash, path, size, now).
-
-При повреждении реестра:
-
-Пересоздать из сканирования папок downloads/ всех известных
-инстансов.
-
-## CLI команды
-
-Имя exe — `Firelink.Cli.exe`. Usage-строка — `firelink`
-(сознательное расхождение display name и file name).
-
-| Команда | Описание |
-|---|---|
-| `firelink pack <config>` | Создать манифест (`<config>` — путь к `firelink-pack.json`) |
-| `firelink install <manifest> [--target <dir>]` | Установка |
-| `firelink verify <target> [--verbose]` | Проверка целостности |
-| `firelink hash <file>` | xxHash64 (`xxh64:hex`) |
-| `firelink doctor` | Диагностика окружения (stub) |
-
-**Return codes:**
-
-- `pack`: 0 — OK, 2 — ошибка (включая CLI-parse), 130 — отменено (Ctrl+C).
-- `install`: 0 — OK, 2 — ошибка, 130 — отменено (Ctrl+C).
-- `verify`: 0 — OK, 1 — есть падения, 2 — ошибка, 130 — отменено (Ctrl+C).
-
-**Не делаем / отложено:**
-
-| Команда | Статус |
-|---|---|
-| `firelink index` | Не делаем (нет SQLite-индекса) |
-| `firelink repair` | Не делаем (install идемпотентен) |
-| `firelink cache list/prune/rebuild` | v0.2.0+ (глобальный реестр) |
-| `firelink config set/get/clear/list` | v0.2.0+ (API-ключ через конфиг) |
-
-Обработка ошибок
-Матрица packer-а
-Ситуация	Поведение
-firelink-pack.json не найден	FileNotFoundException
-Невалидный JSON	InvalidOperationException («Failed to parse»)
-meta.name не проходит NameValidator	InvalidOperationException
-meta.version не semver	InvalidOperationException
-instance.path не проходит InstancePathValidator	InvalidOperationException
-mo2.source не MirrorSourceRef	InvalidOperationException
-instance.path не существует	DirectoryNotFoundException
-MO2/ не существует	DirectoryNotFoundException
-downloads/ не существует	DirectoryNotFoundException
-mods/ не существует	DirectoryNotFoundException
-Профиль не найден	DirectoryNotFoundException
-Мод enabled, папки нет	DirectoryNotFoundException
-Мод disabled, папки нет	Warning, пропустить
-Сепаратор без папки	LogDebug, пропустить
-Дубликат archiveId	InvalidOperationException
-.meta без modID/fileID	Warning, fallback на archiveSources
-Архив без .meta и без archiveSources	UnresolvedArchive, warning
-mo2.archive не найден в downloads/	Size = 0, hash из mo2.source.hash
-Hash MO2-архива mismatch	InvalidOperationException
-Entry в mo2.extensions[] не найден	FileNotFoundException
-Entry в stockGame.extras[] не найден	FileNotFoundException
-Файл мода не найден в архивах	Unmatched → __Firelink_Output
-Файл extension/extra не найден в архивах	Unmatched → __Firelink_Output
-FromArchiveDirective.Archive не существует	InvalidOperationException
-Ctrl+C во время pack	Cancelled., exit 130
-Пути с пробелами без кавычек	CLI error + hint, exit 2
-
-Матрица installer-а
-Ситуация	Поведение
-schemaVersion не поддерживается	Ошибка
-meta.name не проходит NameValidator	Ошибка
---target — корень / системная папка / папка exe	Ошибка
-Нет прав записи	Ошибка
-Инстанс не существует	Создать
-Архив есть локально с нужным хешем	Пропустить
-Архив с другим именем, но тем же хешем	Использовать
-Архив отсутствует	Скачать по sources
-nexus (до блока 9)	Warning, Skipped, fallback
-nexus (после блока 9)	NexusDownloader — API, качает
-Hash не совпадает	Удалить .part, следующий источник
-Все источники провалились	Ошибка
-Мод [NoDelete]	Пропустить
-Мод-сепаратор (#...)	Пропустить
-mods[].meta != null	MetaIniWriter.WriteFile
-mods[].meta == null, файл есть	Удалить
-mods[].meta == null, файла нет	Ничего не делать
-MO2: локальный архив с нужным хешем	Использовать
-MO2: локальный архив с другим хешем	Перекачать
-MO2: архива нет	Скачать
-MO2: hash mismatch после скачивания	.part удалён, следующий источник
-MO2: все источники провалились	Ошибка
-MO2: распаковка	Всегда, с заменой (идемпотентно)
-Ctrl+C во время install / verify	Cancelled., exit 130
-Пути с пробелами без кавычек	CLI error + hint, exit 2
-
-Технологический стек
-Компонент	Технология
-Платформа	.NET 8 (net8.0), C# 12
-CLI	Spectre.Console.Cli
-JSON	System.Text.Json
-Хеширование	System.IO.Hashing (xxHash64)
-Распаковка	7z.exe + 7z.dll (Assets/7z/)
-База данных	Microsoft.Data.Sqlite (v0.2.0)
-Шифрование	System.Security.Cryptography.ProtectedData (DPAPI, v0.2.0)
-DI	Microsoft.Extensions.DependencyInjection
-Логирование	Microsoft.Extensions.Logging (+ .Console)
-Retry	Polly 8 (в Firelink.Core — блок 5)
-HTTP	Microsoft.Extensions.Http
-Тесты	xUnit + FluentAssertions
-Целевая ОС	Windows 10 1809+ / Windows 11
-Удалено: SharpCompress (заменён на 7z), Octokit (GitHub cleanup).
-
-Дорожная карта
-
-MVP (v0.1.0)
-
-Packer:
-
-☑ Скелет solution.
-☑ Core: модели, JSON, XxHash64Value, IStep.
-☑ MO2-файлы: чтение/запись.
-☑ MetaReader, MetaIniReader, MetaIniWriter.
-☑ Packer: 13 шагов, полный pipeline.
-☑ UtcDateTimeOffsetJsonConverter.
-☑ Mo2Section.Profile.
-☑ ScanExtensionsStep / ScanExtrasStep.
-☑ MatchExtensionsStep / MatchExtrasStep.
-☑ Унификация ArchiveMatcher (12.13.6).
-☑ ArchiveMatcher.Build → BuildAsync (12.11.7.1).
-
-Installer:
-
-☑ 12.1 — ReadManifestStep, ResolveTargetStep, ValidateTargetStep.
-☑ 12.2 — BootstrapInstanceStep.
-☑ 12.3 — SyncArchivesStep (локально + mirror).
-☑ 12.4 — SyncModsStep.
-☑ 12.5 — GenerateMetaIniStep + MetaIniWriter.
-☑ 12.6 — RegenerateProfileStep.
-☑ 12.7 — BootstrapMo2Step (самодостаточный).
-☑ 12.9 — ExecuteExtensionsStep + ExecuteExtrasStep.
-☑ 12.10 — InstallPipeline.
-☑ 12.11.1–12.11.3 — Verify (Pipeline + Tests + CLI).
-☑ 12.12 — интеграционный тест pack → install.
-
-**Хвосты MVP (перед 12.8):**
-
-- [x] 12.13.7 + 12.13.8 — таблицы CLI.
-- [x] 12.11.5 — `meta.ini` в verify.
-- [x] 12.11.6 — extensions/extras в verify.
-- [x] 13.1 — общий helper скачивания.
-- [x] 12.11.7 — Ctrl+C в CLI.
-- [x] 12.13.10 — error-msg для пробелов без кавычек.
-□ 12.8 — NexusDownloader.
-
-v0.2.0
-□ Nexus Premium API (расширение NexusDownloader).
-□ Глобальный реестр archives.db.
-□ Persist кеша хешей (SQLite).
-□ Прогресс-бар Spectre.
-□ File-logging (ротация).
-□ Команда firelink-install cache list/prune/rebuild.
-□ Команда firelink-install config set/get/clear/list.
-□ Механизм патчей для inline-файлов.
-
-v0.3.0
-□ NexusFreeStrategy (реальная реализация).
-□ Команда doctor — расширенная диагностика.
-□ Поддержка нескольких игр (проверка meta.game).
-□ Пайплайн обновления сборки.
-v1.0.0
-□ GUI.
-□ Hardlink-режим для кеша.
-□ Документация для авторов сборок.
-
-## Статус реализации
-
-**Обновлено:** 2026-09-21
-**Версия документа:** 4.0
-
-### Готово
-
-- Полный pipeline packer-а (13 шагов).
-- Installer: 12.1–12.7, 12.9.1, 12.10, 12.11.1–12.11.7, 12.12,
-  12.13.1–12.13.10, 13.1.
-- **Фаза 1 — единый CLI `Firelink.Cli.exe`** (шаги 1.1–1.7).
-  `Firelink.Pack` и `Firelink.Install` — class libraries.
-  DI-extension-методы `AddFirelinkPack` / `AddFirelinkInstall`.
-- **Фаза 2 — общие API для GUI** (шаги 2.1–2.4):
-  `StepProgress` + `IProgress`, `PackInputFactory` /
-  `InstallInputFactory`, `PackSummary` / `InstallSummary` +
-  Builder-ы. `PackPipeline.Input` введён.
-- **621 тест, все проходят.**
-
-### В работе
-
-Ничего. Фаза 2 закрыта. Следующая — Фаза 6 (Nexus Premium, 12.8).
-
-### Ключевые решения
-
-- `MatchStep` использует **общий** `ArchiveMatcher` через `Input.Matcher`.
-  Один extract на весь pipeline packer-а (12.13.6).
-- `ArchiveMatcher.BuildAsync` — async, отмена пробрасывается, не
-  глотается (12.11.7.1).
-- Unmatched extensions/extras → плоско в `__Firelink_Output/MO2/<path>`
-  и `__Firelink_Output/Stock Game/<path>`.
-- `entry` с пустым списком директив не попадает в
-  `manifest.Mo2.Extensions[]` и `manifest.StockGame.Extras[]`.
-- Папки `__Firelink_Output/MO2/` (без `mods/`) и
-  `__Firelink_Output/Stock Game/` создаются только при непустых unmatched.
-- `.bsa`/`.ba2` — единые файлы, не контейнеры.
-- `InlineFile` / `OrphanFile` — модель удалена.
-- `firelink index` / `firelink repair` — не делаем.
-- `firelink cache` / `firelink config` — v0.2.0+.
-- Verify сравнивает `meta.ini` **семантически**.
-- Verify проверяет `mo2.extensions[]`/`stockGame.extras[]`.
-- `ArchiveDownloadHelper` — общий helper для `SyncArchivesStep` и
-  `BootstrapMo2Step` (13.1).
-- `CancellationHelper.IsCancellation` — единая точка распознавания
-  «отмены» (включая `AggregateException`).
-- `config.PropagateExceptions()` в CLI — для того, чтобы
-  обрабатывать `CommandParseException` самим.
-- **Единый CLI:** `Firelink.Cli` (exe → `Firelink.Cli.exe`) +
-  `Firelink.Pack` и `Firelink.Install` как class libraries.
-- **DI:** `AddFirelinkPack` / `AddFirelinkInstall` в
-  `Firelink.Pack/PackServices.cs` и
-  `Firelink.Install/InstallServices.cs`.
-- **`Firelink.exe`** зарезервировано под GUI (Фаза 3).
-- **`StepProgress`** — общий тип в `Firelink.Core.Progress`.
-  `Report` перед шагом. Packer: 14, installer: 11 имён.
-- **Фабрики** — единственная точка нормализации путей и
-  `ParallelOptions`. Static-классы, не DI.
-- **Summary** — плоский DTO только из примитивов. Builder-ы
-  static. Полные списки — не в Summary.
-- **CLI рисует таблицы из Summary**, не из `Output`. Внешний
-  вид не изменился.
-
-````
-
-## FIRELINK.md
-
-````markdown
-# Firelink — состояние проекта и план работ
-
-**Обновлено:** 2026-09-22
-**Всего тестов:** 621, 0 failed
-**Текущий блок:** Legacy cleanup (HANDOFF/PROJECT-STATE удалены)
-**Следующий блок:** Фаза 6 — Nexus Premium (12.8)
-
-**Спутние документы:**
-- `DOC.md` (v4.2) — формальная документация: форматы, pipeline, CLI, обработка ошибок.
-- `repo-dump.md` — свежий дамп репозитория.
-
----
-
-## Что это
-
-Firelink — инструмент для создания и установки воспроизводимых сборок
-модов для Mod Organizer 2. C#/.NET 8.
-
-Ключевая идея: манифест `modlist.json` — единственный источник правды.
-Файлы восстанавливаются по хешам `xxHash64`. Firelink работает с
-**результатом** установки, а не с процессом.
-
-Один CLI (`Firelink.Cli`, exe → `Firelink.Cli.exe`) + в будущем один GUI
-(Avalonia, exe → `Firelink.exe`). Логика — в библиотеках, интерфейсы
-(CLI, GUI) — отдельные слои.
-
----
-
-## Как начать работу в новом чате
-
-**Скопируйте в первое сообщение:**
-
-1. **FIRELINK.md** (этот файл) — полностью.
-2. **DOC.md** — полностью.
-3. **repo-dump.md** — свежий.
-
-**Первое сообщение — шаблон:**
-
-> Продолжаем проект Firelink. Стиль — пошаговые блоки кода с тестами.
->
-> Прикладываю: FIRELINK.md, DOC.md (v4.2), repo-dump.md (свежий).
->
-> Текущее состояние: 621 тест, 0 failed. Закрыты: MVP (packer,
-> installer, verify), Фаза 1 (единый CLI `Firelink.Cli`),
-> Фаза 2 (общие API для GUI).
->
-> Следующая задача: [из раздела «План работ», актуальный блок].
->
-> Стиль ответов:
-> - Разбор задачи.
-> - Полный код файлов с путями.
-> - Инструкция по сборке/тестам.
-> - Ожидаемый вывод dotnet test.
-> - FIRELINK.md — только по запросу.
->
-> Не пиши код, пока я не подтвержу готовность.
-
----
-
-## Стиль работы
-
-- **Файлы давать целиком**, не патчами.
-- **Запускать `dotnet test` сразу** после каждого блока.
-- **Присылать полный вывод** тестов при падении (текст).
-- **FIRELINK.md** — обновлять по запросу.
-- **Не менять архитектурные решения без обсуждения.**
-- **Не отвечать на китайском.**
-- **Разбивать крупные блоки на 12.x.y** (или `<Фаза>.<шаг>.<подшаг>`).
-- **Не писать код, пока не подтверждена готовность.**
-
----
-
-## Стек
-
-- **.NET 8**, C# 12.
-- **xUnit + FluentAssertions**.
-- **Spectre.Console.Cli** 0.48.0 (с `PropagateExceptions`).
-- **System.Text.Json**.
-- **System.IO.Hashing (xxHash64)**.
-- **Microsoft.Data.Sqlite** (v0.2.0).
-- **Microsoft.Extensions.*** — DI, Logging, Http.
-- **Polly** (в `Firelink.Core`).
-- **7z.exe + 7z.dll**.
-- **SharpCompress удалён.**
-- **Octokit удалён.**
-
----
-
-## Текущий статус
-
-### Готово
-
-- **Полный pipeline packer-а (13 шагов).**
-- **Полный pipeline installer-а (11 шагов).**
-- **Verify** (pipeline + tests + CLI), включая `meta.ini`, extensions,
-  extras.
-- **Ctrl+C** в CLI, `Cancelled.`, exit 130.
-- **Error-msg для пробелов без кавычек.**
-- **593 теста, 0 failed.**
-- **Реальный прогон на `OmenRim 7`** (pack → install → verify,
-  4338 passed, 0 failed).
-- **Фаза 1 целиком — единый CLI `Firelink.Cli.exe`:**
-  - 1.1 — создан `Firelink.Cli`, pack-сторона перенесена.
-  - 1.2 — install-сторона перенесена, все 5 команд работают.
-  - 1.3 — `Firelink.Pack` стал class library.
-  - 1.4 — `Firelink.Install` стал class library.
-  - 1.5 — `AddFirelinkPack` / `AddFirelinkInstall`.
-  - 1.6 — ручной прогон на OmenRim 7: pack → install (TestInstance3)
-    → verify, 4338 passed, 0 failed. Идентично `TestInstance2`.
-  - 1.7 — Ctrl+C на pack/install/verify (`Cancelled.`, exit 130),
-    пробелы без кавычек (`CLI error` + hint, exit 2). Регрессий нет.
-  - **Фаза 2 — общие API для будущего GUI (шаги 2.1–2.4):**
-  - 2.1 — `StepProgress` + `IProgress<StepProgress>?` в обоих pipeline-ах.
-  - 2.2 — `PackInputFactory` / `InstallInputFactory`.
-    `PackPipeline.Input` введён (симметрично `InstallPipeline.Input`).
-  - 2.3 — `PackSummary` / `InstallSummary` + Builder-ы.
-  - 2.4 — реальный прогон на OmenRim 7 (TestInstance4) + verify.
-
-### В работе
-
-- Ничего. Фаза 2 закрыта.
-
-### Не начато
-
-- Фаза 6 — Nexus Premium (12.8).
-- Фаза 3 — GUI (Avalonia).
-- Фаза 5 — Nexus Free (WebView2).
-
-### Вычеркнуто
-
-- **Фаза 4 — вариации дистрибутивов.** Решение 2026-09-21: не делаем.
-  Один CLI, один GUI, один набор exe в дистрибутиве.
-- **E1 (прогон на большом инстансе 4370 модов)** — отменён, не критично.
-
----
-
-## Структура репозитория (после шагов 1.1–1.4)
-
-```
-C:\Code\Firelink
-  Firelink.slnx
-  Directory.Build.props
-  Directory.Build.targets
-  Directory.Packages.props
-  DOC.md                       ← v4.2
-  FIRELINK.md                  ← этот файл
-  repo-dump.md
-  samples/
-    firelink-pack.minimal.json
-    firelink-pack.full.json
-    firelink-pack.invalid-name.json
-    firelink-pack.invalid-path.json
-    firelink-pack.invalid-version.json
-  src/
-    Firelink.Core/             ← ядро: модели, JSON, хеширование,
-                                  валидаторы, абстракции,
-                                  SevenZipExtractor, TempWorkspace,
-                                  FileHashCache, ArchiveDownloadHelper,
-                                  CancellationHelper,
-                                  StepProgress
-    Firelink.Platform.MO2/     ← чтение/запись MO2-файлов
-    Firelink.Platform.Nexus/   ← пусто (Фаза 6)
-    Firelink.Pack/             ← class library: PackPipeline + Steps + Matching
-                                  + PackInputFactory + PackSummary
-                                  + PackSummaryBuilder
-    Firelink.Install/          ← class library: InstallPipeline + Steps +
-                                  Downloaders + Verify
-                                  + InstallInputFactory + InstallSummary
-                                  + InstallSummaryBuilder
-    Firelink.Cli/              ← exe (→ Firelink.Cli.exe):
-                                  Program.cs, Commands/, Settings/,
-                                  Infrastructure/TypeRegistrar.cs
-                                  Зависимости: Firelink.Pack,
-                                  Firelink.Install, Firelink.Core,
-                                  Firelink.Platform.*
-  tests/
-    Firelink.Core.Tests/
-    Firelink.Platform.MO2.Tests/
-    Firelink.Pack.Tests/
-    Firelink.Install.Tests/
-    Firelink.Integration.Tests/
-```
-
-После шага 1.4 — **только один exe** в solution: `Firelink.Cli.exe`.
-`Firelink.Pack.exe` и `Firelink.Install.exe` больше нет. Команды:
-`firelink pack`, `firelink install`, `firelink verify`, `firelink hash`,
-`firelink doctor` (usage-строка; имя exe — `Firelink.Cli.exe`).
-
----
-
-## Пайплайн packer-а (полный)
-
-```
-ReadConfigStep → ReadInstanceStep → IndexArchivesStep → ScanModsStep →
-ScanExtensionsStep → ScanExtrasStep →
-[build ArchiveMatcher via BuildAsync] →
-MatchStep → MatchExtensionsStep → MatchExtrasStep →
-[write unmatched extensions/extras] →
-BuildManifestStep → ValidateManifestStep → WriteManifestStep
-```
-
-## Пайплайн installer-а
-
-```
-ReadManifestStep → ResolveTargetStep → ValidateTargetStep →
-BootstrapInstanceStep → BootstrapMo2Step → SyncArchivesStep →
-ExecuteExtensionsStep → ExecuteExtrasStep → SyncModsStep →
-GenerateMetaIniStep → RegenerateProfileStep
-```
-
-**CLI:** `firelink install <manifest> [--target <dir>]`.
-**CLI:** `firelink verify <target> [--verbose]`.
-
----
-
-## Прогоны на реальных инстансах
-
-**`C:\Firelink\TestInstance\` (19.09.2026, до 12.13.x):**
-
-- Install: 82 мода, 68 архивов, 82 meta.ini, профиль `Default`.
-- Verify: 4337 passed (здоровый), 4310/2 (сломанный), install
-  восстанавливает.
-
-**`C:\Firelink\TestInstance2\` (20.09.2026, после 12.13.6, `OmenRim 7`):**
-
-- Pack: 82 мода, 4236 matched, 69 архивов, 49/49 extensions, 2/2 extras.
-- Install: 82 мода, 1 extension written, 2 extras written, 82 meta.ini.
-- Verify: **4338 passed, 0 failed**.
-
-**Перепроверка через `Firelink.Cli.exe install ... --target ...` (21.09.2026,
-после шага 1.2):**
-
-- Archives already present: 69.
-- Mods skipped: 82. meta.ini written: 82.
-- Extensions/extras: 0 written, 1/2 skipped.
-- Done.
-
-**Важно:** `install` без `--target` создаёт инстанс в
-`<exeDir>/Instances/<meta.name>/`, а не рядом с манифестом. Это
-архитектурное решение (см. решение №52). Для переустановки поверх
-существующего инстанса — всегда указывать `--target`.
-
----
-
-## Ключевые архитектурные решения (не переделывать)
-
-Ниже — накопленный список. Сгруппирован по темам, но **пункты
-сохранены все**. Нумерация — историческая, чтобы не сбиться при
-ссылках.
-
-### Общие принципы (1–19)
-
-1. **Манифест — единственный источник правды.** Профиль MO2
-   генерируется из манифеста, а не копируется.
-2. **Файлы восстанавливаются по хешам** (`xxHash64`), не по именам
-   и путям.
-3. **Firelink работает с результатом, а не с процессом.** Никаких
-   FOMOD-парсеров, XML, `meta.ini` (читается только для метаданных).
-4. **Одна папка `downloads/` для всех архивов.** Моды, MO2, extras —
-   всё в одном месте.
-5. **Идентификация архивов — канонический id.** Не по имени файла:
-   `nexus_{game}_{modId}_{fileId}` / `local_{slug}`.
-6. **Глобальный реестр архивов** — SQLite в `%USERPROFILE%\.firelink\archives.db`
-   (v0.2.0).
-7. **Ничего не удаляем** из `downloads/`.
-8. **Директивы выполняются последовательно.** `lastWins`.
-9. **`[NoDelete]` в имени папки** защищает пользовательские моды.
-10. **BSA/BA2 — единые файлы.** Не разбираем содержимое.
-11. **Никаких исполняемых скриптов.** Только декларативные директивы.
-12. **Installer идемпотентен.**
-13. **Installer не работает с игрой.** `Stock Game/` — просто папка.
-14. **Шаги pipeline изолированы.** Pipeline — единственный
-    оркестратор.
-15. **Nexus — один источник, несколько стратегий доступа.**
-16. **Параллелизм на уровне pipeline** (`Parallel.ForEach`).
-17. **Кеш хешей обязателен** (`FileHashCache`, in-memory; persist —
-    v0.2.0).
-18. **Манифест самодостаточен.** Installer не ходит на Nexus за
-    метаданными.
-19. **Unmatched → `__Firelink_Output`.** Не `InlineFile`, не base64.
-
-### Packer (20–51)
-
-20. **`meta.game` = Nexus game domain.**
-21. **`instance.path`** — относительный.
-22. **`mo2.profile`** — обязательный.
-23. **`mo2.source` — обязательно `MirrorSourceRef`.**
-24. **`mo2.archive.size/hash` — из `mo2.source.hash`** (size с диска,
-    если файл есть).
-25. **MO2-архив НЕ попадает в `manifest.Archives[]`.**
-26. **`mo2.extensions`** — от `MO2/`. **`stockGame.extras`** — от
-    `Stock Game/`.
-27. **`.meta`** — Nexus-формат. `MetaReader.TryRead`.
-28. **Канонический id:** `nexus_...` / `local_{slug}`.
-29. **`archiveSources`** вместо `mirrors`.
-30. **Slug** — ASCII-only.
-31. **Semver** — регулярка semver.org.
-32. **`Pack*`-модели** — `record`.
-33. **`ValidationResult`** — накапливает ошибки.
-34. **Trailing slash** разрешён.
-35. **Зарезервированные имена Windows** запрещены.
-36. **Модели MO2** — в `Core.Models.Mo2`.
-37. **CLI** — Spectre.Console.Cli + `TypeRegistrar` + `PropagateExceptions`.
-38. **CLI требует явной команды.**
-39. **Структура инстанса:** `MO2/`, `Stock Game/`, `__Firelink_Output/`.
-40. **`ModlistReader`** читает все строки.
-41. **`[NoDelete]`** — через `Contains`.
-42. **`.meta` не считается архивом.**
-43. **Невалидный `.meta`** → fallback.
-44. **`MirrorSourceRef.Hash` обязателен.**
-45. **`XxHash64Value`** — `xxh64:hex`, 16 символов.
-46. **`MatchStep`** делегирует матчинг `ArchiveMatcher`-у.
-47. **`meta.ini` в корне мода** → `ModMetas`.
-48. **Unmatched модов** → `__Firelink_Output/MO2/mods/<ModName>/<path>`.
-49. **`7z.exe` + `7z.dll`** через `Directory.Build.targets`.
-50. **`SevenZipExtractor`** — таймаут 10 минут.
-51. **`__Firelink_Output`** — каталог автора.
-
-### Pack-модели и валидация (52–73)
-
-52. **`MatchResult`** — `ModDirectives` + `Unmatched` + `ModMetas`.
-53. **`MetaIniReader`** — `[General]`. Ключи case-insensitive.
-54. **`MetaIniWriter`** — `[General]`, camelCase, без
-    `[installedFiles]`, без BOM, CRLF. Не пишет `category`.
-55. **`ModMeta` — без `Category`.**
-56. **`.mohidden` — часть пути.**
-57. **`mods[].meta` со всеми полями** (кроме `Category`).
-58. **`createdAt`** — `yyyy-MM-ddTHH:mm:ss.fffZ`.
-59. **`InlineFileContent` / `OrphanFile` / `InlineFile` удалены.**
-60. **`PackCommand`:** `Manifest archives`, `Manifest extensions`,
-    `Manifest extras`, `mo2.archive`, `Unmatched written to` при `> 0`.
-61. **Сепараторы** сохраняются в манифесте.
-62. **`ScanModsStep`:** сепаратор без папки → `LogDebug`.
-63. **Мод без восстановимых файлов остаётся в манифесте с пустыми
-    директивами.**
-64. **`ArchiveMatcher`** — в `Firelink.Pack.Matching`. Детерминизм
-    при дубликатах: минимальный `archiveId` (Ordinal).
-    `InternalsVisibleTo("Firelink.Pack.Tests")`. Принимает
-    `ILogger<ArchiveMatcher>`. Метод — `BuildAsync(ct)`.
-65. **`ScanExtensionsStep`/`ScanExtrasStep`** — тип результата
-    `EntryScanResult`. `RelativePath` файла — ОТ КОРНЯ `MO2/` или
-    `Stock Game/`. `Parallel.ForEach` + восстановление порядка
-    ключей. Отсутствие entry → `FileNotFoundException`.
-66. **`MatchExtensionsStep`/`MatchExtrasStep`** — тип результата
-    `MatchEntriesResult`. Принимают `ArchiveMatcher` через
-    `Input.Matcher` (`internal`, не `required`). Unmatched **не
-    пишут** на диск — это делает `PackPipeline`.
-67. **`Mo2ArchiveBuilder`** — статический класс в
-    `Firelink.Pack.Matching`. Один источник правды для построения
-    `ArchiveEntry` MO2-архива.
-68. **Unmatched extensions** → `__Firelink_Output/MO2/<relativePath>`
-    (плоско). **Unmatched extras** → `__Firelink_Output/Stock Game/<relativePath>`.
-    `EntryName` на путь не влияет — только `RelativePath`.
-69. **`PackPipeline`** перед write unmatched чистит
-    `__Firelink_Output/MO2/` (кроме `mods/`) и
-    `__Firelink_Output/Stock Game/`. Папки `MO2/` (без `mods/`) и
-    `Stock Game/` создаются **только** при `entries.Count > 0`.
-70. **`PackPipeline`** создаёт `ArchiveMatcher` один раз, `BuildAsync`,
-    передаёт в `MatchStep`, `MatchExtensions`, `MatchExtras`.
-71. **`BuildManifestStep.BuildExtensions`/`BuildExtras`** пропускают
-    entry с пустым списком директив.
-72. **`PackPipeline`** добавляет MO2-архив в `ArchiveIndex` перед
-    созданием `ArchiveMatcher`: `archiveIndexWithMo2 =
-    AddMo2ArchiveToResolved(...)`.
-73. **`Slug.FromFileName`** отрезает **последнее** расширение до
-    slug-ификации.
-
-### Installer (74–113)
-
-74. **Инстансы:** `<exeDir>/Instances/<normalize(meta.name)>/`.
-75. **Копирование манифеста** — `ResolveTargetStep`.
-76. **`--target <dir>`** — escape-hatch.
-77. **`meta.name` перепроверяется.**
-78. **`ValidateTargetStep`** — 4 проверки.
-79. **`[NoDelete]`** — уважаем.
-80. **Существующая папка** — рефлорация.
-81. **`verify` — да, `repair` — нет.**
-82. **File-logging — v0.3.0.**
-83. **Прогресс-бары — v0.2.0.**
-84. **`BootstrapInstanceStep`** — создаёт все папки.
-85. **`IArchiveDownloader`** — абстракция.
-86. **`DownloaderRegistry`** — map sourceType → downloader.
-87. **`SyncArchivesStep`** — только `manifest.Archives`, не трогает
-    MO2.
-88. **Hash — источник правды.**
-89. **Ничего не удаляем** из `downloads/`.
-90. **GitHub — удалён.** Всё через `mirror`.
-91. **Параллельная загрузка** — `ParallelOptions`.
-92. **3 попытки + Polly backoff (2 сек).**
-93. **Скачивание в `.part`**, `File.Move` после проверки.
-94. **Проверка хеша после скачивания обязательна.**
-95. **`nexus` до Фазы 6 — warning + `Skipped`.**
-96. **Глобальный реестр — v0.2.0.**
-97. **`IHttpClientFactory` через DI.**
-98. **`SyncModsStep`** — reconcile `mods/`.
-99. **Только `FromArchive` директивы.**
-100. **`TempWorkspace` на мод.**
-101. **Файлы, которых нет в директивах, — удаляются** (recreate).
-102. **Откат при ошибке — никакого.**
-103. **`SyncModsStep.Input.ArchivesById`.**
-104. **`SyncModsStep.Output`:** `Created`/`Recreated`/`Skipped`/`Deleted`.
-105. **Сепараторы в `SyncModsStep`:** pass 1 — `Skipped`; pass 2 —
-     не удаляются.
-106. **`GenerateMetaIniStep`:** reconcile `meta.ini`.
-107. **`RegenerateProfileStep`:** сортировка по `Order` ascending,
-     **без `Reverse()`**.
-108. **`BootstrapMo2Step` — самодостаточный.** Распаковка всегда,
-     с заменой.
-109. **`BootstrapMo2Step.Output = Input`.**
-110. **Порядок pipeline:** BootstrapInstance → BootstrapMo2 →
-     SyncArchives → ExecuteExtensions → ExecuteExtras → SyncMods →
-     GenerateMetaIni → RegenerateProfile.
-111. **`ConfigureMo2Step`** — не делаем.
-112. **`InstallPipeline`** — склейка шагов.
-113. **`InstallPipeline.BuildArchivesById`** — включая MO2-архив.
-
-### Verify (114–130)
-
-114. **Verify — read-only.**
-115. **Изоляция (вариант A).**
-116. **`VerifyPipeline.Execute` — синхронный.**
-117. **Проверки — приватные методы внутри `VerifyPipeline`.**
-118. **`VerifyContext`** — единый контекст.
-119. **`VerifyReport`** — `Checks`, `IsOk`, `PassedCount`, `FailedCount`.
-120. **`VerifyCheckResult`** — `Name`, `Passed`, `Message`.
-121. **Регенерация modlist.txt / plugins.txt / loadorder.txt в память**
-     через `Serialize`-методы writer-ов.
-122. **Сравнение `meta.ini`** — семантическое.
-123. **`schemaVersion`** — через `ManifestSchema.IsSupported`.
-124. **Пустые директивы у disabled-мода** — OK.
-125. **Return code CLI:** 0 — OK, 1 — есть падения, 2 — ошибка, 130 — Ctrl+C.
-126. **`ManifestJson.Load` / `Save` — sync-версии для verify.**
-127. **`VerifyCommand`** — summary + провалы; `--verbose` — все проверки.
-      `Markup.Escape`.
-128. **`VerifySettings`** — `<target>` + `--verbose`/`-v`.
-129. **`CheckMod` делает `yield break`** при отсутствии папки мода.
-130. **Verify проверяет extensions/extras.** Общий helper
-      `CheckDirectiveFile(displayPrefix, rootPath, directive)`.
-
-### Cancellation / CLI (131–136)
-
-131. **`CancellationHelper.IsCancellation`** в `Firelink.Core` —
-      распознаёт отмену, включая `AggregateException` со всеми
-      cancellation-inner.
-132. **`ArchiveMatcher.BuildAsync`** — async; `catch (OperationCanceledException)
-      { throw; }` **перед** `catch (Exception)`.
-133. **`PackCommand`/`InstallCommand`/`VerifyCommand`** — `catch (Exception ex)
-      when (CancellationHelper.IsCancellation(ex))` → `Cancelled.` + exit 130.
-      `Console.CancelKeyPress` подписывается на время выполнения команды,
-      `e.Cancel = true` + `cts.Cancel()`, отписка в `finally`.
-134. **`Program.cs` CLI** — `catch (Exception ex)
-      when (CancellationHelper.IsCancellation(ex))` → `Cancelled.` + exit 130
-      (fallback на случай отмены до подписки).
-135. **`config.PropagateExceptions()`** включено в CLI. Без него
-      Spectre перехватывает `CommandParseException` и
-      `OperationCanceledException` до нашего `try/catch`.
-136. **`catch (CommandParseException ex)`** в `Program.cs` — печатает
-      `CLI error: <msg>` + `Hint: paths with spaces must be quoted: ...`
-      (hint только если в `argv` нет строк с пробелами).
-
-### 12.13.x / 13.1 (137–143)
-
-137. **`MatchStep` использует общий `ArchiveMatcher` через
-     `Input.Matcher`.**
-138. **`.bsa`/`.ba2` — единые файлы, не контейнеры.**
-139. **CLI-таблицы `PackCommand`/`InstallCommand` включают
-     extensions/extras.**
-140. **`ArchiveDownloadHelper`** в `Firelink.Core.Archives` —
-     общий helper скачивания (`.part`, retry через Polly, hash-check).
-141. **`ExecuteExtensionsStep`** — раскладывает `manifest.Mo2.Extensions[]`
-     в `<target>/MO2/`. Группирует директивы по archiveId, extract
-     один раз на архив, `FileMatches`-skip для идемпотентности.
-142. **`ExecuteExtrasStep`** — симметричен `ExecuteExtensionsStep`,
-     корень `<target>/Stock Game/`.
-143. **`ExecuteExtensionsStep`/`ExecuteExtrasStep` — Skipped**, если
-     файлы уже на месте.
-
-### Фаза 1 — Единый CLI (144–152)
-
-Решения, принятые при рефакторинге CLI (шаги 1.1–1.7, 2026-09-21).
-
-144. **Один CLI-проект:** `Firelink.Cli`, exe → `Firelink.Cli.exe`.
-     `<AssemblyName>` не задаём — имя exe берётся из имени `.csproj`.
-145. **`Firelink.Pack` и `Firelink.Install` — class libraries.**
-     Не exe. Все `Program.cs`, `Commands/`, `Settings/`,
-     `Infrastructure/` переехали в `Firelink.Cli`.
-146. **Namespace `Firelink.Cli.*`.** Команды —
-     `Firelink.Cli.Commands`, настройки — `Firelink.Cli.Settings`,
-     `TypeRegistrar` — `Firelink.Cli.Infrastructure`.
-147. **`SetApplicationName("firelink")`** — usage-строка `firelink pack`,
-     `firelink install` и т.д. Имя exe — `Firelink.Cli.exe`. Это
-     сознательное расхождение display name и file name (как `dotnet`
-     vs `dotnet.exe`).
-148. **`Firelink.exe`** зарезервировано под GUI (Фаза 3).
-     `<AssemblyName>Firelink</AssemblyName>` будет у `Firelink.Gui.csproj`.
-     В дистрибутиве будут оба exe: `Firelink.Cli.exe` (CLI) и
-     `Firelink.exe` (GUI).
-149. **`TryAddSingleton` вместо `AddSingleton`** для
-     `FileHashCache`, `IArchiveExtractor` — эти регистрации
-     встречаются и в pack-, и в install-части. `TryAdd` не даёт
-     плодить дубли в DI-контейнере.
-150. **DI-extension-методы: `AddFirelinkPack` / `AddFirelinkInstall`.**
-     Регистрируют все сервисы своей библиотеки.
-     Файлы: `Firelink.Pack/PackServices.cs`,
-     `Firelink.Install/InstallServices.cs`.
-     Namespace'ы — `Firelink.Pack` / `Firelink.Install` (то есть
-     extension-метод виден из CLI без лишних using'ов).
-151. **`AddFirelinkInstall` регистрирует `MirrorDownloader`** через
-     `AddHttpClient<T>` (таймаут 10 минут). Требует
-     `Microsoft.Extensions.Http` — явная `<PackageReference>` в
-     `Firelink.Install.csproj`.
-152. **`Firelink.Cli/Program.cs` регистрирует только то, что
-     относится к CLI:** `AddLogging`, `IAnsiConsole`, `ParallelOptions`.
-     Всё остальное — через `AddFirelinkPack()` и `AddFirelinkInstall()`.
-
-### Фаза 2 — Общие API (153–160)
-
-Решения, принятые при подготовке общих API для GUI (шаги 2.1–2.4,
-2026-09-21).
-
-153. **`StepProgress` — общий тип в `Firelink.Core.Progress`.** Record
-     `(int StepIndex, int TotalSteps, string StepName)`. StepIndex
-     — 1-based. StepName — стабильный контракт для GUI: имена не
-     менять без причины.
-154. **`IProgress<StepProgress>? progress = null` — опциональный
-     последний параметр** в `PackPipeline.ExecuteAsync` и
-     `InstallPipeline.ExecuteAsync`. `Report` вызывается **перед**
-     шагом, не после. Packer: 14 имён шагов. Installer: 11.
-155. **`PackPipeline.Input` введён.** Симметрично
-     `InstallPipeline.Input`. `ExecuteAsync(Input, ct, progress?)`.
-     Все тесты packer-а обновлены.
-156. **`PackInputFactory` / `InstallInputFactory`** — статические
-     классы. Единственная точка, где `Path.GetFullPath` и
-     `ParallelOptions`. Принимают `ParallelOptions? = null`,
-     дефолт — `Environment.ProcessorCount`.
-157. **`PackSummary` / `InstallSummary`** — `sealed record` с
-     `required` полями. Только примитивы. Никаких ссылок на
-     `PackResult`/`InstallPipeline.Output`. Плоские DTO для
-     отображения.
-158. **`PackSummaryBuilder` / `InstallSummaryBuilder`** —
-     статические классы. Единственное место, где решается
-     «что показывать пользователю». Логика подсчёта
-     `DirectivesTotal`/`DirectivesFromArchive` (была в
-     `PackCommand`) ушла сюда.
-159. **CLI-таблицы строятся из Summary, не из Output.**
-     Внешний вид таблиц не изменился. Поменялся только источник
-     данных: `summary.X` вместо `output.Xxx.Yyy.Count`.
-160. **`ParallelOptions` остаётся в DI.** Фабрики принимают его
-     параметром. CLI передаёт `_parallelOptions` из DI. GUI
-     сможет передавать свой.
----
-
-## План работ
-
-### Фаза 1 — Единый CLI (`Firelink.Cli`) ✅ ЗАКРЫТА
-
-**Цель:** объединить `Firelink.Pack` и `Firelink.Install` в один exe.
-
-**Статус:** закрыта 2026-09-21.
-
-**Все шаги:**
-
-- ✅ 1.1 — создан `Firelink.Cli`, pack-сторона перенесена.
-- ✅ 1.2 — install-сторона перенесена, все 5 команд работают.
-- ✅ 1.3 — `Firelink.Pack` стал class library.
-- ✅ 1.4 — `Firelink.Install` стал class library. Один exe
-  (`Firelink.Cli.exe`).
-- ✅ 1.5 — `AddFirelinkPack` / `AddFirelinkInstall`. DI-регистрация
-  в библиотеках, `Firelink.Cli/Program.cs` сокращён.
-- ✅ 1.6 — ручной прогон на OmenRim 7: pack → install (TestInstance3)
-  → verify, **4338 passed, 0 failed**. Идентично `TestInstance2`
-  (modlist.txt, plugins.txt, loadorder.txt, ModOrganizer.exe).
-- ✅ 1.7 — Ctrl+C на pack/install/verify (`Cancelled.`, exit 130),
-  пробелы без кавычек (`CLI error` + hint, exit 2). Регрессий нет.
-
-**Итог Фазы 1:**
-
-- Один exe `Firelink.Cli.exe`, все 5 команд.
-- `Firelink.Pack` и `Firelink.Install` — чистые библиотеки.
-- Все 593 теста зелёные на каждом шаге.
-- Ручной прогон на OmenRim 7 подтверждает отсутствие регрессий.
-
----
-
-### Фаза 2 — Общие API для будущего GUI ✅ ЗАКРЫТА
-
-**Цель:** подготовить код так, чтобы GUI мог переиспользовать
-pipeline без дублирования логики.
-
-**Статус:** закрыта 2026-09-21.
-
-**Все шаги:**
-
-- ✅ 2.1 — `StepProgress` + `IProgress<StepProgress>?` в
-  `PackPipeline` и `InstallPipeline`.
-- ✅ 2.2 — `PackInputFactory` / `InstallInputFactory`.
-  `PackPipeline.Input` введён.
-- ✅ 2.3 — `PackSummary` / `InstallSummary` + Builder-ы.
-- ✅ 2.4 — ручной прогон на OmenRim 7 (pack → install →
-  verify), **4338 passed, 0 failed**.
-
-**Итог Фазы 2:**
-
-- Публичный API библиотек готов к использованию из GUI:
-  - `PackInputFactory.Create(...)` / `InstallInputFactory.Create(...)`.
-  - `pipeline.ExecuteAsync(input, ct, progress)`.
-  - `PackSummaryBuilder.Build(result)` / `InstallSummaryBuilder.Build(output)`.
-- CLI — первый потребитель этих API.
-- Все 621 тест зелёные на каждом шаге.
-
----
-
-### Фаза 6 — Nexus Premium (12.8)
-
-**Цель:** убрать warning `No downloader for source type 'nexus'` и
-дать возможность скачивать архивы с Nexus через Premium-API.
-
-**Статус:** не начата. Идёт **после Фазы 2** и **до Фазы 3** (GUI).
-
-**Разбиение:**
-
-- **12.8.1** — `NexusClient` + `NexusApiKeyProvider` + модели
-  ответов.
-  - HTTP к `https://api.nexusmods.com/v1/`.
-  - API-ключ из `%USERPROFILE%\.firelink\nexus.key`.
-- **12.8.2** — `NexusDownloader : IArchiveDownloader`
-  (`SourceType => "nexus"`).
-  - `DownloadAsync`: получить ссылку через `NexusClient`, скачать
-    `HttpClient`-ом.
-  - Hash — на стороне `SyncArchivesStep` (через
-    `ArchiveDownloadHelper`).
-- **12.8.3** — DI в `Firelink.Cli/Program.cs` (через
-  `AddFirelinkInstall`) + тесты с fake-`HttpMessageHandler`.
-- **12.8.4** — обновить `DOC.md` и `FIRELINK.md`.
-
-**Что НЕ делаем:**
-
-- Nexus Premium API (отдельная подписка) — это отдельная задача.
-- Кеширование ссылок.
-- `nxm://`, WebView2.
-
-**Проверка:**
-
-- Тесты: ~610 passed.
-- Ручной: скачать архив с Nexus через Premium-аккаунт.
-
-**Время:** ~1 неделя. **Риск:** низкий.
-
----
-
-### Фаза 3 — GUI (Avalonia)
-
-**Цель:** графический интерфейс поверх pipeline.
-
-**Статус:** не начата.
-
-**Архитектура (модульная):**
-
-```
-src/
-  Firelink.Gui.Shared/       ← MVVM-инфра, стили, DI-extension
-  Firelink.Gui.Install/      ← модуль installer (class library, Avalonia)
-  Firelink.Gui.Pack/         ← модуль packer (class library, Avalonia)
-  Firelink.Gui/              ← exe-оркестратор: Install + Pack
-                                 → <AssemblyName>Firelink</AssemblyName>
-                                 → Firelink.exe
-```
-
-**Контракт модуля:**
-
-```csharp
-public interface IGuiModule
-{
-    string Title { get; }
-    string Icon { get; }
-    int Order { get; }
-    object CreateViewModel();
-}
-```
-
-Главное окно — sidebar с модулями, content area.
-
-**Что в MVP GUI:**
-
-- Экран Install: выбор `modlist.json`, кнопка «Установить»,
-  прогресс-бар (шаг X из Y), лог-панель (живой), кнопка «Отмена»,
-  экран результата.
-- Экран Pack: выбор `firelink-pack.json`, кнопка «Создать манифест»,
-  тот же прогресс/лог, результат.
-- Экран Verify: выбор инстанса, кнопка «Проверить», результат
-  таблицей.
-- `ObservableLoggerProvider` — логи в `ObservableCollection<LogEntry>`.
-- `CancellationTokenSource` ← кнопка «Отмена».
-
-**Что НЕ в MVP:**
-
-- Настройки.
-- Интерактивные диалоги (конфликты, выбор источника).
-- Темы/иконки.
-- WebView2.
-
-**Проверка:**
-
-- Ручная: запустить GUI, установить сборку на `TestInstance3`, verify.
-- Сравнить с CLI-результатом — идентично.
-
-**Стек:** Avalonia 11.x, CommunityToolkit.Mvvm,
-Microsoft.Extensions.DependencyInjection.
-
-**Время:** ~3 недели. **Риск:** средний.
-
-**Важное:** `Firelink.exe` (GUI) — зарезервированное имя. В
-дистрибутиве оба: `Firelink.Cli.exe` + `Firelink.exe`.
-
----
-
-### Фаза 5 — Nexus Free (WebView2)
-
-**Цель:** скачивание модов с Nexus для Free-аккаунтов через
-WebView2.
-
-**Статус:** не начата. Технически — после Фазы 3.
-
-**Контекст:**
-
-- Nexus не отдаёт прямые ссылки для Free-аккаунтов через API.
-- Premium — через `download_link` API (Фаза 6).
-- Free — только через автоматизацию UI (как Wabbajack, Nolvus).
-
-**Задачи:**
-
-- Новый проект `Firelink.NexusHelper` — отдельное Avalonia-приложение
-  (не библиотека!).
-- WebView2.
-- Открывает `nexusmods.com`, пользователь логинится.
-- Кликает «Slow Download» для каждого мода из списка.
-- Скачанные файлы кладёт в `downloads/`.
-- CLI-команда `firelink nexus-helper` — запускает
-  `Firelink.NexusHelper.exe` как отдельный процесс.
-- В GUI — отдельный экран «Nexus Free Download».
-
-**Время:** ~2–3 недели. **Риск:** средний (юридические нюансы,
-хрупкость UI).
-
----
-
-### Порядок фаз
-
-**Строгая последовательность:**
-
-1. **Фаза 1** — единый CLI. ✅ закрыта.
-2. **Фаза 2** — общие API. ✅ закрыта.
-3. **Фаза 6** (12.8) — Nexus Premium. **← следующая**.
-4. **Фаза 3** — GUI. Основной UI.
-5. **Фаза 5** — Nexus Free. Расширение для Free.
-
-**Почему 12.8 (Фаза 6) перед GUI (Фаза 3):**
-
-- 12.8 быстрый и независимый. Даёт Premium-функционал.
-- После 12.8 можно сразу работать с Nexus-архивами — GUI уже будет
-  надстраивать UI над этой функциональностью.
-
-**Почему Free (Фаза 5) — последняя:**
-
-- Требует WebView2 — это уже GUI-стек.
-- Premium-путь проще и даёт работающий продукт для многих.
-- Free — расширение, не базис.
-
-**Фаза 4 — вариации дистрибутивов — вычеркнута.**
-
----
-
-## Ключевые принципы рефакторинга
-
-- Никаких больших изменений за один шаг. Каждый шаг компилируется.
-- 593 теста — зелёные на каждом шаге. Если упали — откат.
-- Ручной прогон на OmenRim 7 после каждой фазы.
-- Никаких изменений в pipeline, шагах, моделях. Только композиция.
-- `TryAddSingleton` в DI-extensions — защита от дублирования.
-- Никаких `Process.Start` для внутренних вызовов. Только прямые
-  вызовы pipeline.
-- GUI — отдельные проекты, ссылаются на pipeline. Обратных ссылок
-  нет.
-- CLI — первоклассный клиент. GUI — дополнение, не замена.
-
-## Что НЕ делать
-
-- Не делать «единый exe через `Process.Start` дочерних процессов».
-- Не выносить presentation в pipeline. Pipeline — оркестрация,
-  presentation — в клиентах.
-- Не делать GUI до Фазы 2 (общие API).
-- Не делать Free-стратегию (Фаза 5) до Premium (Фаза 6).
-- Не трогать `Firelink.Core`, `Firelink.Platform.*` — они не меняются.
-
----
-
-## Грабли и подводные камни
-
-Накопленные замечания. Актуальны при правках.
-
-### Про копипаст
-
-Были ошибки (`Pack.Steps` vs `Install.Steps`, пропущенные `Profile`,
-`params` vs named args, shadowing в тестах, `PluginsEntry` вместо
-`PluginEntry`). Если билд падает — вероятнее ошибка в коде ассистента.
-
-### Про BOM
-
-Файлы в репозитории часто с BOM (`\uFEFF`). При перезаписи файлов
-не копировать BOM из вывода dump. `firelink-pack.json` у автора тоже
-бывает с BOM — `PackConfigJson` читает его корректно, но лучше без.
-
-### Про samples
-
-`samples/*.json` копируются в output тестов через `PreserveNewest`.
-Если правите sample — обновите и исходник, и (при необходимости)
-очистите `bin/obj`.
-
-### Про пути
-
-Все проекты живут в `src/` и `tests/`. Новые проекты создавать
-**строго** в `tests/<Name>/`, иначе `..\..\src\...` в
-`ProjectReference` не разрешится.
-
-### Про пустой DisabledMod
-
-Мод без восстановимых файлов остаётся в манифесте с пустыми
-директивами. Installer создаёт папку, файлов нет. Это норма.
-
-### Про пустой extension/extra
-
-Entry с пустым списком директив **не попадает** в манифест.
-Unmatched уже выгружены в `__Firelink_Output`; entry без директив
-бессмысленна.
-
-### Про xUnit1031
-
-Не использовать `.GetAwaiter().GetResult()` в тестах. Если API
-async — тест `async Task`, `await`.
-
-### Про Spectre markup
-
-`[...]` — это разметка. Для имён файлов и мод-неймов (особенно
-`[NoDelete]`) — обязательно `Markup.Escape`.
-
-### Про verify-счётчики
-
-При отсутствии папки мода `CheckMod` делает `yield break` — одна
-fail-проверка вместо 10+ «file missing». Сознательное решение.
-
-### Про `Slug.FromFileName`
-
-`.7z` отрезается **до** slug-ификации. `FomodTools.7z` →
-`fomodtools`, `Mod.Organizer-2.5.2.7z` → `mod-organizer-2-5-2`.
-
-### Про `MatchStep.Input.Matcher`
-
-`internal`, не `required`. При создании `MatchStep` из тестов (не
-через DI) — **обязательно** задавать.
-`MatchExtensionsStep`/`MatchExtrasStep` — аналогично.
-
-### Про `Mod.Organizer-2.5.2.7z`
-
-Если файла нет в `OmenRim 7\MO2\downloads\`, pack пишет `Size = 0`
-для `manifest.Mo2.Archive`. **Не ошибка.** Hash берётся из
-`mo2.source.hash`.
-
-### Про runtime-файлы
-
-`.log`/`.ini` от SKSE-плагинов не восстанавливаются из архивов и
-уходят в `__Firelink_Output`. **Не пытаться «чинить»** — это
-правильное поведение.
-
-### Про `.bsa`/`.ba2`
-
-Единые файлы, не контейнеры для Firelink. Отдельных `.bsa` в
-`downloads/` не бывает на практике.
-
-### Про `meta.ini` в verify
-
-Сравнение **семантическое** (парсим через `MetaIniReader.Parse`,
-сравниваем `ModMeta` по полям). Нормализация: `null ≡ ""`.
-`mod.Meta == null` + файл есть → fail.
-
-### Про `ArchiveMatcher.BuildAsync`
-
-Async, отмена пробрасывается как есть
-(`catch (OperationCanceledException) { throw; }` **перед**
-`catch (Exception)`). В тестах хелпер называется
-`MakeMatcherAsync`, `await matcher.BuildAsync(ct)`.
-
-### Про `CancellationHelper`
-
-В `Firelink.Core`. Используется в `PackCommand`, `InstallCommand`,
-`VerifyCommand` и в `Program.cs` — `catch (Exception ex) when
-(CancellationHelper.IsCancellation(ex))`.
-
-### Про `config.PropagateExceptions()`
-
-Включено в CLI. Без него Spectre ловит `CommandParseException` сам
-и печатает свой формат без hint.
-
-### Про `install` без `--target` (Фаза 1)
-
-`firelink install <manifest>` без `--target` создаёт инстанс в
-`<exeDir>/Instances/<meta.name>/`, а **не рядом с манифестом**.
-Это архитектурное решение. Для переустановки поверх существующего
-инстанса — всегда указывать `--target`.
-
-### Про CS0104 при переезде CLI (Фаза 1)
-
-При переносе команд в `Firelink.Cli` возникли коллизии имён
-(`PackSettings`, `PackCommand` и т.д.) между `Firelink.Cli.*` и
-`Firelink.Pack.*`/`Firelink.Install.*`. Решались псевдонимами
-(`using X = Firelink.Cli.X;`). После шагов 1.3/1.4 псевдонимы убраны —
-коллизий больше нет, потому что `Firelink.Pack.Commands` и
-`Firelink.Install.Commands` больше не существуют.
-
----
-
-## Технический долг
-
-- Persist кеша хешей в SQLite (v0.2.0).
-- Глобальный реестр `archives.db` — v0.2.0.
-- Nexus API — **Фаза 6 (12.8)**.
-- Прогресс-бар Spectre — v0.2.0.
-- File-logging — v0.3.0.
-- `SyncModsStep` поддерживает только `FromArchive`.
-- `ConfigureMo2Step` — не делаем.
-- E1 (прогон на большом инстансе) — отменён по решению.
-- Механизм патчей для inline-файлов — v0.2.0+.
-
-## Сознательно не делаем
-
-- `ConfigureMo2Step` — автоконфигурация MO2.
-- Автопатчи / autoPack / inlinePatterns — отменены.
-- `repair` в CLI — install идемпотентен.
-- Обработка `.bsa`/`.ba2` как контейнеров — они единые файлы.
-- `firelink index`.
-- Фаза 4 — вариации дистрибутивов (2026-09-21).
-- Nexus Premium API как отдельная подписка (кроме Фазы 6).
-- Кеширование Nexus download-ссылок.
-
----
-
-## Окружение
-
-- Windows 10/11.
-- .NET 8 SDK (SDK 10 тоже).
-- Visual Studio 2022.
-- `C:\Firelink\TestInstance\` — MVP прогон (до 12.13.x), verify OK.
-- `C:\Firelink\TestInstance2\` — после 12.13.6, extensions/extras,
-  verify 0 failed.
-- `C:\Firelink\OmenRim 7\` — тестовый оригинал.
-- Большой инстанс — 4370 модов (не используется).
-
----
-
-## История изменений документа
-
-- **2026-09-21** — создан `FIRELINK.md`: объединены `HANDOFF.md`,
-  `PROJECT-STATE.md`, `ROADMAP.md`. Фаза 4 вычеркнута. Добавлен
-  раздел «Фаза 1 — Единый CLI» (решения 144–150). Обновлён план
-  работ с учётом закрытых шагов 1.1–1.4.
-- **2026-09-21** — Фаза 1 закрыта. Добавлены решения 150–152
-  (`AddFirelinkPack`/`AddFirelinkInstall`, `AddHttpClient<MirrorDownloader>`,
-  регистрация только CLI-специфики в `Program.cs`).
-  Раздел «План работ → Фаза 1» помечен как закрытый.
-- **2026-09-22** — legacy cleanup: удалены `HANDOFF.md` и
-  `PROJECT-STATE.md` (объединены в `FIRELINK.md` 2026-09-21).
-  Убраны записи из `Firelink.slnx`. Обновлена версия `DOC.md` до
-  v4.2 в шапке.
-
-````
-
-## Firelink.slnx
-
-````xml
-<Solution>
-  <Folder Name="/src/">
-    <Project Path="src/Firelink.Cli/Firelink.Cli.csproj" Id="dc3df7b9-060e-4849-b03a-73326885949c" />
-    <Project Path="src/Firelink.Core/Firelink.Core.csproj" />
-    <Project Path="src/Firelink.Install/Firelink.Install.csproj" />
-    <Project Path="src/Firelink.Pack/Firelink.Pack.csproj" />
-    <Project Path="src/Firelink.Platform.MO2/Firelink.Platform.MO2.csproj" />
-    <Project Path="src/Firelink.Platform.Nexus/Firelink.Platform.Nexus.csproj" />
-  </Folder>
-  <Folder Name="/tests/">
-    <Project Path="tests/Firelink.Core.Tests/Firelink.Core.Tests.csproj" />
-    <Project Path="tests/Firelink.Install.Tests/Firelink.Install.Tests.csproj" />
-    <Project Path="tests/Firelink.Integration.Tests/Firelink.Integration.Tests.csproj" Id="453e4164-1215-4415-9a5f-5c2ff85859fa" />
-    <Project Path="tests/Firelink.Pack.Tests/Firelink.Pack.Tests.csproj" />
-    <Project Path="tests/Firelink.Platform.MO2.Tests/Firelink.Platform.MO2.Tests.csproj" />
-  </Folder>
-  <Folder Name="/Элементы решения/">
-    <File Path="DOC.md" />
-    <File Path="FIRELINK.md" />
-  </Folder>
-</Solution>
-
-````
-
-## HANDOFF.md
-
-````markdown
-# Handoff — как продолжить проект Firelink в новом чате
-
-**Обновлено:** 2026-09-21
-**Последний закрытый блок:** 12.13.10 — error-msg для пробелов без кавычек
-**Следующий блок:** 12.8 — NexusDownloader
-**Всего тестов:** 593, 0 failed
-
----
-
-## Что это
-
-Firelink — C#/.NET 8 проект для создания и установки воспроизводимых
-сборок модов для Mod Organizer 2. Два CLI-приложения: `Firelink.Pack`
-(автор) и `Firelink.Install` (пользователь). Манифест `modlist.json` —
-единственный источник правды. Файлы восстанавливаются по хешам `xxHash64`.
-
----
-
-## Как начать работу в новом чате
-
-**Скопируйте в первое сообщение:**
-
-1. **HANDOFF.md** (этот файл) — полностью.
-2. **PROJECT-STATE.md** — полностью.
-3. **DOC.md** (v3.9) — полностью.
-4. **repo-dump.md** — свежий.
-
-**Первое сообщение — шаблон:**
-
-Продолжаем проект Firelink. Стиль — пошаговые блоки кода с тестами.
-
-Прикладываю: HANDOFF.md, PROJECT-STATE.md, DOC.md (v3.9), repo-dump.md (свежий).
-
-Текущее состояние: 593 теста, 0 failed. Закрыты блоки 10.7, 11,
-12.1–12.7, 12.10.1–12.10.3, 12.6.1, Packer fix, Meta.ini fix, GitHub cleanup,
-12.12, 12.11.1–12.11.7 (Verify + Ctrl+C), 12.13.1–12.13.10
-(extensions/extras + таблицы CLI + error-msg), 13.1 (общий helper скачивания).
-
-MVP работает end-to-end. Прогон на C:\Firelink\TestInstance2\ успешен.
-Verify 4338 passed на OmenRim 7, 0 failed. Остался только 12.8 (Nexus).
-
-Следующая задача: 12.8 — NexusDownloader.
-
-Стиль ответов:
-- Разбор задачи.
-- Полный код файлов с путями.
-- Инструкция по сборке/тестам.
-- Ожидаемый вывод dotnet test.
-- HANDOFF.md и PROJECT-STATE.md — только по запросу.
-
-Не пиши код, пока я не подтвержу готовность.
-
----
-
-## Стиль работы
-
-- **Файлы давать целиком**, не патчами.
-- **Запускать `dotnet test` сразу** после каждого блока.
-- **Присылать полный вывод** тестов при падении (текст).
-- **HANDOFF.md и PROJECT-STATE.md** — только по запросу.
-- **Не менять архитектурные решения без обсуждения.**
-- **Не отвечать на китайском.**
-- **Разбивать крупные блоки на 12.x.y.**
-- **Не писать код, пока не подтверждена готовность.**
-
-### Замечания (накопленные)
-
-- **Про копипаст:** были ошибки (`Pack.Steps` vs `Install.Steps`,
-  пропущенные `Profile`, `params` vs named args, shadowing в тестах,
-  `PluginsEntry` вместо `PluginEntry`).
-  Если билд падает — вероятнее ошибка в коде ассистента.
-- **Про BOM:** файлы в репозитории часто с BOM (`\uFEFF`).
-  При перезаписи файлов не копировать BOM из вывода `dump`.
-  `firelink-pack.json` у автора тоже бывает с BOM — `PackConfigJson`
-  читает его корректно, но лучше без.
-- **Про samples:** `samples/*.json` копируются в output
-  тестов через `PreserveNewest`. Если правите sample — обновите и
-  исходник, и (при необходимости) очистите `bin/obj`.
-- **Про пути:** все проекты живут в `src/` и `tests/`.
-  Новые проекты создавать **строго** в `tests/<Name>/`, иначе
-  `..\..\src\...` в ProjectReference не разрешится.
-- **Про пустой DisabledMod:** мод без восстановимых файлов
-  остаётся в манифесте с пустыми директивами. Installer создаёт
-  папку, файлов нет. Это норма.
-- **Про пустой extension/extra:** entry с пустым списком директив
-  **не попадает** в манифест (решение №114). Unmatched уже
-  выгружены в `__Firelink_Output`; entry без директив бессмысленна.
-- **Про xUnit1031:** не использовать `.GetAwaiter().GetResult()`
-  в тестах. Если API async — тест `async Task`, `await`.
-- **Про Spectre markup:** `[...]` — это разметка.
-  Для имён файлов и мод-неймов (особенно `[NoDelete]`) — обязательно
-  `Markup.Escape`.
-- **Про verify-счётчики:** при отсутствии папки мода
-  `CheckMod` делает `yield break` — одна fail-проверка вместо
-  10+ «file missing». Сознательное решение.
-- **Про `Slug.FromFileName`:** `.7z` отрезается **до**
-  slug-ификации. `FomodTools.7z` → `fomodtools`,
-  `Mod.Organizer-2.5.2.7z` → `mod-organizer-2-5-2`.
-- **Про `MatchStep.Input.Matcher`:** `internal`, не `required`.
-  При создании `MatchStep` из тестов (не через DI) — **обязательно**
-  задавать. `MatchExtensionsStep`/`MatchExtrasStep` — аналогично.
-- **Про `Mod.Organizer-2.5.2.7z`:** если файла нет
-  в `OmenRim 7\MO2\downloads\`, pack пишет `Size = 0` для
-  `manifest.Mo2.Archive`. **Не ошибка.** Hash берётся из `mo2.source.hash`.
-- **Про runtime-файлы:** `.log`/`.ini` от SKSE-плагинов
-  не восстанавливаются из архивов и уходят в `__Firelink_Output`.
-  **Не пытаться «чинить»** — это правильное поведение.
-- **Про `.bsa`/`.ba2`:** единые файлы, не контейнеры для Firelink.
-  Отдельных `.bsa` в `downloads/` не бывает на практике.
-- **Про `meta.ini` в verify:** сравнение **семантическое** (парсим
-  через `MetaIniReader.Parse`, сравниваем `ModMeta` по полям).
-  Нормализация: `null ≡ ""`. `mod.Meta == null` + файл есть → fail.
-- **Про `ArchiveMatcher.BuildAsync`:** async, отмена пробрасывается
-  как есть (`catch (OperationCanceledException) { throw; }` **перед**
-  `catch (Exception)`). В тестах хелпер называется `MakeMatcherAsync`,
-  `await matcher.BuildAsync(ct)`.
-- **Про `CancellationHelper`:** в `Firelink.Core`. Используется
-  в `PackCommand`, `InstallCommand`, `VerifyCommand` и в обоих
-  `Program.cs` — `catch (Exception ex) when (CancellationHelper.IsCancellation(ex))`.
-- **Про `config.PropagateExceptions()`:** включено в обоих CLI,
-  чтобы `CommandParseException` долетел до нашего `catch`. Без этого
-  Spectre ловит его сам и печатает свой формат без hint.
-
----
-
-## Стек
-
-- **.NET 8**, C# 12.
-- **xUnit + FluentAssertions**.
-- **Spectre.Console.Cli** 0.48.0 (с `PropagateExceptions`).
-- **System.Text.Json**.
-- **System.IO.Hashing (xxHash64)**.
-- **Microsoft.Data.Sqlite** (v0.2.0).
-- **Microsoft.Extensions.*** — DI, Logging, Http.
-- **Polly** (в `Firelink.Core` — блок 5).
-- **7z.exe + 7z.dll**.
-- **SharpCompress удалён.**
-- **Octokit удалён.**
-
----
-
-## Ключевые архитектурные решения (не переделывать)
-
-### Packer
-
-1. **`meta.game` = Nexus game domain.**
-2. **`instance.path`** — относительный.
-3. **`mo2.profile`** — обязательный.
-4. **`mo2.source` — обязательно `MirrorSourceRef`.**
-5. **`mo2.archive.size/hash` — из `mo2.source.hash`** (size с диска,
-   если файл есть).
-6. **MO2-архив НЕ попадает в `manifest.Archives[]`.**
-7. **`mo2.extensions`** — от `MO2/`. **`stockGame.extras`** — от `Stock Game/`.
-8. **`.meta`** — Nexus-формат. `MetaReader.TryRead`.
-9. **Канонический id:** `nexus_...` / `local_{slug}`.
-10. **`archiveSources`** вместо `mirrors`.
-11. **Slug** — ASCII-only.
-12. **Semver** — регулярка semver.org.
-13. **`Pack*`-модели** — `record`.
-14. **`ValidationResult`** — накапливает ошибки.
-15. **Trailing slash** разрешён.
-16. **Зарезервированные имена Windows** запрещены.
-17. **Модели MO2** — в `Core.Models.Mo2`.
-18. **CLI** — Spectre.Console.Cli + `TypeRegistrar` + `PropagateExceptions`.
-19. **CLI требует явной команды.**
-20. **Структура инстанса:** MO2/, Stock Game/, `__Firelink_Output/`.
-21. **`ModlistReader`** читает все строки.
-22. **`[NoDelete]`** — через `Contains`.
-23. **`.meta` не считается архивом.**
-24. **Невалидный `.meta`** → fallback.
-25. **`MirrorSourceRef.Hash` обязателен.**
-26. **`XxHash64Value`** — `xxh64:hex`, 16 символов.
-27. **`MatchStep`** делегирует матчинг `ArchiveMatcher`-у.
-28. **`meta.ini` в корне мода** → `ModMetas`.
-29. **Unmatched модов** → `__Firelink_Output/MO2/mods/<ModName>/<path>`.
-30. **`7z.exe` + `7z.dll`** через `Directory.Build.targets`.
-31. **`SevenZipExtractor`** — таймаут 10 минут.
-32. **`__Firelink_Output`** — каталог автора.
-33. **`MatchResult`** — `ModDirectives` + `Unmatched` + `ModMetas`.
-34. **`MetaIniReader`** — `[General]`. Ключи case-insensitive.
-35. **`MetaIniWriter`** — `[General]`, camelCase, без `[installedFiles]`,
-    без BOM, CRLF. Не пишет `category`.
-36. **`ModMeta` — без `Category`.**
-37. **`.mohidden` — часть пути.**
-38. **`mods[].meta` со всеми полями** (кроме `Category`).
-39. **`createdAt`** — `yyyy-MM-ddTHH:mm:ss.fffZ`.
-40. **`InlineFileContent` / `OrphanFile` / `InlineFile` удалены.**
-41. **`PackCommand`:** `Manifest archives`, `Manifest extensions`,
-    `Manifest extras`, `mo2.archive`, `Unmatched written to` при `> 0`.
-42. **Сепараторы** сохраняются в манифесте.
-43. **`ScanModsStep`:** сепаратор без папки → `LogDebug`.
-44. **Мод без восстановимых файлов остаётся в манифесте с пустыми
-    директивами.**
-45. **`ArchiveMatcher`** — в `Firelink.Pack.Matching`. Детерминизм
-    при дубликатах: минимальный `archiveId` (Ordinal).
-    `InternalsVisibleTo("Firelink.Pack.Tests")`. Принимает
-    `ILogger<ArchiveMatcher>`. Метод — `BuildAsync(ct)` (12.11.7.1).
-46. **`ScanExtensionsStep`/`ScanExtrasStep`** — тип результата
-    `EntryScanResult`. `RelativePath` файла — ОТ КОРНЯ MO2/ или
-    Stock Game/. `Parallel.ForEach` + восстановление порядка ключей.
-    Отсутствие entry → `FileNotFoundException`.
-47. **`MatchExtensionsStep`/`MatchExtrasStep`** — тип результата
-    `MatchEntriesResult`. Принимают `ArchiveMatcher` через
-    `Input.Matcher` (`internal`, не `required`). Unmatched **не пишут**
-    на диск — это делает `PackPipeline`.
-48. **`Mo2ArchiveBuilder`** — статический класс в `Firelink.Pack.Matching`.
-    Один источник правды для построения `ArchiveEntry` MO2-архива.
-49. **Unmatched extensions** → `__Firelink_Output/MO2/<relativePath>`
-    (плоско). **Unmatched extras** → `__Firelink_Output/Stock Game/<relativePath>`.
-    `EntryName` на путь не влияет — только `RelativePath`.
-50. **`PackPipeline`** перед write unmatched чистит
-    `__Firelink_Output/MO2/` (кроме `mods/`) и
-    `__Firelink_Output/Stock Game/`. Папки `MO2/` (без `mods/`) и
-    `Stock Game/` создаются **только** при `entries.Count > 0`.
-51. **`PackPipeline`** создаёт `ArchiveMatcher` один раз, `BuildAsync`,
-    передаёт в `MatchStep`, `MatchExtensions`, `MatchExtras` (12.13.6).
-
-### Installer
-
-52. **Инстансы:** `<exeDir>/Instances/<normalize(meta.name)>/`.
-53. **Копирование манифеста** — `ResolveTargetStep`.
-54. **`--target <dir>`** — escape-hatch.
-55. **`meta.name` перепроверяется.**
-56. **`ValidateTargetStep`** — 4 проверки.
-57. **`[NoDelete]`** — уважаем.
-58. **Существующая папка** — рефлорация.
-59. **`verify` — да, `repair` — нет.**
-60. **File-logging — v0.3.0.**
-61. **Прогресс-бары — v0.2.0.**
-62. **`BootstrapInstanceStep`** — создаёт все папки.
-63. **`IArchiveDownloader`** — абстракция.
-64. **`DownloaderRegistry`** — map sourceType → downloader.
-65. **`SyncArchivesStep`** — только `manifest.Archives`, не трогает MO2.
-66. **Hash — источник правды.**
-67. **Ничего не удаляем** из `downloads/`.
-68. **GitHub — удалён.** Всё через `mirror`.
-69. **Параллельная загрузка** — `ParallelOptions`.
-70. **3 попытки + Polly backoff (2 сек).**
-71. **Скачивание в `.part`**, `File.Move` после проверки.
-72. **Проверка хеша после скачивания обязательна.**
-73. **`nexus` до 12.8 — warning + `Skipped`.**
-74. **Глобальный реестр — v0.2.0.**
-75. **`IHttpClientFactory` через DI.**
-76. **`SyncModsStep`** — reconcile `mods/`.
-77. **Только `FromArchive` директивы.**
-78. **`TempWorkspace` на мод.**
-79. **Файлы, которых нет в директивах, — удаляются** (recreate).
-80. **Откат при ошибке — никакого.**
-81. **`SyncModsStep.Input.ArchivesById`.**
-82. **`SyncModsStep.Output`:** `Created`/`Recreated`/`Skipped`/`Deleted`.
-83. **Сепараторы в `SyncModsStep`:** pass 1 — `Skipped`; pass 2 —
-    не удаляются.
-84. **`GenerateMetaIniStep`:** reconcile `meta.ini`.
-85. **`RegenerateProfileStep`:** сортировка по `Order` ascending,
-    **без `Reverse()`**.
-86. **`BootstrapMo2Step` — самодостаточный.** Распаковка всегда, с заменой.
-87. **`BootstrapMo2Step.Output = Input`.**
-88. **Порядок pipeline:** BootstrapInstance → BootstrapMo2 → SyncArchives →
-    ExecuteExtensions → ExecuteExtras → SyncMods → GenerateMetaIni →
-    RegenerateProfile.
-89. **`ConfigureMo2Step`** — не делаем.
-90. **`InstallPipeline`** — склейка шагов.
-91. **`InstallPipeline.BuildArchivesById`** — включая MO2-архив.
-92. **`InstallCommand`** — печатает таблицу, включая extensions/extras.
-93. **DI:** шаги — синглтоны, `MirrorDownloader` — через `AddHttpClient<T>`,
-    регистрируется как `IArchiveDownloader`.
-94. **`ExecuteExtensionsStep`** — раскладывает `manifest.Mo2.Extensions[]`
-    в `<target>/MO2/`. Группирует директивы по archiveId, extract один
-    раз на архив, `FileMatches`-skip для идемпотентности.
-95. **`ExecuteExtrasStep`** — симметричен `ExecuteExtensionsStep`, корень
-    `<target>/Stock Game/`.
-96. **`ExecuteExtensionsStep`/`ExecuteExtrasStep` — Skipped**, если
-    файлы уже на месте.
-
-### Verify
-
-97. **Verify — read-only.**
-98. **Изоляция (вариант A).**
-99. **`VerifyPipeline.Execute` — синхронный.**
-100. **Проверки — приватные методы внутри `VerifyPipeline`.**
-101. **`VerifyContext`** — единый контекст.
-102. **`VerifyReport`** — `Checks`, `IsOk`, `PassedCount`, `FailedCount`.
-103. **`VerifyCheckResult`** — `Name`, `Passed`, `Message`.
-104. **Регенерация modlist.txt / plugins.txt / loadorder.txt в память**
-     через `Serialize`-методы writer-ов.
-105. **Сравнение `meta.ini`** — семантическое.
-106. **`schemaVersion`** — через `ManifestSchema.IsSupported`.
-107. **Пустые директивы у disabled-мода** — OK.
-108. **Return code CLI:** 0 — OK, 1 — есть падения, 2 — ошибка, 130 — Ctrl+C.
-109. **`ManifestJson.Load` / `Save` — sync-версии для verify.**
-110. **`VerifyCommand`** — summary + провалы; `--verbose` — все проверки.
-      `Markup.Escape`.
-111. **`VerifySettings`** — `<target>` + `--verbose`/`-v`.
-112. **`CheckMod` делает `yield break`** при отсутствии папки мода.
-113. **Verify проверяет extensions/extras.** Общий helper
-      `CheckDirectiveFile(displayPrefix, rootPath, directive)`.
-
-### Cancellation / CLI (12.11.7, 12.13.10)
-
-114. **`CancellationHelper.IsCancellation`** в `Firelink.Core` —
-      распознаёт отмену, включая `AggregateException` со всеми
-      cancellation-inner.
-115. **`ArchiveMatcher.BuildAsync`** — async; `catch (OperationCanceledException)
-      { throw; }` **перед** `catch (Exception)`.
-116. **`PackCommand`/`InstallCommand`/`VerifyCommand`** — `catch (Exception ex)
-      when (CancellationHelper.IsCancellation(ex))` → `Cancelled.` + exit 130.
-      `Console.CancelKeyPress` подписывается на время выполнения команды,
-      `e.Cancel = true` + `cts.Cancel()`, отписка в `finally`.
-117. **`Program.cs` обоих CLI** — `catch (Exception ex)
-      when (CancellationHelper.IsCancellation(ex))` → `Cancelled.` + exit 130
-      (fallback на случай отмены до подписки).
-118. **`config.PropagateExceptions()`** включено в обоих CLI. Без него
-      Spectre перехватывает `CommandParseException` и `OperationCanceledException`
-      до нашего `try/catch`.
-119. **`catch (CommandParseException ex)`** в `Program.cs` — печатает
-      `CLI error: <msg>` + `Hint: paths with spaces must be quoted: ...`
-      (hint только если в `argv` нет строк с пробелами — иначе проблема
-      не в кавычках).
-
-### 12.13.x
-
-120. **`BuildManifestStep.BuildExtensions`/`BuildExtras`** пропускают
-     entry с пустым списком директив.
-121. **`PackPipeline`** добавляет MO2-архив в `ArchiveIndex` перед
-     созданием `ArchiveMatcher`: `archiveIndexWithMo2 = AddMo2ArchiveToResolved(...)`.
-122. **`Slug.FromFileName`** отрезает **последнее** расширение до
-     slug-ификации.
-123. **`MatchStep` использует общий `ArchiveMatcher` через
-     `Input.Matcher`.**
-124. **`.bsa`/`.ba2` — единые файлы, не контейнеры.**
-125. **CLI-таблицы `PackCommand`/`InstallCommand` включают
-     extensions/extras.**
-126. **`ArchiveDownloadHelper`** в `Firelink.Core.Archives` —
-     общий helper скачивания (`.part`, retry через Polly, hash-check).
-
----
-
-## Что сделано (кратко)
-
-**Pipeline packer-а:**
-
-ReadConfigStep → ReadInstanceStep → IndexArchivesStep → ScanModsStep →
-ScanExtensionsStep → ScanExtrasStep →
-**[build ArchiveMatcher]** →
-MatchStep → MatchExtensionsStep → MatchExtrasStep →
-**[write unmatched extensions/extras]** →
-BuildManifestStep → ValidateManifestStep → WriteManifestStep
-
-**Pipeline installer-а:**
-
-ReadManifestStep → ResolveTargetStep → ValidateTargetStep →
-BootstrapInstanceStep → BootstrapMo2Step → SyncArchivesStep →
-ExecuteExtensionsStep → ExecuteExtrasStep → SyncModsStep →
-GenerateMetaIniStep → RegenerateProfileStep
-
-**Оркестратор:** `InstallPipeline`.
-**CLI:** `InstallCommand`, `VerifyCommand`.
-
-**MVP работает:**
-- Прогон на `C:\Firelink\TestInstance\` — успешно (до 12.13.x).
-- **Реальный прогон на `OmenRim 7` после 12.13.6:**
-  - Pack: 82 мода, 4236 matched-директив, 69 архивов,
-    49/49 extensions, 2/2 extras, 6 unmatched (runtime).
-  - Install: 82 мода, 82 meta.ini, 1 extension written, 2 extras written.
-  - Verify: **4338 passed, 0 failed**.
-
-**593 теста, 0 failed.**
-
----
-
-## План работы — оставшиеся блоки
-
-**Всё, кроме 12.8, закрыто.**
-
-### Блок 9 — 12.8: `NexusDownloader` ← **СЛЕДУЮЩИЙ**
-
-**Цель:** убрать warning `No downloader for source type 'nexus'`
-и дать возможность скачивать архивы с Nexus напрямую.
-
-**Разбиение:**
-
-- **12.8.1** — `NexusClient` + `NexusApiKeyProvider` + модели ответов.
-  HTTP к `https://api.nexusmods.com/v1/`. API-ключ из
-  `%USERPROFILE%\.firelink\nexus.key`.
-- **12.8.2** — `NexusDownloader : IArchiveDownloader` (`SourceType => "nexus"`).
-  `DownloadAsync`: получить ссылку через `NexusClient`, скачать
-  `HttpClient`-ом. Hash — на стороне `SyncArchivesStep` (через
-  `ArchiveDownloadHelper`).
-- **12.8.3** — DI в `Firelink.Install/Program.cs` + тесты с
-  fake-`HttpMessageHandler`.
-- **12.8.4** — обновить DOC/HANDOFF/PROJECT-STATE.
-
-**Что НЕ делаем:**
-- Nexus Premium API (отдельная подписка).
-- Кеширование ссылок.
-
-**Ожидаемый `dotnet test`:** ~610 passed.
-
----
-
-## Отложено на v0.2.0+
-
-- Глобальный реестр `archives.db` (SQLite).
-- Persist кеша хешей.
-- Прогресс-бар Spectre.
-- File-logging.
-- Механизм патчей для inline-файлов.
-- Nexus Premium API.
-
-## Сознательно не делаем
-
-- `ConfigureMo2Step` — автоконфигурация MO2.
-- Автопатчи / autoPack / inlinePatterns — отменены.
-- `repair` в CLI — install идемпотентен.
-- Обработка `.bsa`/`.ba2` как контейнеров — они единые файлы.
-- `firelink index`.
-
----
-
-## Окружение
-
-- Windows 10/11.
-- .NET 8 SDK (SDK 10 тоже).
-- Visual Studio 2022.
-- `C:\Firelink\TestInstance\` — MVP прогон (до 12.13.x).
-- `C:\Firelink\TestInstance2\` — после 12.13.6, extensions/extras,
-  verify 0 failed.
-- `C:\Firelink\OmenRim 7\` — тестовый оригинал.
-- Большой инстанс — 4370 модов (прогон E1 отменён, не критично).
-
-````
-
-## PROJECT-STATE.md
-
-````markdown
-# Firelink — состояние проекта
-
-**Обновлено:** 2026-09-21
-**Всего тестов:** 593, 0 failed
-**Текущий блок:** ничего (все хвосты закрыты)
-**Последний закрытый блок:** 12.13.10 — error-msg для пробелов без кавычек
-**Следующий блок:** 12.8 — NexusDownloader
-
----
-
-## Что это
-
-Firelink — инструмент для создания и установки воспроизводимых сборок
-модов для Mod Organizer 2. Два CLI: `Firelink.Pack` (автор) и
-`Firelink.Install` (пользователь). Манифест `modlist.json` — единственный
-источник правды. Файлы восстанавливаются по хешам `xxHash64`.
-
-Подробности — в `DOC.md` (v3.9). План — в `HANDOFF.md`.
-
----
-
-## Статус MVP
-
-**MVP работает end-to-end:**
-
-- Прогон `firelink-install install` на `C:\Firelink\TestInstance\`
-  (19.09.2026, до 12.13.x).
-- 82 мода разложены, 82 meta.ini записаны, профиль сгенерирован.
-- **12.11.1–12.11.3:** Verify (Pipeline + Tests + CLI).
-- **12.11.5:** `meta.ini` в verify (семантическое сравнение).
-- **12.11.6:** extensions/extras в verify.
-- **12.11.7:** Ctrl+C в CLI (Normalized cancellation + `CancellationHelper`).
-- **12.11.7.1:** `ArchiveMatcher.Build` → `BuildAsync`, отмена
-  пробрасывается.
-- **12.12:** integration pack → install.
-- **12.13.1:** ArchiveMatcher + фикс Unmatched root + InternalsVisibleTo.
-- **12.13.2:** ScanExtensionsStep + ScanExtrasStep + EntryScanResult.
-- **12.13.3:** MatchExtensionsStep + MatchExtrasStep + MatchEntriesResult.
-- **12.13.4:** BuildManifestStep + PackPipeline + DI + write unmatched.
-- **12.13.5:** integration test pack → install с extensions/extras.
-- **12.13.6:** унификация extract-а `MatchStep` через `ArchiveMatcher`.
-- **12.13.7 + 12.13.8:** таблицы CLI включают extensions/extras.
-- **12.13.10:** error-msg для пробелов без кавычек.
-- **13.1:** общий helper скачивания `ArchiveDownloadHelper`.
-
-**Реальный прогон на `OmenRim 7` после 12.13.6 (2026-09-20):**
-- Pack: 82 мода, 4236 matched-директив, 69 архивов.
-  - extensions (`plugins/curationclub`) — 49/49 matched.
-  - extras (`skse64_loader.exe`, `skse64_1_7_104.dll`) — 2/2 matched.
-  - 6 unmatched (runtime `.log`/`.ini` от SKSE) → `__Firelink_Output`.
-- Install: 82 мода, 82 meta.ini, 1 extension written, 2 extras written.
-- Verify: **4338 passed, 0 failed**.
-- `ArchiveMatcher` — **один** extract на 70 архивов (12.13.6).
-
----
-
-## Структура репозитория (после 12.13.10 + 13.1 + 12.11.7)
-C:\Code\Firelink
-Firelink.slnx
-Directory.Build.props
-Directory.Build.targets
-Directory.Packages.props
-DOC.md ← v3.9
-PROJECT-STATE.md
-HANDOFF.md
-repo-dump.md
-samples/
-firelink-pack.minimal.json
-firelink-pack.full.json
-firelink-pack.invalid-name.json
-firelink-pack.invalid-path.json
-firelink-pack.invalid-version.json
-src/
-Firelink.Core/
-Abstractions/ (IStep, IArchiveDownloader)
-CancellationHelper.cs ← блок 6
-Hashing/ (XxHash64Value, XxHash64ValueJsonConverter)
-Models/Manifest/
-ArchiveEntry, ModlistManifest, ManifestJson (Load/Save sync),
-ManifestSchema, UtcDateTimeOffsetJsonConverter, ModMeta,
-Directives/ (Directive, FromArchiveDirective,
-CreateDirectoryDirective, DeleteDirective),
-Sources/ (ArchiveSourceRef, NexusSourceRef, MirrorSourceRef)
-Models/Mo2/ (ModlistEntry, ModlistFile, PluginEntry, PluginsFile,
-LoadorderFile)
-Models/Pack/ (PackConfig, PackMeta, PackInstance, PackMo2,
-PackStockGame, PackArchiveSource, PackConfigJson,
-InstanceSnapshot, MatchResult, ModScanResult,
-UnmatchedFile, UnmatchedEntry, EntryScanResult,
-ArchiveIndex, MatchEntriesResult)
-Identity/ (Slug, ArchiveId)
-Validation/ (ValidationResult, NameValidator, SemverValidator,
-RelativePathValidator, InstancePathValidator,
-PackConfigValidator)
-Archives/ (ArchiveExtensions, FileHashCache,
-ArchiveDownloadHelper, ← блок 5
-Extraction/ (IArchiveExtractor, SevenZipExtractor,
-TempWorkspace))
-Assets/7z/ (7z.exe, 7z.dll, License.txt)
-Firelink.Platform.MO2/
-Models/MetaFile.cs
-Readers/ (ModlistReader, PluginsReader, LoadorderReader,
-MetaReader, MetaIniReader)
-Writers/ (ModlistWriter, PluginsWriter, LoadorderWriter,
-MetaIniWriter; + Serialize)
-Firelink.Platform.Nexus/ (пусто)
-Firelink.Pack/
-Commands/ (PackCommand, HashCommand, DoctorCommand)
-Settings/ (PackSettings, DoctorSettings)
-Infrastructure/TypeRegistrar.cs
-Matching/ (ArchiveMatcher, ArchiveIndexes, Mo2ArchiveBuilder)
-Steps/ (ReadConfigStep, ReadInstanceStep, IndexArchivesStep,
-ScanModsStep, ScanExtensionsStep, ScanExtrasStep,
-MatchStep, MatchExtensionsStep, MatchExtrasStep,
-BuildManifestStep, ValidateManifestStep, WriteManifestStep)
-PackPipeline.cs
-Program.cs (с PropagateExceptions + CommandParseException catch)
-Firelink.Install/
-Commands/ (InstallCommand, VerifyCommand, DoctorCommand)
-Settings/ (InstallSettings, VerifySettings, DoctorSettings)
-Infrastructure/TypeRegistrar.cs
-Downloaders/ (MirrorDownloader, DownloaderRegistry)
-Steps/ (ReadManifestStep, ResolveTargetStep, ValidateTargetStep,
-BootstrapInstanceStep, BootstrapMo2Step, SyncArchivesStep,
-ExecuteExtensionsStep, ExecuteExtrasStep, SyncModsStep,
-GenerateMetaIniStep, RegenerateProfileStep)
-Verify/ (VerifyContext, VerifyCheckResult, VerifyReport, VerifyPipeline)
-InstallPipeline.cs
-Program.cs (с PropagateExceptions + CommandParseException catch)
-tests/
-Firelink.Core.Tests/
-Firelink.Platform.MO2.Tests/
-Firelink.Pack.Tests/
-ArchiveMatcherTests.cs
-ScanExtensionsStepTests.cs
-ScanExtrasStepTests.cs
-MatchExtensionsStepTests.cs
-MatchExtrasStepTests.cs
-Firelink.Install.Tests/
-Verify/ (VerifyPipelineTests)
-Firelink.Integration.Tests/
-PackInstallRoundtripTests.cs
-PackInstallExtensionsExtrasTests.cs
-
-text
-
-Реальные инстансы:
-
-- `C:\Firelink\TestInstance\` — MVP прогон (до 12.13.x), verify OK.
-- `C:\Firelink\TestInstance2\` — после 12.13.6, 82 мода,
-  extensions/extras, verify 0 failed.
-- `C:\Firelink\OmenRim 7\` — тестовый оригинал.
-- Большой инстанс — 4370 модов (прогон E1 отменён).
-
----
-
-## Пайплайн packer-а (полный)
-ReadConfigStep → ReadInstanceStep → IndexArchivesStep → ScanModsStep →
-ScanExtensionsStep → ScanExtrasStep →
-[build ArchiveMatcher via BuildAsync] →
-MatchStep → MatchExtensionsStep → MatchExtrasStep →
-[write unmatched extensions/extras] →
-BuildManifestStep → ValidateManifestStep → WriteManifestStep
-
-text
-
----
-
-## Пайплайн installer-а
-ReadManifestStep → ResolveTargetStep → ValidateTargetStep →
-BootstrapInstanceStep → BootstrapMo2Step → SyncArchivesStep →
-ExecuteExtensionsStep → ExecuteExtrasStep → SyncModsStep →
-GenerateMetaIniStep → RegenerateProfileStep
-
-text
-
-**CLI:** `firelink-install install <manifest> [--target <dir>]`.
-**CLI:** `firelink-install verify <target> [--verbose]`.
-
----
-
-## Прогоны на реальных инстансах
-
-**`C:\Firelink\TestInstance\` (19.09.2026, до 12.13.x):**
-
-- Install: 82 мода, 68 архивов, 82 meta.ini, профиль `Default`.
-- Verify: 4337 passed (здоровый), 4310/2 (сломанный), install
-  восстанавливает.
-
-**`C:\Firelink\TestInstance2\` (20.09.2026, после 12.13.6, `OmenRim 7`):**
-
-- Pack: 82 мода, 4236 matched, 69 архивов, 49/49 extensions, 2/2 extras.
-- Install: 82 мода, 1 extension written, 2 extras written, 82 meta.ini.
-- Verify: **4338 passed, 0 failed**.
-
----
-
-## CLI: сценарии и exit codes
-
-| Сценарий | Вывод | Exit code |
-|---|---|---|
-| `pack` OK | таблица, `Done.` | 0 |
-| `pack` с пробелами без кавычек | `CLI error` + hint | 2 |
-| `pack` без `<config>` | `ERROR: Command 'pack' is missing required argument 'config'.` | 2 |
-| `pack` + Ctrl+C | `Cancelled.` | 130 |
-| `install` OK | таблица, `Done.` | 0 |
-| `install` + Ctrl+C | `Cancelled.` | 130 |
-| `verify` OK | `All checks passed.` | 0 |
-| `verify` с падениями | summary + failures | 1 |
-
----
-
-## Что в работе
-
-Ничего. Все хвосты MVP закрыты.
-
----
-
-## Следующий блок
-
-**12.8 — NexusDownloader.** Подробное описание — в `HANDOFF.md`,
-раздел «План работы».
-
----
-
-## Технический долг
-
-- Persist кеша хешей в SQLite (v0.2.0).
-- Глобальный реестр `archives.db` — v0.2.0.
-- Nexus API — **12.8**.
-- Прогресс-бар Spectre — v0.2.0.
-- `Firelink.Platform.Nexus` пуст — до 12.8.
-- `SyncModsStep` поддерживает только `FromArchive`.
-- `ConfigureMo2Step` — не делаем.
-- E1 (прогон на большом инстансе) — отменён по решению.
-
----
-
-## Окружение
-
-- Windows 10/11.
-- .NET 8 SDK (SDK 10 тоже).
-- Visual Studio 2022.
-- `C:\Firelink\TestInstance\` — MVP прогон (до 12.13.x).
-- `C:\Firelink\TestInstance2\` — после 12.13.6, extensions/extras,
-  verify 0 failed.
-- `C:\Firelink\OmenRim 7\` — тестовый оригинал.
-- Большой инстанс — 4370 модов (не используется).
-
-````
-
-## repo-dump-extra.md
-
-````markdown
-# Firelink -- repo dump
-
-**Generated:** 22.09.2026  0:26:29,26
-**Root:** C:\Code\Firelink
-
----
-
-## .editorconfig
-
-````text
-root = true
-
-[*]
-charset = utf-8
-end_of_line = crlf
-insert_final_newline = true
-trim_trailing_whitespace = true
-indent_style = space
-indent_size = 4
-
-[*.{cs,csx}]
-dotnet_sort_system_directives_first = true
-dotnet_style_qualification_for_field = false:suggestion
-dotnet_style_qualification_for_property = false:suggestion
-csharp_style_var_for_built_in_types = true:suggestion
-csharp_style_var_when_type_is_apparent = true:suggestion
-csharp_prefer_braces = true:suggestion
-csharp_style_namespace_declarations = file_scoped:warning
-dotnet_diagnostic.CA1822.severity = none
-
-[*.{csproj,props,targets}]
-indent_size = 2
-
-[*.json]
-indent_size = 2
-
-[*.{yml,yaml}]
-indent_size = 2
-````
-
-## .gitignore
-
-````text
-# --- Visual Studio / Rider / VS Code ---
-.vs/
-.idea/
-.vscode/
-*.user
-*.suo
-
-# --- Build output ---
-[Bb]in/
-[Oo]bj/
-[Dd]ebug/
-[Rr]elease/
-x64/
-x86/
-[Ww][Ii][Nn]32/
-[Aa][Rr][Mm]/
-[Aa][Rr][Mm]64/
-build/
-build_artifacts/
-
-# --- NuGet ---
-*.nupkg
-*.snupkg
-**/packages/*
-!**/packages/build/
-.nuget/
-
-# --- Test / coverage ---
-[Tt]est[Rr]esult*/
-*.trx
-coverage/
-*.coverage
-*.coveragexml
-
-# --- OS junk ---
-Thumbs.db
-ehthumbs.db
-Desktop.ini
-$RECYCLE.BIN/
-*.lnk
-.DS_Store
-
-# --- Firelink-specific ---
-# Логи, которые Firelink пишет
-firelink.log
-firelink-*.log
-
-# Локальные инстансы MO2, которые не надо коммитить
-# (раскомментируйте, если инстанс лежит рядом с репо)
-# Firelink/
-# OmenRim 7/
-````
-
-## samples/firelink-pack.full.json
-
-````json
-{
-  "meta": {
-    "name": "Nordic UI Overhaul",
-    "version": "1.2.0",
-    "author": "Username",
-    "game": "skyrimspecialedition",
-    "gameVersion": "1.6.1170"
-  },
-  "instance": {
-    "path": "NordicUI Overhaul"
-  },
-  "mo2": {
-    "version": "2.5.2",
-    "profile": "NordicUI",
-    "archive": "Mod.Organizer-2.5.2.7z",
-    "source": {
-      "type": "mirror",
-      "url": "https://github.com/ModOrganizer2/modorganizer/releases/download/v2.5.2/Mod.Organizer-2.5.2.7z",
-      "hash": "xxh64:0000000000000001"
-    },
-    "extensions": [
-      "plugins/fomod_plus_installer.dll",
-      "plugins/fomod_plus_scanner.dll",
-      "tools/BethINI/"
-    ]
-  },
-  "stockGame": {
-    "extras": [
-      "skse64_loader.exe",
-      "skse64_1_6_1170.dll",
-      "d3d11.dll",
-      "enbseries/"
-    ]
-  },
-  "archiveSources": [
-    {
-      "archive": "SomeModWithoutMeta.7z",
-      "sources": [
-        {
-          "type": "mirror",
-          "url": "https://cdn.example.com/SomeModWithoutMeta.7z",
-          "hash": "xxh64:0000000000000abc"
-        },
-        {
-          "type": "nexus",
-          "modId": 12345,
-          "fileId": 67890,
-          "game": "skyrimspecialedition"
-        }
-      ]
-    },
-    {
-      "archive": "AnotherMod.7z",
-      "sources": [
-        {
-          "type": "mirror",
-          "url": "https://github.com/author/repo/releases/download/v1.0/AnotherMod.7z",
-          "hash": "xxh64:0000000000000def"
-        }
-      ]
-    }
-  ]
-}
-````
-
-## samples/firelink-pack.invalid-name.json
-
-````json
-{
-  "meta": {
-    "name": "CON",
-    "version": "1.0.0",
-    "author": "tester",
-    "game": "skyrimspecialedition",
-    "gameVersion": "1.6.1170"
-  },
-  "instance": {
-    "path": "Bad Name Pack"
-  },
-  "mo2": {
-    "version": "2.5.2",
-    "profile": "Default",
-    "archive": "Mod.Organizer-2.5.2.7z",
-    "source": {
-      "type": "mirror",
-      "url": "https://example.com/Mod.Organizer-2.5.2.7z",
-      "hash": "xxh64:0000000000000001"
-    },
-    "extensions": []
-  },
-  "stockGame": {
-    "extras": []
-  },
-  "archiveSources": []
-}
-````
-
-## samples/firelink-pack.invalid-path.json
-
-````json
-{
-  "meta": {
-    "name": "Bad Path Pack",
-    "version": "1.0.0",
-    "author": "tester",
-    "game": "skyrimspecialedition",
-    "gameVersion": "1.6.1170"
-  },
-  "instance": {
-    "path": "Bad Path Pack"
-  },
-  "mo2": {
-    "version": "2.5.2",
-    "profile": "Default",
-    "archive": "Mod.Organizer-2.5.2.7z",
-    "source": {
-      "type": "mirror",
-      "url": "https://example.com/Mod.Organizer-2.5.2.7z",
-      "hash": "xxh64:0000000000000001"
-    },
-    "extensions": [
-      "plugins/../../../etc/passwd"
-    ]
-  },
-  "stockGame": {
-    "extras": []
-  },
-  "archiveSources": []
-}
-````
-
-## samples/firelink-pack.invalid-version.json
-
-````json
-{
-  "meta": {
-    "name": "Bad Version Pack",
-    "version": "v1.0",
-    "author": "tester",
-    "game": "skyrimspecialedition",
-    "gameVersion": "1.6.1170"
-  },
-  "instance": {
-    "path": "Bad Version Pack"
-  },
-  "mo2": {
-    "version": "2.5.2",
-    "profile": "Default",
-    "archive": "Mod.Organizer-2.5.2.7z",
-    "source": {
-      "type": "mirror",
-      "url": "https://example.com/Mod.Organizer-2.5.2.7z",
-      "hash": "xxh64:0000000000000001"
-    },
-    "extensions": []
-  },
-  "stockGame": {
-    "extras": []
-  },
-  "archiveSources": []
-}
-````
-
-## samples/firelink-pack.minimal.json
-
-````json
-{
-  "meta": {
-    "name": "Minimal Pack",
-    "version": "1.0.0",
-    "author": "tester",
-    "game": "skyrimspecialedition",
-    "gameVersion": "1.6.1170"
-  },
-  "instance": {
-    "path": "Minimal Pack"
-  },
-  "mo2": {
-    "version": "2.5.2",
-    "profile": "Default",
-    "archive": "Mod.Organizer-2.5.2.7z",
-    "source": {
-      "type": "mirror",
-      "url": "https://github.com/ModOrganizer2/modorganizer/releases/download/v2.5.2/Mod.Organizer-2.5.2.7z",
-      "hash": "xxh64:0000000000000001"
-    },
-    "extensions": []
-  },
-  "stockGame": {
-    "extras": []
-  },
-  "archiveSources": []
-}
-````
-
-## src/Firelink.Core/Assets/7z/License.txt
-
-````text
-  7-Zip
-  ~~~~~
-  License for use and distribution
-  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-  7-Zip Copyright (C) 1999-2026 Igor Pavlov.
-
-  The licenses for files are:
-
-    - 7z.dll:
-         - The "GNU LGPL" as main license for most of the code
-         - The "GNU LGPL" with "unRAR license restriction" for some code
-         - The "BSD 3-clause License" for some code
-         - The "BSD 2-clause License" for some code
-    - All other files: the "GNU LGPL".
-
-  Redistributions in binary form must reproduce related license information from this file.
-
-  Note:
-    You can use 7-Zip on any computer, including a computer in a commercial
-    organization. You don't need to register or pay for 7-Zip.
-
-
-GNU LGPL information
---------------------
-
-    This library is free software; you can redistribute it and/or
-    modify it under the terms of the GNU Lesser General Public
-    License as published by the Free Software Foundation; either
-    version 2.1 of the License, or (at your option) any later version.
-
-    This library is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-    Lesser General Public License for more details.
-
-    You can receive a copy of the GNU Lesser General Public License from
-    http://www.gnu.org/
-
-
-
-
-BSD 3-clause License in 7-Zip code
-----------------------------------
-
-  The "BSD 3-clause License" is used for the following code in 7z.dll
-    1) LZFSE data decompression.
-       That code was derived from the code in the "LZFSE compression library" developed by Apple Inc,
-       that also uses the "BSD 3-clause License".
-    2) ZSTD data decompression.
-       that code was developed using original zstd decoder code as reference code.
-       The original zstd decoder code was developed by Facebook Inc,
-       that also uses the "BSD 3-clause License".
-
-  Copyright (c) 2015-2016, Apple Inc. All rights reserved.
-  Copyright (c) Facebook, Inc. All rights reserved.
-  Copyright (c) 2023-2026 Igor Pavlov.
-
-Text of the "BSD 3-clause License"
-----------------------------------
-
-Redistribution and use in source and binary forms, with or without modification,
-are permitted provided that the following conditions are met:
-
-1. Redistributions of source code must retain the above copyright notice, this
-   list of conditions and the following disclaimer.
-
-2. Redistributions in binary form must reproduce the above copyright notice,
-   this list of conditions and the following disclaimer in the documentation
-   and/or other materials provided with the distribution.
-
-3. Neither the name of the copyright holder nor the names of its contributors may
-   be used to endorse or promote products derived from this software without
-   specific prior written permission.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
-ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
-ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
----
-
-
-
-
-BSD 2-clause License in 7-Zip code
-----------------------------------
-
-  The "BSD 2-clause License" is used for the XXH64 code in 7-Zip.
-
-  XXH64 code in 7-Zip was derived from the original XXH64 code developed by Yann Collet.
-
-  Copyright (c) 2012-2021 Yann Collet.
-  Copyright (c) 2023-2026 Igor Pavlov.
-
-Text of the "BSD 2-clause License"
-----------------------------------
-
-Redistribution and use in source and binary forms, with or without modification,
-are permitted provided that the following conditions are met:
-
-1. Redistributions of source code must retain the above copyright notice, this
-   list of conditions and the following disclaimer.
-
-2. Redistributions in binary form must reproduce the above copyright notice,
-   this list of conditions and the following disclaimer in the documentation
-   and/or other materials provided with the distribution.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
-ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
-ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
----
-
-
-
-
-unRAR license restriction
--------------------------
-
-The decompression engine for RAR archives was developed using source
-code of unRAR program.
-All copyrights to original unRAR code are owned by Alexander Roshal.
-
-The license for original unRAR code has the following restriction:
-
-  The unRAR sources cannot be used to re-create the RAR compression algorithm,
-  which is proprietary. Distribution of modified unRAR sources in separate form
-  or as a part of other software is permitted, provided that it is clearly
-  stated in the documentation and source comments that the code may
-  not be used to develop a RAR (WinRAR) compatible archiver.
-
---
-
-````
-
-
-````
-
-## repo-dump.md
-
-````markdown
-# Firelink -- repo dump
-
-**Generated:** 22.09.2026  0:47:55,19
-**Root:** C:\Code\Firelink
-
----
-
-## Directory.Build.props
-
-```
-````
-
-## src/Firelink.Cli/Firelink.Cli.csproj
-
-````xml
-﻿<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
-    <RootNamespace>Firelink.Cli</RootNamespace>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\Firelink.Core\Firelink.Core.csproj" />
-    <ProjectReference Include="..\Firelink.Platform.MO2\Firelink.Platform.MO2.csproj" />
-    <ProjectReference Include="..\Firelink.Platform.Nexus\Firelink.Platform.Nexus.csproj" />
-    <ProjectReference Include="..\Firelink.Pack\Firelink.Pack.csproj" />
-    <ProjectReference Include="..\Firelink.Install\Firelink.Install.csproj" />
-  </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="Spectre.Console.Cli" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
-    <PackageReference Include="Microsoft.Extensions.Logging" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Console" />
-    <PackageReference Include="Microsoft.Extensions.Http" />
-  </ItemGroup>
-</Project>
 ````
 
 ## src/Firelink.Cli/Program.cs
@@ -7996,26 +994,6 @@ public static class CancellationHelper
 
 ````
 
-## src/Firelink.Core/Firelink.Core.csproj
-
-````xml
-﻿<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="System.Text.Json" />
-    <PackageReference Include="System.IO.Hashing" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
-    <PackageReference Include="Microsoft.Data.Sqlite" />
-    <PackageReference Include="Polly" />
-  </ItemGroup>
-</Project>
-````
-
 ## src/Firelink.Core/Abstractions/IArchiveDownloader.cs
 
 ````csharp
@@ -8265,6 +1243,171 @@ public sealed class FileHashCache
 
 ````
 
+## src/Firelink.Core/Archives/TempFileStream.cs
+
+````csharp
+namespace Firelink.Core.Archives;
+
+/// <summary>
+/// Поток во временный файл на диске. Создаёт файл в системной temp-папке,
+/// позволяет писать в него и читать с начала. При Dispose файл удаляется.
+///
+/// Зачем: скачивание архива через MemoryStream не работает для файлов
+/// больше ~2 ГБ (лимит MemoryStream — int.MaxValue). У Nexus есть моды
+/// по 3, 5, 10 ГБ, поэтому downloader-ы пишут во временный файл.
+///
+/// Альтернатива — расширить IArchiveDownloader до «скачай сразу в файл»,
+/// но это ломает существующий контракт и ArchiveDownloadHelper.
+/// TempFileStream даёт тот же эффект без ломки контракта.
+///
+/// Двойная запись: downloader → temp → .part (в ArchiveDownloadHelper).
+/// На SSD это почти незаметно, на HDD — стоимость, которую принимаем.
+/// </summary>
+public sealed class TempFileStream : Stream
+{
+    private readonly string _path;
+    private readonly FileStream _inner;
+    private bool _disposed;
+
+    public TempFileStream()
+    {
+        _path = Path.Combine(
+            Path.GetTempPath(),
+            "firelink-dl-" + Guid.NewGuid().ToString("N") + ".tmp");
+
+        _inner = new FileStream(
+            _path,
+            FileMode.CreateNew,
+            FileAccess.ReadWrite,
+            FileShare.None,
+            bufferSize: 81920,
+            FileOptions.SequentialScan | FileOptions.DeleteOnClose);
+    }
+
+    /// <summary>Путь временного файла. Для диагностики.</summary>
+    public string TempPath => _path;
+
+    public override bool CanRead => _inner.CanRead;
+    public override bool CanSeek => _inner.CanSeek;
+    public override bool CanWrite => _inner.CanWrite;
+
+    public override long Length => _inner.Length;
+
+    public override long Position
+    {
+        get => _inner.Position;
+        set => _inner.Position = value;
+    }
+
+    public override void Flush() => _inner.Flush();
+
+    public override Task FlushAsync(CancellationToken ct)
+        => _inner.FlushAsync(ct);
+
+    public override int Read(byte[] buffer, int offset, int count)
+        => _inner.Read(buffer, offset, count);
+
+    public override ValueTask<int> ReadAsync(
+        Memory<byte> buffer, CancellationToken ct = default)
+        => _inner.ReadAsync(buffer, ct);
+
+    public override int Read(Span<byte> buffer)
+        => _inner.Read(buffer);
+
+    public override Task<int> ReadAsync(
+        byte[] buffer, int offset, int count, CancellationToken ct)
+        => _inner.ReadAsync(buffer, offset, count, ct);
+
+    public override long Seek(long offset, SeekOrigin origin)
+        => _inner.Seek(offset, origin);
+
+    public override void SetLength(long value)
+        => _inner.SetLength(value);
+
+    public override void Write(byte[] buffer, int offset, int count)
+        => _inner.Write(buffer, offset, count);
+
+    public override void Write(ReadOnlySpan<byte> buffer)
+        => _inner.Write(buffer);
+
+    public override ValueTask WriteAsync(
+        ReadOnlyMemory<byte> buffer, CancellationToken ct = default)
+        => _inner.WriteAsync(buffer, ct);
+
+    public override Task WriteAsync(
+        byte[] buffer, int offset, int count, CancellationToken ct)
+        => _inner.WriteAsync(buffer, offset, count, ct);
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed)
+        {
+            base.Dispose(disposing);
+            return;
+        }
+
+        _disposed = true;
+
+        if (disposing)
+        {
+            try
+            {
+                _inner.Dispose();
+            }
+            catch
+            {
+                // FileOptions.DeleteOnClose обычно сам удаляет файл.
+                // Если что-то пошло не так — игнорируем, ОС подчистит.
+            }
+
+            // На случай, если DeleteOnClose не сработал.
+            try
+            {
+                if (File.Exists(_path))
+                    File.Delete(_path);
+            }
+            catch
+            {
+                // Игнорируем.
+            }
+        }
+
+        base.Dispose(disposing);
+    }
+
+    public override async ValueTask DisposeAsync()
+    {
+        if (_disposed)
+        {
+            await base.DisposeAsync();
+            return;
+        }
+
+        _disposed = true;
+
+        try
+        {
+            await _inner.DisposeAsync();
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            if (File.Exists(_path))
+                File.Delete(_path);
+        }
+        catch
+        {
+        }
+
+        await base.DisposeAsync();
+    }
+}
+
+````
+
 ## src/Firelink.Core/Archives/Extraction/IArchiveExtractor.cs
 
 ````csharp
@@ -8492,6 +1635,158 @@ public sealed class TempWorkspace : IDisposable
         }
     }
 }
+
+````
+
+## src/Firelink.Core/Assets/7z/License.txt
+
+````text
+  7-Zip
+  ~~~~~
+  License for use and distribution
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  7-Zip Copyright (C) 1999-2026 Igor Pavlov.
+
+  The licenses for files are:
+
+    - 7z.dll:
+         - The "GNU LGPL" as main license for most of the code
+         - The "GNU LGPL" with "unRAR license restriction" for some code
+         - The "BSD 3-clause License" for some code
+         - The "BSD 2-clause License" for some code
+    - All other files: the "GNU LGPL".
+
+  Redistributions in binary form must reproduce related license information from this file.
+
+  Note:
+    You can use 7-Zip on any computer, including a computer in a commercial
+    organization. You don't need to register or pay for 7-Zip.
+
+
+GNU LGPL information
+--------------------
+
+    This library is free software; you can redistribute it and/or
+    modify it under the terms of the GNU Lesser General Public
+    License as published by the Free Software Foundation; either
+    version 2.1 of the License, or (at your option) any later version.
+
+    This library is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+    Lesser General Public License for more details.
+
+    You can receive a copy of the GNU Lesser General Public License from
+    http://www.gnu.org/
+
+
+
+
+BSD 3-clause License in 7-Zip code
+----------------------------------
+
+  The "BSD 3-clause License" is used for the following code in 7z.dll
+    1) LZFSE data decompression.
+       That code was derived from the code in the "LZFSE compression library" developed by Apple Inc,
+       that also uses the "BSD 3-clause License".
+    2) ZSTD data decompression.
+       that code was developed using original zstd decoder code as reference code.
+       The original zstd decoder code was developed by Facebook Inc,
+       that also uses the "BSD 3-clause License".
+
+  Copyright (c) 2015-2016, Apple Inc. All rights reserved.
+  Copyright (c) Facebook, Inc. All rights reserved.
+  Copyright (c) 2023-2026 Igor Pavlov.
+
+Text of the "BSD 3-clause License"
+----------------------------------
+
+Redistribution and use in source and binary forms, with or without modification,
+are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its contributors may
+   be used to endorse or promote products derived from this software without
+   specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+---
+
+
+
+
+BSD 2-clause License in 7-Zip code
+----------------------------------
+
+  The "BSD 2-clause License" is used for the XXH64 code in 7-Zip.
+
+  XXH64 code in 7-Zip was derived from the original XXH64 code developed by Yann Collet.
+
+  Copyright (c) 2012-2021 Yann Collet.
+  Copyright (c) 2023-2026 Igor Pavlov.
+
+Text of the "BSD 2-clause License"
+----------------------------------
+
+Redistribution and use in source and binary forms, with or without modification,
+are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+---
+
+
+
+
+unRAR license restriction
+-------------------------
+
+The decompression engine for RAR archives was developed using source
+code of unRAR program.
+All copyrights to original unRAR code are owned by Alexander Roshal.
+
+The license for original unRAR code has the following restriction:
+
+  The unRAR sources cannot be used to re-create the RAR compression algorithm,
+  which is proprietary. Distribution of modified unRAR sources in separate form
+  or as a part of other software is permitted, provided that it is clearly
+  stated in the documentation and source comments that the code may
+  not be used to develop a RAR (WinRAR) compatible archiver.
+
+--
 
 ````
 
@@ -10133,24 +3428,2844 @@ public sealed class ValidationResult
 
 ````
 
-## src/Firelink.Install/Firelink.Install.csproj
+## src/Firelink.Gui/App.axaml
 
-````xml
-﻿<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\Firelink.Core\Firelink.Core.csproj" />
-    <ProjectReference Include="..\Firelink.Platform.MO2\Firelink.Platform.MO2.csproj" />
-    <ProjectReference Include="..\Firelink.Platform.Nexus\Firelink.Platform.Nexus.csproj" />
-  </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Http" />
-  </ItemGroup>
-</Project>
+````text
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Firelink.Gui.App"
+             RequestedThemeVariant="Default">
+  <Application.Styles>
+    <FluentTheme />
+  </Application.Styles>
+</Application>
+
+````
+
+## src/Firelink.Gui/App.axaml.cs
+
+````csharp
+using Avalonia;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Markup.Xaml;
+using Firelink.Gui.Install;
+using Firelink.Gui.Pack;
+using Firelink.Gui.Services;
+using Firelink.Gui.Shared;
+using Firelink.Gui.Shared.Logging;
+using Firelink.Gui.Shared.Navigation;
+using Firelink.Gui.Shared.Services;
+using Firelink.Gui.Shared.ViewModels;
+using Firelink.Gui.Verify;
+using Firelink.Install;
+using Firelink.Pack;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+
+namespace Firelink.Gui;
+
+public partial class App : Application
+{
+    public static IServiceProvider Services { get; private set; } = null!;
+
+    public override void Initialize()
+    {
+        AvaloniaXamlLoader.Load(this);
+        DataTemplates.Add(new ViewLocator());
+    }
+
+    public override void OnFrameworkInitializationCompleted()
+    {
+        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+        {
+            Services = BuildServices();
+            desktop.MainWindow = new MainWindow
+            {
+                DataContext = Services.GetRequiredService<MainWindowVM>(),
+            };
+        }
+
+        base.OnFrameworkInitializationCompleted();
+    }
+
+    private static IServiceProvider BuildServices()
+    {
+        var services = new ServiceCollection();
+
+        services.AddLogging(builder =>
+        {
+            builder.SetMinimumLevel(LogLevel.Debug);
+        });
+
+        // Pipeline-сервисы.
+        services.AddFirelinkInstall();
+        services.AddFirelinkPack();
+
+        // UI-инфраструктура exe-проекта.
+        services.AddSingleton<IUiDispatcher, AvaloniaUiDispatcher>();
+        services.AddSingleton<IFilePickerService, AvaloniaFilePickerService>();
+        services.AddSingleton<IScreenFactory, ScreenFactory>();
+
+        // GUI-модули.
+        services.AddGuiShared();
+        services.AddGuiInstall();
+        services.AddGuiPack();
+        services.AddGuiVerify();
+
+        services.AddSingleton<MainWindowVM>();
+
+        return services.BuildServiceProvider();
+    }
+}
+
+````
+
+## src/Firelink.Gui/MainWindow.axaml
+
+````text
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Firelink.Gui.Shared.ViewModels"
+        xmlns:views="using:Firelink.Gui.Views"
+        x:Class="Firelink.Gui.MainWindow"
+        x:DataType="vm:MainWindowVM"
+        Title="Firelink"
+        Width="1000"
+        Height="700">
+  <Grid ColumnDefinitions="220,*">
+    <views:NavigationView Grid.Column="0"
+                          DataContext="{Binding Navigation}" />
+    <ContentControl Grid.Column="1"
+                    Content="{Binding ActivePane}" />
+  </Grid>
+</Window>
+
+````
+
+## src/Firelink.Gui/MainWindow.axaml.cs
+
+````csharp
+using Avalonia.Controls;
+
+namespace Firelink.Gui;
+
+public partial class MainWindow : Window
+{
+    public MainWindow()
+    {
+        InitializeComponent();
+    }
+}
+
+````
+
+## src/Firelink.Gui/Program.cs
+
+````csharp
+using Avalonia;
+
+namespace Firelink.Gui;
+
+internal static class Program
+{
+    [STAThread]
+    public static void Main(string[] args) => BuildAvaloniaApp()
+        .StartWithClassicDesktopLifetime(args);
+
+    public static AppBuilder BuildAvaloniaApp()
+        => AppBuilder.Configure<App>()
+            .UsePlatformDetect()
+            .WithInterFont()
+            .LogToTrace();
+}
+
+````
+
+## src/Firelink.Gui/ViewLocator.cs
+
+````csharp
+using Avalonia.Controls;
+using Avalonia.Controls.Templates;
+using Firelink.Gui.Shared.ViewModels;
+
+namespace Firelink.Gui;
+
+public sealed class ViewLocator : IDataTemplate
+{
+    public Control? Build(object? param)
+    {
+        if (param is null) return null;
+
+        var vmType = param.GetType();
+        var shortName = vmType.Name.Replace("VM", "View", StringComparison.Ordinal);
+
+        // 1. Точное совпадение по FullName с заменой .ViewModels. → .Views.
+        //    Работает только если View в той же сборке и namespace без .Controls
+        //    в середине. Часто не срабатывает между проектами.
+        var directName = vmType.FullName!
+            .Replace(".ViewModels.", ".Views.", StringComparison.Ordinal)
+            .Replace("VM", "View", StringComparison.Ordinal);
+
+        var direct = Type.GetType(directName);
+        if (direct is not null && typeof(Control).IsAssignableFrom(direct))
+            return (Control)Activator.CreateInstance(direct)!;
+
+        // 2. Поиск по всем загруженным сборкам: перебираем все типы и ищем
+        //    тот, чей FullName заканчивается на ".Views.<ShortName>".
+        //
+        //    Это надёжнее, чем `asm.GetType($"{asmName}.Views.{ShortName}")`,
+        //    потому что:
+        //      - assembly name ≠ root namespace (Firelink.Gui → "Firelink");
+        //      - namespace View может быть вложенным (Firelink.Gui.Install.Views);
+        //      - .NET может ещё не загрузить сборку — на всякий случай
+        //        форсируем загрузку через GetReferencedAssemblies.
+        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            var candidate = FindViewInAssembly(asm, shortName);
+            if (candidate is not null)
+                return (Control)Activator.CreateInstance(candidate)!;
+        }
+
+        return new TextBlock { Text = $"View not found: {vmType.FullName}" };
+    }
+
+    private static Type? FindViewInAssembly(System.Reflection.Assembly asm, string shortName)
+    {
+        Type[] types;
+        try
+        {
+            types = asm.GetTypes();
+        }
+        catch (System.Reflection.ReflectionTypeLoadException ex)
+        {
+            // Часть типов не загрузилась — работаем с тем, что есть.
+            types = ex.Types.Where(t => t is not null).ToArray()!;
+        }
+
+        foreach (var type in types)
+        {
+            if (type is null) continue;
+            if (!typeof(Control).IsAssignableFrom(type)) continue;
+            if (type.IsAbstract) continue;
+
+            // FullName = "Firelink.Gui.Views.HomeView" или
+            //           "Firelink.Gui.Install.Views.InstallView".
+            // Ищем совпадение последних двух сегментов: ".Views.<ShortName>".
+            var fullName = type.FullName;
+            if (fullName is null) continue;
+
+            if (fullName.EndsWith("." + shortName, StringComparison.Ordinal)
+                && fullName.Contains(".Views.", StringComparison.Ordinal))
+            {
+                return type;
+            }
+        }
+
+        return null;
+    }
+
+    public bool Match(object? data) => data is ViewModel;
+}
+
+````
+
+## src/Firelink.Gui/Services/AvaloniaFilePickerService.cs
+
+````csharp
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Platform.Storage;
+using Firelink.Gui.Shared.Services;
+
+namespace Firelink.Gui.Services;
+
+public sealed class AvaloniaFilePickerService : IFilePickerService
+{
+    public async Task<string?> PickFileAsync(string title, string? filterHint = null)
+    {
+        var window = GetMainWindow();
+        if (window is null) return null;
+
+        var options = new FilePickerOpenOptions
+        {
+            Title = title,
+            AllowMultiple = false,
+        };
+
+        if (!string.IsNullOrWhiteSpace(filterHint))
+        {
+            var pattern = filterHint.StartsWith('.') ? "*" + filterHint : filterHint;
+            options.FileTypeFilter = new[]
+            {
+                new FilePickerFileType(filterHint) { Patterns = new[] { pattern } },
+            };
+        }
+
+        var files = await window.StorageProvider.OpenFilePickerAsync(options);
+        return files.Count > 0 ? files[0].Path.LocalPath : null;
+    }
+
+    public async Task<string?> PickFolderAsync(string title)
+    {
+        var window = GetMainWindow();
+        if (window is null) return null;
+
+        var folders = await window.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = title,
+            AllowMultiple = false,
+        });
+
+        return folders.Count > 0 ? folders[0].Path.LocalPath : null;
+    }
+
+    private static Window? GetMainWindow()
+    {
+        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+            return desktop.MainWindow;
+
+        return null;
+    }
+}
+
+````
+
+## src/Firelink.Gui/Services/AvaloniaUiDispatcher.cs
+
+````csharp
+using Avalonia.Threading;
+using Firelink.Gui.Shared.Logging;
+
+namespace Firelink.Gui.Services;
+
+/// <summary>
+/// Реализация IUiDispatcher поверх Dispatcher.UIThread.
+///
+/// Post — fire-and-forget: логи не блокируют worker-потоки pipeline.
+/// Порядок сохраняется: Dispatcher гарантирует FIFO для Post
+/// с одного и того же контекста.
+/// </summary>
+internal sealed class AvaloniaUiDispatcher : IUiDispatcher
+{
+    public void Post(Action action)
+    {
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            // Уже на UI-потоке: вызываем синхронно, чтобы не плодить
+            // лишние Post'ы (важно для тестов и для случая, когда
+            // лог пришёл синхронно из UI).
+            action();
+            return;
+        }
+
+        Dispatcher.UIThread.Post(action);
+    }
+}
+
+````
+
+## src/Firelink.Gui/Services/ScreenFactory.cs
+
+````csharp
+using Firelink.Gui.Install.ViewModels;
+using Firelink.Gui.Pack.ViewModels;
+using Firelink.Gui.Shared.Navigation;
+using Firelink.Gui.Shared.ViewModels;
+using Firelink.Gui.Verify.ViewModels;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Firelink.Gui.Services;
+
+internal sealed class ScreenFactory : IScreenFactory
+{
+    private readonly IServiceProvider _sp;
+
+    public ScreenFactory(IServiceProvider sp) => _sp = sp;
+
+    public object Create(ScreenType screen) => screen switch
+    {
+        ScreenType.Home => _sp.GetRequiredService<HomeVM>(),
+        ScreenType.Install => _sp.GetRequiredService<InstallVM>(),
+        ScreenType.Pack => _sp.GetRequiredService<PackVM>(),
+        ScreenType.Verify => _sp.GetRequiredService<VerifyVM>(),
+        _ => _sp.GetRequiredService<HomeVM>(),
+    };
+}
+
+````
+
+## src/Firelink.Gui/Views/HomeView.axaml
+
+````text
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Firelink.Gui.Shared.ViewModels"
+             xmlns:controls="using:Firelink.Gui.Controls.Views"
+             x:Class="Firelink.Gui.Views.HomeView"
+             x:DataType="vm:HomeVM">
+    <Grid RowDefinitions="Auto,*">
+        <StackPanel Grid.Row="0"
+                    VerticalAlignment="Center"
+                    HorizontalAlignment="Center"
+                    Spacing="12"
+                    Margin="0,60,0,30">
+            <TextBlock Text="{Binding Title}"
+                       FontSize="36"
+                       FontWeight="Bold"
+                       HorizontalAlignment="Center" />
+            <TextBlock Text="{Binding Subtitle}"
+                       FontSize="14"
+                       Opacity="0.7"
+                       HorizontalAlignment="Center" />
+        </StackPanel>
+
+        <controls:LogView Grid.Row="1"
+                          DataContext="{Binding Log}"
+                          Margin="20,0,20,20" />
+    </Grid>
+</UserControl>
+
+````
+
+## src/Firelink.Gui/Views/HomeView.axaml.cs
+
+````csharp
+using Avalonia.Controls;
+
+namespace Firelink.Gui.Views;
+
+public partial class HomeView : UserControl
+{
+    public HomeView()
+    {
+        InitializeComponent();
+    }
+}
+
+````
+
+## src/Firelink.Gui/Views/NavigationView.axaml
+
+````text
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Firelink.Gui.Shared.ViewModels"
+             x:Class="Firelink.Gui.Views.NavigationView"
+             x:DataType="vm:NavigationVM">
+  <Border Background="#1F2933">
+    <ListBox ItemsSource="{Binding Items}"
+             SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
+             Background="Transparent"
+             BorderThickness="0">
+      <ListBox.ItemTemplate>
+        <DataTemplate DataType="vm:NavigationItem">
+          <TextBlock Text="{Binding Title}"
+                     Padding="16,12"
+                     FontSize="14" />
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </Border>
+</UserControl>
+
+````
+
+## src/Firelink.Gui/Views/NavigationView.axaml.cs
+
+````csharp
+using Avalonia.Controls;
+
+namespace Firelink.Gui.Views;
+
+public partial class NavigationView : UserControl
+{
+    public NavigationView()
+    {
+        InitializeComponent();
+    }
+}
+
+````
+
+## src/Firelink.Gui.Controls/Converters/LogLevelToBrushConverter.cs
+
+````csharp
+using System.Globalization;
+using Avalonia.Data.Converters;
+using Avalonia.Media;
+using Microsoft.Extensions.Logging;
+
+using AvaloniaColor = Avalonia.Media.Color;
+
+namespace Firelink.Gui.Controls.Converters;
+
+public sealed class LogLevelToBrushConverter : IValueConverter
+{
+    public static readonly LogLevelToBrushConverter Instance = new();
+
+    private static readonly IBrush TraceBrush = new SolidColorBrush(AvaloniaColor.Parse("#4B5563"));
+    private static readonly IBrush DebugBrush = new SolidColorBrush(AvaloniaColor.Parse("#6B7280"));
+    private static readonly IBrush InfoBrush = new SolidColorBrush(AvaloniaColor.Parse("#D1D5DB"));
+    private static readonly IBrush WarningBrush = new SolidColorBrush(AvaloniaColor.Parse("#FBBF24"));
+    private static readonly IBrush ErrorBrush = new SolidColorBrush(AvaloniaColor.Parse("#F87171"));
+    private static readonly IBrush CriticalBrush = new SolidColorBrush(AvaloniaColor.Parse("#DC2626"));
+
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is not LogLevel level) return InfoBrush;
+
+        return level switch
+        {
+            LogLevel.Trace => TraceBrush,
+            LogLevel.Debug => DebugBrush,
+            LogLevel.Information => InfoBrush,
+            LogLevel.Warning => WarningBrush,
+            LogLevel.Error => ErrorBrush,
+            LogLevel.Critical => CriticalBrush,
+            _ => InfoBrush,
+        };
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+````
+
+## src/Firelink.Gui.Controls/Views/FilePickerView.axaml
+
+````text
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Firelink.Gui.Shared.ViewModels.Controls"
+             x:Class="Firelink.Gui.Controls.Views.FilePickerView"
+             x:DataType="vm:FilePickerVM">
+  <StackPanel Spacing="4">
+    <TextBlock Text="{Binding Placeholder}"
+               FontSize="12"
+               Opacity="0.7" />
+    <Grid ColumnDefinitions="*,Auto">
+      <Border Grid.Column="0"
+              Background="#0B1116"
+              BorderBrush="#2A3742"
+              BorderThickness="1"
+              CornerRadius="3"
+              Padding="8,6"
+              Margin="0,0,8,0">
+        <TextBlock Text="{Binding Path}"
+                   FontFamily="Consolas,Menlo,monospace"
+                   FontSize="12"
+                   TextTrimming="CharacterEllipsis" />
+      </Border>
+      <Button Grid.Column="1"
+              Content="Browse…"
+              Command="{Binding PickCommand}"
+              Padding="12,6" />
+    </Grid>
+    <TextBlock Text="{Binding Error}"
+               Foreground="#F87171"
+               FontSize="11"
+               IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}" />
+  </StackPanel>
+</UserControl>
+
+````
+
+## src/Firelink.Gui.Controls/Views/FilePickerView.axaml.cs
+
+````csharp
+using Avalonia.Controls;
+
+namespace Firelink.Gui.Controls.Views;
+
+public partial class FilePickerView : UserControl
+{
+    public FilePickerView()
+    {
+        InitializeComponent();
+    }
+}
+
+````
+
+## src/Firelink.Gui.Controls/Views/LogView.axaml
+
+````text
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Firelink.Gui.Shared.ViewModels"
+             xmlns:log="using:Firelink.Gui.Shared.Logging"
+             xmlns:conv="using:Firelink.Gui.Controls.Converters"
+             x:Class="Firelink.Gui.Controls.Views.LogView"
+             x:DataType="vm:LogVM">
+  <Grid RowDefinitions="Auto,*">
+    <Grid Grid.Row="0"
+          ColumnDefinitions="*,Auto"
+          Background="#111820">
+      <TextBlock Grid.Column="0"
+                 Text="Log"
+                 Foreground="#9CA3AF"
+                 Margin="10,6"
+                 FontSize="12"
+                 FontWeight="SemiBold"
+                 VerticalAlignment="Center" />
+      <Button Grid.Column="1"
+              Content="Clear"
+              Command="{Binding ClearCommand}"
+              Margin="6"
+              Padding="10,3"
+              FontSize="11" />
+    </Grid>
+
+    <ScrollViewer Grid.Row="1"
+                  Name="Scroll"
+                  Background="#0B1116"
+                  HorizontalScrollBarVisibility="Disabled"
+                  VerticalScrollBarVisibility="Auto">
+      <ItemsControl ItemsSource="{Binding Entries}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate DataType="log:LogEntry">
+            <TextBlock Padding="10,1"
+                       FontFamily="Consolas,Menlo,monospace"
+                       FontSize="12"
+                       TextWrapping="Wrap"
+                       Foreground="{Binding Level, Converter={x:Static conv:LogLevelToBrushConverter.Instance}}">
+              <Run Text="[" />
+              <Run Text="{Binding Timestamp, StringFormat='{}{0:HH:mm:ss}'}" />
+              <Run Text="] [" />
+              <Run Text="{Binding Level}" />
+              <Run Text="] " />
+              <Run Text="{Binding Message}" />
+            </TextBlock>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+  </Grid>
+</UserControl>
+
+````
+
+## src/Firelink.Gui.Controls/Views/LogView.axaml.cs
+
+````csharp
+using System.Collections.Specialized;
+using Avalonia.Controls;
+using Avalonia.Threading;
+using Firelink.Gui.Shared.ViewModels;
+
+namespace Firelink.Gui.Controls.Views;
+
+public partial class LogView : UserControl
+{
+    private ScrollViewer? _scroll;
+
+    public LogView()
+    {
+        InitializeComponent();
+
+        _scroll = this.FindControl<ScrollViewer>("Scroll");
+
+        DataContextChanged += OnDataContextChanged;
+    }
+
+    private void OnDataContextChanged(object? sender, EventArgs e)
+    {
+        if (DataContext is LogVM vm)
+        {
+            vm.Entries.CollectionChanged += OnEntriesChanged;
+        }
+    }
+
+    private void OnEntriesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.Action != NotifyCollectionChangedAction.Add) return;
+        if (_scroll is null) return;
+
+        Dispatcher.UIThread.Post(() => _scroll.ScrollToEnd());
+    }
+}
+
+````
+
+## src/Firelink.Gui.Install/GuiInstallServices.cs
+
+````csharp
+using Firelink.Gui.Install.Services;
+using Firelink.Gui.Install.ViewModels;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Firelink.Gui.Install;
+
+public static class GuiInstallServices
+{
+    public static IServiceCollection AddGuiInstall(this IServiceCollection services)
+    {
+        services.AddSingleton<IInstallRunner, InstallRunner>();
+        services.AddSingleton<InstallVM>();
+        return services;
+    }
+}
+
+````
+
+## src/Firelink.Gui.Install/Services/IInstallRunner.cs
+
+````csharp
+using Firelink.Core.Progress;
+using Firelink.Install;
+
+namespace Firelink.Gui.Install.Services;
+
+/// <summary>
+/// Обёртка над InstallPipeline.
+///
+/// Зачем: InstallVM тестируется без поднятия всего DI-графа pipeline.
+/// В тестах IInstallRunner заменяется fake-ом, который либо возвращает
+/// готовый InstallSummary, либо бросает исключение.
+///
+/// Реализация (InstallRunner) — тонкая. Вся логика — в pipeline.
+/// </summary>
+public interface IInstallRunner
+{
+    /// <summary>
+    /// Запустить установку. Возвращает сводку результата.
+    ///
+    /// target == null → InstallInputFactory сам разрулит в
+    /// &lt;exeDir&gt;/Instances/&lt;normalize(meta.name)&gt;/.
+    ///
+    /// Бросает:
+    ///   - OperationCanceledException (или AggregateException с cancellation)
+    ///     при отмене через ct;
+    ///   - любой exception из pipeline — при ошибке.
+    /// </summary>
+    Task<InstallSummary> RunAsync(
+        string manifestPath,
+        string? target,
+        IProgress<StepProgress> progress,
+        CancellationToken ct);
+}
+
+````
+
+## src/Firelink.Gui.Install/Services/InstallRunner.cs
+
+````csharp
+using Firelink.Core.Progress;
+using Firelink.Install;
+
+namespace Firelink.Gui.Install.Services;
+
+public sealed class InstallRunner : IInstallRunner
+{
+    private readonly InstallPipeline _pipeline;
+
+    public InstallRunner(InstallPipeline pipeline)
+    {
+        _pipeline = pipeline;
+    }
+
+    public async Task<InstallSummary> RunAsync(
+        string manifestPath,
+        string? target,
+        IProgress<StepProgress> progress,
+        CancellationToken ct)
+    {
+        var input = InstallInputFactory.Create(
+            manifestPath,
+            target: target,
+            parallelOptions: null);
+
+        var output = await _pipeline.ExecuteAsync(input, ct, progress);
+
+        return InstallSummaryBuilder.Build(output);
+    }
+}
+
+````
+
+## src/Firelink.Gui.Install/ViewModels/InstallVM.cs
+
+````csharp
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using Firelink.Core;
+using Firelink.Core.Progress;
+using Firelink.Gui.Install.Services;
+using Firelink.Gui.Shared.Navigation;
+using Firelink.Gui.Shared.Services;
+using Firelink.Gui.Shared.State;
+using Firelink.Gui.Shared.ViewModels;
+using Firelink.Gui.Shared.ViewModels.Controls;
+using Firelink.Install;
+using Microsoft.Extensions.Logging;
+
+namespace Firelink.Gui.Install.ViewModels;
+
+public sealed partial class InstallVM : ProgressViewModel, INavigationAware
+{
+    private readonly IInstallRunner _runner;
+    private readonly ILogger<InstallVM> _logger;
+    private Action? _navigateHome;
+    private CancellationTokenSource? _cts;
+
+    [ObservableProperty]
+    private InstallState _state = InstallState.Configuration;
+
+    [ObservableProperty]
+    private bool _isConfiguring = true;
+
+    [ObservableProperty]
+    private bool _isInstalling;
+
+    [ObservableProperty]
+    private bool _isSuccess;
+
+    [ObservableProperty]
+    private bool _isFailure;
+
+    [ObservableProperty]
+    private InstallSummary? _summary;
+
+    [ObservableProperty]
+    private string? _errorMessage;
+
+    public FilePickerVM ModlistPicker { get; }
+    public FilePickerVM TargetPicker { get; }
+    public LogVM Log { get; }
+
+    public InstallVM(
+        IInstallRunner runner,
+        IFilePickerService picker,
+        LogVM log,
+        ILogger<InstallVM> logger)
+    {
+        _runner = runner;
+        _logger = logger;
+        Log = log;
+
+        ModlistPicker = new FilePickerVM(picker)
+        {
+            Placeholder = "Select modlist.json",
+            FilterHint = ".json",
+            MustExist = true,
+            Folder = false,
+        };
+        ModlistPicker.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(FilePickerVM.IsValid))
+                InstallCommand.NotifyCanExecuteChanged();
+        };
+
+        TargetPicker = new FilePickerVM(picker)
+        {
+            Placeholder = "Target folder (optional)",
+            MustExist = false,
+            Folder = true,
+        };
+    }
+
+    public void SetNavigateHome(Action navigateHome) => _navigateHome = navigateHome;
+
+    [RelayCommand(CanExecute = nameof(CanInstall))]
+    private async Task InstallAsync()
+    {
+        Log.Clear();
+
+        State = InstallState.Installing;
+        UpdateVisibility();
+
+        _cts = new CancellationTokenSource();
+
+        var progress = new Progress<StepProgress>(p =>
+            Report(p.StepIndex, p.TotalSteps, p.StepName));
+
+        try
+        {
+            var target = string.IsNullOrWhiteSpace(TargetPicker.Path)
+                ? null
+                : TargetPicker.Path;
+
+            Summary = await _runner.RunAsync(
+                ModlistPicker.Path!, target, progress, _cts.Token);
+
+            State = InstallState.Success;
+        }
+        catch (Exception ex) when (CancellationHelper.IsCancellation(ex))
+        {
+            _logger.LogInformation("Install cancelled by user");
+            ErrorMessage = "Cancelled.";
+            State = InstallState.Configuration;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Install failed");
+            ErrorMessage = ex.Message;
+            State = InstallState.Failure;
+        }
+        finally
+        {
+            _cts?.Dispose();
+            _cts = null;
+            UpdateVisibility();
+        }
+    }
+
+    private bool CanInstall()
+        => State == InstallState.Configuration && ModlistPicker.IsValid;
+
+    [RelayCommand(CanExecute = nameof(CanCancel))]
+    private void Cancel()
+    {
+        _cts?.Cancel();
+    }
+
+    private bool CanCancel() => State == InstallState.Installing;
+
+    [RelayCommand]
+    private void Home() => _navigateHome?.Invoke();
+
+    partial void OnStateChanged(InstallState value)
+    {
+        UpdateVisibility();
+        InstallCommand.NotifyCanExecuteChanged();
+        CancelCommand.NotifyCanExecuteChanged();
+    }
+
+    private void UpdateVisibility()
+    {
+        IsConfiguring = State == InstallState.Configuration;
+        IsInstalling = State == InstallState.Installing;
+        IsSuccess = State == InstallState.Success;
+        IsFailure = State == InstallState.Failure;
+    }
+}
+
+````
+
+## src/Firelink.Gui.Install/Views/InstallView.axaml
+
+````text
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Firelink.Gui.Install.ViewModels"
+             xmlns:controls="using:Firelink.Gui.Controls.Views"
+             x:Class="Firelink.Gui.Install.Views.InstallView"
+             x:DataType="vm:InstallVM">
+    <Grid RowDefinitions="Auto,*,Auto" Margin="20">
+
+        <!-- Header -->
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,16">
+            <TextBlock Grid.Column="0"
+                       Text="Install"
+                       FontSize="24"
+                       FontWeight="Bold"
+                       VerticalAlignment="Center" />
+            <Button Grid.Column="1"
+                    Content="Home"
+                    Command="{Binding HomeCommand}"
+                    Padding="12,6"
+                    IsVisible="{Binding IsConfiguring}" />
+        </Grid>
+
+        <!-- Configuration -->
+        <StackPanel Grid.Row="1"
+                    Spacing="16"
+                    IsVisible="{Binding IsConfiguring}"
+                    VerticalAlignment="Top">
+            <controls:FilePickerView DataContext="{Binding ModlistPicker}" />
+            <controls:FilePickerView DataContext="{Binding TargetPicker}" />
+
+            <TextBlock Text="{Binding ErrorMessage}"
+                       Foreground="#FBBF24"
+                       FontSize="12"
+                       IsVisible="{Binding ErrorMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+            <Button Content="Install"
+                    Command="{Binding InstallCommand}"
+                    HorizontalAlignment="Left"
+                    Padding="20,8"
+                    FontWeight="SemiBold" />
+        </StackPanel>
+
+        <!-- Installing -->
+        <StackPanel Grid.Row="1"
+                    Spacing="20"
+                    IsVisible="{Binding IsInstalling}"
+                    VerticalAlignment="Center"
+                    HorizontalAlignment="Stretch">
+            <TextBlock Text="{Binding StepName}"
+                       FontSize="16"
+                       HorizontalAlignment="Center" />
+            <TextBlock HorizontalAlignment="Center"
+                       Opacity="0.7"
+                       FontSize="12">
+                <Run Text="Step " />
+                <Run Text="{Binding CurrentStep}" />
+                <Run Text=" of " />
+                <Run Text="{Binding TotalSteps}" />
+            </TextBlock>
+            <ProgressBar Value="{Binding Percent}"
+                         Minimum="0"
+                         Maximum="100"
+                         Height="6" />
+            <Button Content="Cancel"
+                    Command="{Binding CancelCommand}"
+                    HorizontalAlignment="Center"
+                    Padding="20,8" />
+        </StackPanel>
+
+        <!-- Success -->
+        <StackPanel Grid.Row="1"
+                    Spacing="12"
+                    IsVisible="{Binding IsSuccess}"
+                    VerticalAlignment="Top">
+            <TextBlock Text="Installation complete"
+                       FontSize="18"
+                       FontWeight="SemiBold"
+                       Foreground="#4ADE80" />
+
+            <Border Background="#0B1116"
+                    BorderBrush="#2A3742"
+                    BorderThickness="1"
+                    CornerRadius="4"
+                    Padding="16">
+                <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Name"
+                               Opacity="0.6" Margin="0,0,16,4" />
+                    <TextBlock Grid.Row="0" Grid.Column="1"
+                               Text="{Binding Summary.Name}" Margin="0,0,0,4" />
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Version"
+                               Opacity="0.6" Margin="0,0,16,4" />
+                    <TextBlock Grid.Row="1" Grid.Column="1"
+                               Text="{Binding Summary.Version}" Margin="0,0,0,4" />
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Instance"
+                               Opacity="0.6" Margin="0,0,16,4" />
+                    <TextBlock Grid.Row="2" Grid.Column="1"
+                               Text="{Binding Summary.InstancePath}"
+                               FontFamily="Consolas,Menlo,monospace"
+                               FontSize="12"
+                               TextTrimming="CharacterEllipsis"
+                               Margin="0,0,0,4" />
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Mods"
+                               Opacity="0.6" Margin="0,0,16,4" />
+                    <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,0,0,4">
+                        <Run Text="{Binding Summary.ModsCreated}" />
+                        <Run Text=" created, " />
+                        <Run Text="{Binding Summary.ModsSkipped}" />
+                        <Run Text=" skipped" />
+                    </TextBlock>
+
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Archives"
+                               Opacity="0.6" Margin="0,0,16,4" />
+                    <TextBlock Grid.Row="4" Grid.Column="1" Margin="0,0,0,4">
+                        <Run Text="{Binding Summary.ArchivesDownloaded}" />
+                        <Run Text=" downloaded, " />
+                        <Run Text="{Binding Summary.ArchivesAlreadyPresent}" />
+                        <Run Text=" present" />
+                    </TextBlock>
+
+                    <TextBlock Grid.Row="5" Grid.Column="0" Text="meta.ini"
+                               Opacity="0.6" Margin="0,0,16,0" />
+                    <TextBlock Grid.Row="5" Grid.Column="1"
+                               Text="{Binding Summary.MetaIniWritten}" />
+                </Grid>
+            </Border>
+
+            <Button Content="Home"
+                    Command="{Binding HomeCommand}"
+                    HorizontalAlignment="Left"
+                    Padding="20,8" />
+        </StackPanel>
+
+        <!-- Failure -->
+        <StackPanel Grid.Row="1"
+                    Spacing="12"
+                    IsVisible="{Binding IsFailure}"
+                    VerticalAlignment="Top">
+            <TextBlock Text="Installation failed"
+                       FontSize="18"
+                       FontWeight="SemiBold"
+                       Foreground="#F87171" />
+
+            <Border Background="#1F1414"
+                    BorderBrush="#7F1D1D"
+                    BorderThickness="1"
+                    CornerRadius="4"
+                    Padding="16">
+                <TextBlock Text="{Binding ErrorMessage}"
+                           TextWrapping="Wrap"
+                           FontFamily="Consolas,Menlo,monospace"
+                           FontSize="12" />
+            </Border>
+
+            <Button Content="Home"
+                    Command="{Binding HomeCommand}"
+                    HorizontalAlignment="Left"
+                    Padding="20,8" />
+        </StackPanel>
+
+        <!-- Log panel -->
+        <Border Grid.Row="2"
+                Height="200"
+                Margin="0,16,0,0"
+                IsVisible="{Binding !IsConfiguring}">
+            <controls:LogView DataContext="{Binding Log}" />
+        </Border>
+
+    </Grid>
+</UserControl>
+
+````
+
+## src/Firelink.Gui.Install/Views/InstallView.axaml.cs
+
+````csharp
+using Avalonia.Controls;
+
+namespace Firelink.Gui.Install.Views;
+
+public partial class InstallView : UserControl
+{
+    public InstallView()
+    {
+        InitializeComponent();
+    }
+}
+
+````
+
+## src/Firelink.Gui.Pack/GuiPackServices.cs
+
+````csharp
+using Firelink.Gui.Pack.Services;
+using Firelink.Gui.Pack.ViewModels;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Firelink.Gui.Pack;
+
+public static class GuiPackServices
+{
+    public static IServiceCollection AddGuiPack(this IServiceCollection services)
+    {
+        services.AddSingleton<IPackRunner, PackRunner>();
+        services.AddSingleton<PackVM>();
+        return services;
+    }
+}
+
+````
+
+## src/Firelink.Gui.Pack/Services/IPackRunner.cs
+
+````csharp
+using Firelink.Core.Progress;
+using Firelink.Pack;
+
+namespace Firelink.Gui.Pack.Services;
+
+/// <summary>
+/// Обёртка над PackPipeline.
+///
+/// Зачем: PackVM тестируется без поднятия всего DI-графа pipeline.
+/// В тестах IPackRunner заменяется fake-ом, который либо возвращает
+/// готовый PackSummary, либо бросает исключение.
+///
+/// Реализация (PackRunner) — тонкая. Вся логика — в pipeline.
+/// </summary>
+public interface IPackRunner
+{
+    /// <summary>
+    /// Запустить pack. Возвращает сводку результата.
+    ///
+    /// Бросает:
+    ///   - OperationCanceledException (или AggregateException с cancellation)
+    ///     при отмене через ct;
+    ///   - любой exception из pipeline — при ошибке.
+    /// </summary>
+    Task<PackSummary> RunAsync(
+        string configPath,
+        IProgress<StepProgress> progress,
+        CancellationToken ct);
+}
+
+````
+
+## src/Firelink.Gui.Pack/Services/PackRunner.cs
+
+````csharp
+using Firelink.Core.Progress;
+using Firelink.Pack;
+
+namespace Firelink.Gui.Pack.Services;
+
+public sealed class PackRunner : IPackRunner
+{
+    private readonly PackPipeline _pipeline;
+
+    public PackRunner(PackPipeline pipeline)
+    {
+        _pipeline = pipeline;
+    }
+
+    public async Task<PackSummary> RunAsync(
+        string configPath,
+        IProgress<StepProgress> progress,
+        CancellationToken ct)
+    {
+        var input = PackInputFactory.Create(configPath);
+
+        var result = await _pipeline.ExecuteAsync(input, ct, progress);
+
+        return PackSummaryBuilder.Build(result);
+    }
+}
+
+````
+
+## src/Firelink.Gui.Pack/ViewModels/PackVM.cs
+
+````csharp
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using Firelink.Core;
+using Firelink.Core.Progress;
+using Firelink.Gui.Pack.Services;
+using Firelink.Gui.Shared.Navigation;
+using Firelink.Gui.Shared.Services;
+using Firelink.Gui.Shared.State;
+using Firelink.Gui.Shared.ViewModels;
+using Firelink.Gui.Shared.ViewModels.Controls;
+using Firelink.Pack;
+using Microsoft.Extensions.Logging;
+
+namespace Firelink.Gui.Pack.ViewModels;
+
+public sealed partial class PackVM : ProgressViewModel, INavigationAware
+{
+    private readonly IPackRunner _runner;
+    private readonly ILogger<PackVM> _logger;
+    private Action? _navigateHome;
+    private CancellationTokenSource? _cts;
+
+    [ObservableProperty]
+    private PackState _state = PackState.Configuration;
+
+    [ObservableProperty]
+    private bool _isConfiguring = true;
+
+    [ObservableProperty]
+    private bool _isPacking;
+
+    [ObservableProperty]
+    private bool _isSuccess;
+
+    [ObservableProperty]
+    private bool _isFailure;
+
+    [ObservableProperty]
+    private PackSummary? _summary;
+
+    [ObservableProperty]
+    private string? _errorMessage;
+
+    public FilePickerVM ConfigPicker { get; }
+    public LogVM Log { get; }
+
+    public PackVM(
+        IPackRunner runner,
+        IFilePickerService picker,
+        LogVM log,
+        ILogger<PackVM> logger)
+    {
+        _runner = runner;
+        _logger = logger;
+        Log = log;
+
+        ConfigPicker = new FilePickerVM(picker)
+        {
+            Placeholder = "Select firelink-pack.json",
+            FilterHint = ".json",
+            MustExist = true,
+            Folder = false,
+        };
+        ConfigPicker.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(FilePickerVM.IsValid))
+                PackCommand.NotifyCanExecuteChanged();
+        };
+    }
+
+    public void SetNavigateHome(Action navigateHome) => _navigateHome = navigateHome;
+
+    [RelayCommand(CanExecute = nameof(CanPack))]
+    private async Task PackAsync()
+    {
+        Log.Clear();
+
+        State = PackState.Packing;
+        UpdateVisibility();
+
+        _cts = new CancellationTokenSource();
+
+        var progress = new Progress<StepProgress>(p =>
+            Report(p.StepIndex, p.TotalSteps, p.StepName));
+
+        try
+        {
+            Summary = await _runner.RunAsync(
+                ConfigPicker.Path!, progress, _cts.Token);
+
+            State = PackState.Success;
+        }
+        catch (Exception ex) when (CancellationHelper.IsCancellation(ex))
+        {
+            _logger.LogInformation("Pack cancelled by user");
+            ErrorMessage = "Cancelled.";
+            State = PackState.Configuration;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Pack failed");
+            ErrorMessage = ex.Message;
+            State = PackState.Failure;
+        }
+        finally
+        {
+            _cts?.Dispose();
+            _cts = null;
+            UpdateVisibility();
+        }
+    }
+
+    private bool CanPack()
+        => State == PackState.Configuration && ConfigPicker.IsValid;
+
+    [RelayCommand(CanExecute = nameof(CanCancel))]
+    private void Cancel()
+    {
+        _cts?.Cancel();
+    }
+
+    private bool CanCancel() => State == PackState.Packing;
+
+    [RelayCommand]
+    private void Home() => _navigateHome?.Invoke();
+
+    partial void OnStateChanged(PackState value)
+    {
+        UpdateVisibility();
+        PackCommand.NotifyCanExecuteChanged();
+        CancelCommand.NotifyCanExecuteChanged();
+    }
+
+    private void UpdateVisibility()
+    {
+        IsConfiguring = State == PackState.Configuration;
+        IsPacking = State == PackState.Packing;
+        IsSuccess = State == PackState.Success;
+        IsFailure = State == PackState.Failure;
+    }
+}
+
+````
+
+## src/Firelink.Gui.Pack/Views/PackView.axaml
+
+````text
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Firelink.Gui.Pack.ViewModels"
+             xmlns:controls="using:Firelink.Gui.Controls.Views"
+             x:Class="Firelink.Gui.Pack.Views.PackView"
+             x:DataType="vm:PackVM">
+    <Grid RowDefinitions="Auto,*,Auto" Margin="20">
+
+        <!-- Header -->
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,16">
+            <TextBlock Grid.Column="0"
+                       Text="Pack"
+                       FontSize="24"
+                       FontWeight="Bold"
+                       VerticalAlignment="Center" />
+            <Button Grid.Column="1"
+                    Content="Home"
+                    Command="{Binding HomeCommand}"
+                    Padding="12,6"
+                    IsVisible="{Binding IsConfiguring}" />
+        </Grid>
+
+        <!-- Configuration -->
+        <StackPanel Grid.Row="1"
+                    Spacing="16"
+                    IsVisible="{Binding IsConfiguring}"
+                    VerticalAlignment="Top">
+            <controls:FilePickerView DataContext="{Binding ConfigPicker}" />
+
+            <TextBlock Text="{Binding ErrorMessage}"
+                       Foreground="#FBBF24"
+                       FontSize="12"
+                       IsVisible="{Binding ErrorMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+            <Button Content="Pack"
+                    Command="{Binding PackCommand}"
+                    HorizontalAlignment="Left"
+                    Padding="20,8"
+                    FontWeight="SemiBold" />
+        </StackPanel>
+
+        <!-- Packing -->
+        <StackPanel Grid.Row="1"
+                    Spacing="20"
+                    IsVisible="{Binding IsPacking}"
+                    VerticalAlignment="Center"
+                    HorizontalAlignment="Stretch">
+            <TextBlock Text="{Binding StepName}"
+                       FontSize="16"
+                       HorizontalAlignment="Center" />
+            <TextBlock HorizontalAlignment="Center"
+                       Opacity="0.7"
+                       FontSize="12">
+                <Run Text="Step " />
+                <Run Text="{Binding CurrentStep}" />
+                <Run Text=" of " />
+                <Run Text="{Binding TotalSteps}" />
+            </TextBlock>
+            <ProgressBar Value="{Binding Percent}"
+                         Minimum="0"
+                         Maximum="100"
+                         Height="6" />
+            <Button Content="Cancel"
+                    Command="{Binding CancelCommand}"
+                    HorizontalAlignment="Center"
+                    Padding="20,8" />
+        </StackPanel>
+
+        <!-- Success -->
+        <StackPanel Grid.Row="1"
+                    Spacing="12"
+                    IsVisible="{Binding IsSuccess}"
+                    VerticalAlignment="Top">
+            <TextBlock Text="Pack complete"
+                       FontSize="18"
+                       FontWeight="SemiBold"
+                       Foreground="#4ADE80" />
+
+            <Border Background="#0B1116"
+                    BorderBrush="#2A3742"
+                    BorderThickness="1"
+                    CornerRadius="4"
+                    Padding="16">
+                <Grid ColumnDefinitions="Auto,*"
+                      RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Name"
+                               Opacity="0.6" Margin="0,0,16,4" />
+                    <TextBlock Grid.Row="0" Grid.Column="1"
+                               Text="{Binding Summary.Name}" Margin="0,0,0,4" />
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Version"
+                               Opacity="0.6" Margin="0,0,16,4" />
+                    <TextBlock Grid.Row="1" Grid.Column="1"
+                               Text="{Binding Summary.Version}" Margin="0,0,0,4" />
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Instance"
+                               Opacity="0.6" Margin="0,0,16,4" />
+                    <TextBlock Grid.Row="2" Grid.Column="1"
+                               Text="{Binding Summary.InstancePath}"
+                               FontFamily="Consolas,Menlo,monospace"
+                               FontSize="12"
+                               TextTrimming="CharacterEllipsis"
+                               Margin="0,0,0,4" />
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Mods scanned"
+                               Opacity="0.6" Margin="0,0,16,4" />
+                    <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,0,0,4">
+                        <Run Text="{Binding Summary.ModsScanned}" />
+                        <Run Text=" mods, " />
+                        <Run Text="{Binding Summary.FilesScanned}" />
+                        <Run Text=" files" />
+                    </TextBlock>
+
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Directives"
+                               Opacity="0.6" Margin="0,0,16,4" />
+                    <TextBlock Grid.Row="4" Grid.Column="1" Margin="0,0,0,4">
+                        <Run Text="{Binding Summary.DirectivesTotal}" />
+                        <Run Text=" total, " />
+                        <Run Text="{Binding Summary.DirectivesFromArchive}" />
+                        <Run Text=" from archive" />
+                    </TextBlock>
+
+                    <TextBlock Grid.Row="5" Grid.Column="0" Text="Archives"
+                               Opacity="0.6" Margin="0,0,16,4" />
+                    <TextBlock Grid.Row="5" Grid.Column="1" Margin="0,0,0,4">
+                        <Run Text="{Binding Summary.ArchivesResolved}" />
+                        <Run Text=" resolved, " />
+                        <Run Text="{Binding Summary.ArchivesUnresolved}" />
+                        <Run Text=" unresolved" />
+                    </TextBlock>
+
+                    <TextBlock Grid.Row="6" Grid.Column="0" Text="Unmatched"
+                               Opacity="0.6" Margin="0,0,16,4" />
+                    <TextBlock Grid.Row="6" Grid.Column="1"
+                               Text="{Binding Summary.UnmatchedFiles}"
+                               Margin="0,0,0,4" />
+
+                    <TextBlock Grid.Row="7" Grid.Column="0" Text="Manifest"
+                               Opacity="0.6" Margin="0,0,16,4" />
+                    <TextBlock Grid.Row="7" Grid.Column="1" Margin="0,0,0,4">
+                        <Run Text="{Binding Summary.ManifestMods}" />
+                        <Run Text=" mods, " />
+                        <Run Text="{Binding Summary.ManifestArchives}" />
+                        <Run Text=" archives, " />
+                        <Run Text="{Binding Summary.ManifestExtensions}" />
+                        <Run Text=" extensions, " />
+                        <Run Text="{Binding Summary.ManifestExtras}" />
+                        <Run Text=" extras" />
+                    </TextBlock>
+
+                    <TextBlock Grid.Row="8" Grid.Column="0" Text="meta.ini"
+                               Opacity="0.6" Margin="0,0,16,4" />
+                    <TextBlock Grid.Row="8" Grid.Column="1"
+                               Text="{Binding Summary.MetaIniCount}"
+                               Margin="0,0,0,4" />
+
+                    <TextBlock Grid.Row="9" Grid.Column="0" Text="Written to"
+                               Opacity="0.6" Margin="0,0,16,4"
+                               IsVisible="{Binding Summary.UnmatchedWrittenTo, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                    <TextBlock Grid.Row="9" Grid.Column="1"
+                               Text="{Binding Summary.UnmatchedWrittenTo}"
+                               FontFamily="Consolas,Menlo,monospace"
+                               FontSize="12"
+                               TextTrimming="CharacterEllipsis"
+                               Margin="0,0,0,4"
+                               IsVisible="{Binding Summary.UnmatchedWrittenTo, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+                    <TextBlock Grid.Row="10" Grid.Column="0" Text="Manifest path"
+                               Opacity="0.6" Margin="0,0,16,0" />
+                    <TextBlock Grid.Row="10" Grid.Column="1"
+                               Text="{Binding Summary.ManifestPath}"
+                               FontFamily="Consolas,Menlo,monospace"
+                               FontSize="12"
+                               TextTrimming="CharacterEllipsis" />
+                </Grid>
+            </Border>
+
+            <Button Content="Home"
+                    Command="{Binding HomeCommand}"
+                    HorizontalAlignment="Left"
+                    Padding="20,8" />
+        </StackPanel>
+
+        <!-- Failure -->
+        <StackPanel Grid.Row="1"
+                    Spacing="12"
+                    IsVisible="{Binding IsFailure}"
+                    VerticalAlignment="Top">
+            <TextBlock Text="Pack failed"
+                       FontSize="18"
+                       FontWeight="SemiBold"
+                       Foreground="#F87171" />
+
+            <Border Background="#1F1414"
+                    BorderBrush="#7F1D1D"
+                    BorderThickness="1"
+                    CornerRadius="4"
+                    Padding="16">
+                <TextBlock Text="{Binding ErrorMessage}"
+                           TextWrapping="Wrap"
+                           FontFamily="Consolas,Menlo,monospace"
+                           FontSize="12" />
+            </Border>
+
+            <Button Content="Home"
+                    Command="{Binding HomeCommand}"
+                    HorizontalAlignment="Left"
+                    Padding="20,8" />
+        </StackPanel>
+
+        <!-- Log panel -->
+        <Border Grid.Row="2"
+                Height="200"
+                Margin="0,16,0,0"
+                IsVisible="{Binding !IsConfiguring}">
+            <controls:LogView DataContext="{Binding Log}" />
+        </Border>
+
+    </Grid>
+</UserControl>
+
+````
+
+## src/Firelink.Gui.Pack/Views/PackView.axaml.cs
+
+````csharp
+using Avalonia.Controls;
+
+namespace Firelink.Gui.Pack.Views;
+
+public partial class PackView : UserControl
+{
+    public PackView()
+    {
+        InitializeComponent();
+    }
+}
+
+````
+
+## src/Firelink.Gui.Shared/GuiSharedServices.cs
+
+````csharp
+using Firelink.Gui.Shared.Logging;
+using Firelink.Gui.Shared.ViewModels;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+
+namespace Firelink.Gui.Shared;
+
+public static class GuiSharedServices
+{
+    public static IServiceCollection AddGuiShared(this IServiceCollection services)
+    {
+        services.AddSingleton<ObservableLogSink>();
+
+        services.AddSingleton<ILoggerProvider>(sp =>
+            new ObservableLoggerProvider(
+                sp.GetRequiredService<ObservableLogSink>(),
+                minLevel: LogLevel.Information));
+
+        services.AddSingleton<LogVM>();
+
+        services.AddSingleton<HomeVM>();
+
+        // MainWindowVM регистрируется в клиенте (Firelink.Gui), потому что
+        // зависит от IScreenFactory, реализация которого живёт в exe-проекте.
+
+        return services;
+    }
+}
+
+````
+
+## src/Firelink.Gui.Shared/Logging/IUiDispatcher.cs
+
+````csharp
+namespace Firelink.Gui.Shared.Logging;
+
+/// <summary>
+/// Абстракция над UI-диспетчером.
+///
+/// Зачем: ObservableLogSink принимает логи из worker-потоков pipeline
+/// (Parallel.ForEach). ObservableCollection&lt;T&gt; не потокобезопасен:
+/// мутация из worker-потока параллельно с UI-биндингом (ItemsControl
+/// через CollectionChanged) — гонка и падение процесса вне try/catch VM.
+///
+/// Решение: любая мутация коллекции — через Post на UI-поток.
+/// Firelink.Gui.Shared не знает про Avalonia; IUiDispatcher —
+/// тонкая абстракция. Реализация (AvaloniaUiDispatcher) — в Firelink.Gui.
+///
+/// Post — fire-and-forget. Возврата значения нет: логи не блокируют
+/// worker-потоки.
+/// </summary>
+public interface IUiDispatcher
+{
+    void Post(Action action);
+}
+
+````
+
+## src/Firelink.Gui.Shared/Logging/LogEntry.cs
+
+````csharp
+using Microsoft.Extensions.Logging;
+
+namespace Firelink.Gui.Shared.Logging;
+
+public sealed record LogEntry(
+    DateTimeOffset Timestamp,
+    LogLevel Level,
+    string Message);
+
+````
+
+## src/Firelink.Gui.Shared/Logging/ObservableLoggerProvider.cs
+
+````csharp
+using Microsoft.Extensions.Logging;
+
+namespace Firelink.Gui.Shared.Logging;
+
+public sealed class ObservableLoggerProvider : ILoggerProvider
+{
+    private readonly ObservableLogSink _sink;
+    private readonly LogLevel _minLevel;
+
+    public ObservableLoggerProvider(ObservableLogSink sink, LogLevel minLevel = LogLevel.Information)
+    {
+        _sink = sink;
+        _minLevel = minLevel;
+    }
+
+    public ILogger CreateLogger(string categoryName)
+        => new ObservableLogger(_sink, categoryName, _minLevel);
+
+    public void Dispose() { }
+
+    private sealed class ObservableLogger : ILogger
+    {
+        private readonly ObservableLogSink _sink;
+        private readonly string _category;
+        private readonly LogLevel _minLevel;
+
+        public ObservableLogger(ObservableLogSink sink, string category, LogLevel minLevel)
+        {
+            _sink = sink;
+            _category = category;
+            _minLevel = minLevel;
+        }
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => logLevel >= _minLevel;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            if (!IsEnabled(logLevel)) return;
+
+            var message = formatter(state, exception);
+            if (exception is not null)
+                message += $" | {exception.GetType().Name}: {exception.Message}";
+
+            _sink.Add(new LogEntry(DateTimeOffset.Now, logLevel, message));
+        }
+    }
+}
+
+````
+
+## src/Firelink.Gui.Shared/Logging/ObservableLogSink.cs
+
+````csharp
+using System.Collections.ObjectModel;
+using Microsoft.Extensions.Logging;
+
+namespace Firelink.Gui.Shared.Logging;
+
+/// <summary>
+/// Потокобезопасный приёмник логов.
+///
+/// Все мутации Entries идут через IUiDispatcher (если он задан),
+/// чтобы ObservableCollection мутировался строго на UI-потоке.
+/// Если диспетчер не задан (тесты, не-GUI сценарии) — мутации
+/// синхронные, как раньше.
+///
+/// Порядок логов сохраняется: IUiDispatcher.Post в Avalonia
+/// гарантирует FIFO-порядок обработки в UI-очереди.
+///
+/// Хранится последние MaxEntries записей; старые вытесняются.
+/// </summary>
+public sealed class ObservableLogSink
+{
+    private const int MaxEntries = 200;
+    private readonly object _lock = new();
+    private readonly IUiDispatcher? _dispatcher;
+
+    public ObservableCollection<LogEntry> Entries { get; } = new();
+
+    public ObservableLogSink(IUiDispatcher? dispatcher = null)
+    {
+        _dispatcher = dispatcher;
+    }
+
+    public void Add(LogEntry entry)
+    {
+        if (_dispatcher is null)
+        {
+            AppendCore(entry);
+            return;
+        }
+
+        _dispatcher.Post(() => AppendCore(entry));
+    }
+
+    public void Clear()
+    {
+        if (_dispatcher is null)
+        {
+            ClearCore();
+            return;
+        }
+
+        _dispatcher.Post(ClearCore);
+    }
+
+    private void AppendCore(LogEntry entry)
+    {
+        lock (_lock)
+        {
+            Entries.Add(entry);
+            while (Entries.Count > MaxEntries)
+                Entries.RemoveAt(0);
+        }
+    }
+
+    private void ClearCore()
+    {
+        lock (_lock)
+        {
+            Entries.Clear();
+        }
+    }
+}
+
+````
+
+## src/Firelink.Gui.Shared/Navigation/INavigationAware.cs
+
+````csharp
+namespace Firelink.Gui.Shared.Navigation;
+
+/// <summary>
+/// VM, которым нужно вернуться на Home.
+///
+/// MainWindowVM при навигации проверяет: если VM реализует INavigationAware,
+/// передаёт ей callback для возврата на главный экран.
+///
+/// Реализуется плейсхолдерами (3.2–3.3) и настоящими экранами
+/// (InstallVM в 3.4.2, PackVM в 3.5, VerifyVM в 3.6).
+///
+/// Идемпотентность: SetNavigateHome можно вызывать многократно.
+/// Повторный вызов перезаписывает callback.
+/// </summary>
+public interface INavigationAware
+{
+    void SetNavigateHome(Action navigateHome);
+}
+
+````
+
+## src/Firelink.Gui.Shared/Navigation/IScreenFactory.cs
+
+````csharp
+namespace Firelink.Gui.Shared.Navigation;
+
+/// <summary>
+/// Фабрика VM-инстансов по ScreenType.
+///
+/// Реализуется в клиентском проекте (Firelink.Gui), потому что только он
+/// знает про все VM (HomeVM из Shared, InstallVM из Gui.Install и т.д.).
+///
+/// MainWindowVM резолвит панели через эту фабрику и не знает о конкретных
+/// типах InstallVM/PackVM/VerifyVM.
+/// </summary>
+public interface IScreenFactory
+{
+    object Create(ScreenType screen);
+}
+
+````
+
+## src/Firelink.Gui.Shared/Navigation/ScreenType.cs
+
+````csharp
+namespace Firelink.Gui.Shared.Navigation;
+
+public enum ScreenType
+{
+    Home,
+    Install,
+    Pack,
+    Verify,
+}
+
+````
+
+## src/Firelink.Gui.Shared/Progress/ProgressState.cs
+
+````csharp
+namespace Firelink.Gui.Shared.Progress;
+
+public enum ProgressState
+{
+    Normal,
+    Success,
+    Error,
+}
+
+````
+
+## src/Firelink.Gui.Shared/Progress/Step.cs
+
+````csharp
+namespace Firelink.Gui.Shared.Progress;
+
+public enum Step
+{
+    Configuration,
+    Busy,
+    Done,
+}
+
+````
+
+## src/Firelink.Gui.Shared/Services/IFilePickerService.cs
+
+````csharp
+namespace Firelink.Gui.Shared.Services;
+
+/// <summary>
+/// Абстракция над диалогом выбора файла/папки.
+///
+/// Живёт в Shared (без ссылки на Avalonia), реализуется в Firelink.Gui
+/// через StorageProvider. Это позволяет FilePickerVM и InstallVM
+/// оставаться тестируемыми без UI.
+/// </summary>
+public interface IFilePickerService
+{
+    /// <summary>
+    /// Открыть диалог выбора файла. Возвращает null, если пользователь отменил.
+    /// </summary>
+    /// <param name="title">Заголовок диалога.</param>
+    /// <param name="filterHint">Опциональная подсказка для фильтра (расширение).</param>
+    Task<string?> PickFileAsync(string title, string? filterHint = null);
+
+    /// <summary>
+    /// Открыть диалог выбора папки. Возвращает null, если пользователь отменил.
+    /// </summary>
+    Task<string?> PickFolderAsync(string title);
+}
+
+````
+
+## src/Firelink.Gui.Shared/State/InstallState.cs
+
+````csharp
+namespace Firelink.Gui.Shared.State;
+
+public enum InstallState
+{
+    Configuration,
+    Installing,
+    Success,
+    Failure,
+}
+
+````
+
+## src/Firelink.Gui.Shared/State/PackState.cs
+
+````csharp
+namespace Firelink.Gui.Shared.State;
+
+public enum PackState
+{
+    Configuration,
+    Packing,
+    Success,
+    Failure,
+}
+
+````
+
+## src/Firelink.Gui.Shared/State/VerifyState.cs
+
+````csharp
+namespace Firelink.Gui.Shared.State;
+
+public enum VerifyState
+{
+    Configuration,
+    Verifying,
+    Success,
+    Failure,
+}
+
+````
+
+## src/Firelink.Gui.Shared/ViewModels/HomeVM.cs
+
+````csharp
+using CommunityToolkit.Mvvm.ComponentModel;
+
+namespace Firelink.Gui.Shared.ViewModels;
+
+public sealed partial class HomeVM : ViewModel
+{
+    [ObservableProperty]
+    private string _title = "Firelink";
+
+    [ObservableProperty]
+    private string _subtitle = "Reproducible modpack builds for Mod Organizer 2";
+
+    public LogVM Log { get; }
+
+    public HomeVM(LogVM log)
+    {
+        Log = log;
+    }
+}
+
+````
+
+## src/Firelink.Gui.Shared/ViewModels/LoadingLock.cs
+
+````csharp
+using CommunityToolkit.Mvvm.ComponentModel;
+
+namespace Firelink.Gui.Shared.ViewModels;
+
+public sealed partial class LoadingLock : ObservableObject
+{
+    private int _counter;
+
+    [ObservableProperty]
+    private bool _isLoading;
+
+    public LoadingLock() { }
+
+    public IDisposable Lock()
+    {
+        Interlocked.Increment(ref _counter);
+        IsLoading = true;
+        return new Releaser(this);
+    }
+
+    private void Release()
+    {
+        Interlocked.Decrement(ref _counter);
+        IsLoading = _counter > 0;
+    }
+
+    private sealed class Releaser : IDisposable
+    {
+        private readonly LoadingLock _parent;
+        private int _disposed;
+
+        public Releaser(LoadingLock parent) => _parent = parent;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) == 0)
+                _parent.Release();
+        }
+    }
+}
+
+````
+
+## src/Firelink.Gui.Shared/ViewModels/LogVM.cs
+
+````csharp
+using System.Collections.ObjectModel;
+using CommunityToolkit.Mvvm.Input;
+using Firelink.Gui.Shared.Logging;
+
+namespace Firelink.Gui.Shared.ViewModels;
+
+public sealed partial class LogVM : ViewModel
+{
+    private readonly ObservableLogSink _sink;
+
+    public LogVM(ObservableLogSink sink)
+    {
+        _sink = sink;
+    }
+
+    public ObservableCollection<LogEntry> Entries => _sink.Entries;
+
+    [RelayCommand]
+    public void Clear() => _sink.Clear();
+}
+
+````
+
+## src/Firelink.Gui.Shared/ViewModels/MainWindowVM.cs
+
+````csharp
+using CommunityToolkit.Mvvm.ComponentModel;
+using Firelink.Gui.Shared.Navigation;
+
+namespace Firelink.Gui.Shared.ViewModels;
+
+public sealed partial class MainWindowVM : ViewModel
+{
+    private readonly IScreenFactory _screens;
+
+    [ObservableProperty]
+    private object? _activePane;
+
+    public NavigationVM Navigation { get; }
+    public HomeVM Home { get; }
+
+    public MainWindowVM(IScreenFactory screens)
+    {
+        _screens = screens;
+
+        Home = (HomeVM)_screens.Create(ScreenType.Home);
+        Navigation = new NavigationVM(NavigateTo);
+
+        _activePane = Home;
+        Navigation.SelectScreen(ScreenType.Home);
+    }
+
+    public void NavigateTo(ScreenType screen)
+    {
+        var pane = _screens.Create(screen);
+
+        if (pane is INavigationAware nav)
+            nav.SetNavigateHome(() => NavigateTo(ScreenType.Home));
+
+        ActivePane = pane;
+
+        Navigation.SelectScreen(screen);
+    }
+}
+
+````
+
+## src/Firelink.Gui.Shared/ViewModels/NavigationItem.cs
+
+````csharp
+using Firelink.Gui.Shared.Navigation;
+
+namespace Firelink.Gui.Shared.ViewModels;
+
+public sealed record NavigationItem(string Title, ScreenType Screen);
+
+````
+
+## src/Firelink.Gui.Shared/ViewModels/NavigationVM.cs
+
+````csharp
+using System.Collections.ObjectModel;
+using CommunityToolkit.Mvvm.ComponentModel;
+using Firelink.Gui.Shared.Navigation;
+
+namespace Firelink.Gui.Shared.ViewModels;
+
+public sealed partial class NavigationVM : ViewModel
+{
+    private readonly Action<ScreenType> _navigate;
+    private bool _suppressCallback;
+
+    public ObservableCollection<NavigationItem> Items { get; }
+
+    [ObservableProperty]
+    private NavigationItem? _selectedItem;
+
+    public NavigationVM(Action<ScreenType> navigate)
+    {
+        _navigate = navigate;
+        Items = new ObservableCollection<NavigationItem>
+        {
+            new("Home", ScreenType.Home),
+            new("Install", ScreenType.Install),
+            new("Pack", ScreenType.Pack),
+            new("Verify", ScreenType.Verify),
+        };
+    }
+
+    public void SelectScreen(ScreenType screen)
+    {
+        var item = Items.FirstOrDefault(i => i.Screen == screen);
+        if (item is null) return;
+
+        _suppressCallback = true;
+        SelectedItem = item;
+        _suppressCallback = false;
+    }
+
+    partial void OnSelectedItemChanged(NavigationItem? value)
+    {
+        if (_suppressCallback) return;
+        if (value is null) return;
+
+        _navigate(value.Screen);
+    }
+}
+
+````
+
+## src/Firelink.Gui.Shared/ViewModels/ProgressViewModel.cs
+
+````csharp
+using CommunityToolkit.Mvvm.ComponentModel;
+
+namespace Firelink.Gui.Shared.ViewModels;
+
+public abstract partial class ProgressViewModel : ViewModel
+{
+    [ObservableProperty]
+    private int _currentStep;
+
+    [ObservableProperty]
+    private int _totalSteps;
+
+    [ObservableProperty]
+    private string _stepName = "";
+
+    [ObservableProperty]
+    private double _percent;
+
+    [ObservableProperty]
+    private bool _isBusy;
+
+    public void Report(int step, int total, string name)
+    {
+        CurrentStep = step;
+        TotalSteps = total;
+        StepName = name;
+        Percent = total > 0 ? (double)step / total * 100 : 0;
+    }
+
+    public void Reset()
+    {
+        CurrentStep = 0;
+        TotalSteps = 0;
+        StepName = "";
+        Percent = 0;
+        IsBusy = false;
+    }
+}
+
+````
+
+## src/Firelink.Gui.Shared/ViewModels/ViewModel.cs
+
+````csharp
+using CommunityToolkit.Mvvm.ComponentModel;
+
+namespace Firelink.Gui.Shared.ViewModels;
+
+public abstract class ViewModel : ObservableObject
+{
+    public virtual void Dispose() { }
+}
+
+````
+
+## src/Firelink.Gui.Shared/ViewModels/Controls/FilePickerVM.cs
+
+````csharp
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using Firelink.Gui.Shared.Services;
+
+namespace Firelink.Gui.Shared.ViewModels.Controls;
+
+public sealed partial class FilePickerVM : ObservableObject
+{
+    private readonly IFilePickerService _picker;
+
+    [ObservableProperty]
+    private string? _path;
+
+    [ObservableProperty]
+    private string? _error;
+
+    [ObservableProperty]
+    private bool _isValid;
+
+    public string Placeholder { get; init; } = "Select a file...";
+    public string? FilterHint { get; init; }
+    public bool MustExist { get; init; } = true;
+    public bool Folder { get; init; }
+
+    public FilePickerVM(IFilePickerService picker)
+    {
+        _picker = picker;
+    }
+
+    public void SetPath(string? path)
+    {
+        Path = path;
+        Validate();
+    }
+
+    public void Clear()
+    {
+        Path = null;
+        Error = null;
+        IsValid = false;
+    }
+
+    private void Validate()
+    {
+        if (string.IsNullOrWhiteSpace(Path))
+        {
+            IsValid = false;
+            Error = null;
+            return;
+        }
+
+        if (MustExist)
+        {
+            var exists = Folder ? Directory.Exists(Path) : File.Exists(Path);
+            if (!exists)
+            {
+                IsValid = false;
+                Error = Folder ? "Folder not found" : "File not found";
+                return;
+            }
+        }
+
+        IsValid = true;
+        Error = null;
+    }
+
+    [RelayCommand]
+    private async Task PickAsync()
+    {
+        var picked = Folder
+            ? await _picker.PickFolderAsync(Placeholder)
+            : await _picker.PickFileAsync(Placeholder, FilterHint);
+
+        if (picked is not null)
+            SetPath(picked);
+    }
+}
+
+````
+
+## src/Firelink.Gui.Verify/GuiVerifyServices.cs
+
+````csharp
+using Firelink.Gui.Verify.Services;
+using Firelink.Gui.Verify.ViewModels;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Firelink.Gui.Verify;
+
+public static class GuiVerifyServices
+{
+    public static IServiceCollection AddGuiVerify(this IServiceCollection services)
+    {
+        services.AddSingleton<IVerifyRunner, VerifyRunner>();
+        services.AddSingleton<VerifyVM>();
+        return services;
+    }
+}
+
+````
+
+## src/Firelink.Gui.Verify/Services/IVerifyRunner.cs
+
+````csharp
+using Firelink.Install.Verify;
+
+namespace Firelink.Gui.Verify.Services;
+
+/// <summary>
+/// Обёртка над VerifyPipeline.
+///
+/// Зачем: VerifyVM тестируется без поднятия всего DI-графа pipeline.
+/// В тестах IVerifyRunner заменяется fake-ом, который либо возвращает
+/// готовый VerifyReport, либо бросает исключение.
+///
+/// VerifyPipeline.Execute — синхронный (решение №116). VerifyRunner
+/// оборачивает его в Task.Run, чтобы не блокировать UI-поток.
+///
+/// Реализация (VerifyRunner) — тонкая. Вся логика — в pipeline.
+/// </summary>
+public interface IVerifyRunner
+{
+    /// <summary>
+    /// Запустить верификацию. Возвращает отчёт.
+    ///
+    /// Бросает:
+    ///   - OperationCanceledException (или AggregateException с cancellation)
+    ///     при отмене через ct;
+    ///   - ArgumentException — если targetPath пустой;
+    ///   - любой exception из pipeline — при внутренней ошибке.
+    ///
+    /// «Checks failed» (report.IsOk == false) — НЕ exception,
+    /// а нормальный результат.
+    /// </summary>
+    Task<VerifyReport> RunAsync(string targetPath, CancellationToken ct);
+}
+
+````
+
+## src/Firelink.Gui.Verify/Services/VerifyRunner.cs
+
+````csharp
+using Firelink.Install.Verify;
+
+namespace Firelink.Gui.Verify.Services;
+
+public sealed class VerifyRunner : IVerifyRunner
+{
+    private readonly VerifyPipeline _pipeline;
+
+    public VerifyRunner(VerifyPipeline pipeline)
+    {
+        _pipeline = pipeline;
+    }
+
+    public Task<VerifyReport> RunAsync(string targetPath, CancellationToken ct)
+    {
+        // VerifyPipeline.Execute — синхронный. Task.Run уводит работу
+        // с UI-потока; ct пробрасывается внутрь Execute, где есть
+        // ThrowIfCancellationRequested в начале и в циклах.
+        return Task.Run(() => _pipeline.Execute(targetPath, ct), ct);
+    }
+}
+
+````
+
+## src/Firelink.Gui.Verify/ViewModels/VerifyRowVM.cs
+
+````csharp
+namespace Firelink.Gui.Verify.ViewModels;
+
+/// <summary>
+/// Строка таблицы проверок.
+///
+/// Обёртка над VerifyCheckResult — плоская, с двумя вычисляемыми
+/// полями для удобства биндинга:
+///   - StatusGlyph — "✓" или "×";
+///   - StatusColor — hex для Foreground.
+///
+/// VerifyCheckResult — sealed class с required-свойствами,
+/// поэтому в XAML напрямую биндить нельзя без конвертеров.
+/// </summary>
+public sealed class VerifyRowVM
+{
+    public required string Name { get; init; }
+    public required bool Passed { get; init; }
+    public string? Message { get; init; }
+
+    public string StatusGlyph => Passed ? "✓" : "×";
+
+    public string StatusColor => Passed ? "#4ADE80" : "#F87171";
+}
+
+````
+
+## src/Firelink.Gui.Verify/ViewModels/VerifyVM.cs
+
+````csharp
+using System.Collections.ObjectModel;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using Firelink.Core;
+using Firelink.Gui.Shared.Navigation;
+using Firelink.Gui.Shared.Services;
+using Firelink.Gui.Shared.State;
+using Firelink.Gui.Shared.ViewModels;
+using Firelink.Gui.Shared.ViewModels.Controls;
+using Firelink.Gui.Verify.Services;
+using Firelink.Install.Verify;
+using Microsoft.Extensions.Logging;
+
+namespace Firelink.Gui.Verify.ViewModels;
+
+public sealed partial class VerifyVM : ViewModel, INavigationAware
+{
+    private readonly IVerifyRunner _runner;
+    private readonly ILogger<VerifyVM> _logger;
+    private Action? _navigateHome;
+    private CancellationTokenSource? _cts;
+
+    [ObservableProperty]
+    private VerifyState _state = VerifyState.Configuration;
+
+    [ObservableProperty]
+    private bool _isConfiguring = true;
+
+    [ObservableProperty]
+    private bool _isVerifying;
+
+    [ObservableProperty]
+    private bool _isSuccess;
+
+    [ObservableProperty]
+    private bool _isFailure;
+
+    [ObservableProperty]
+    private VerifyReport? _report;
+
+    [ObservableProperty]
+    private string? _errorMessage;
+
+    [ObservableProperty]
+    private bool _showAllChecks;
+
+    public FilePickerVM TargetPicker { get; }
+    public LogVM Log { get; }
+
+    public ObservableCollection<VerifyRowVM> Rows { get; } = new();
+
+    // ------------------------------------------------------------------
+    //  Производные свойства для UI
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// true, если все проверки прошли.
+    /// Нужен отдельно от Report.IsOk, чтобы не дёргать цепочку
+    /// через null при биндинге.
+    /// </summary>
+    public bool IsOk => Report?.IsOk ?? false;
+
+    public bool HasFailures => Report is not null && Report.FailedCount > 0;
+
+    public int PassedCount => Report?.PassedCount ?? 0;
+    public int FailedCount => Report?.FailedCount ?? 0;
+
+    /// <summary>Заголовок успеха: «All checks passed» или «N checks failed».</summary>
+    public string ResultTitle => Report switch
+    {
+        null => "",
+        { IsOk: true } => "All checks passed",
+        _ => $"{Report.FailedCount} check(s) failed",
+    };
+
+    public string ResultColor => IsOk ? "#4ADE80" : "#F87171";
+
+    public string TargetPath => Report?.TargetPath ?? "";
+
+    public VerifyVM(
+        IVerifyRunner runner,
+        IFilePickerService picker,
+        LogVM log,
+        ILogger<VerifyVM> logger)
+    {
+        _runner = runner;
+        _logger = logger;
+        Log = log;
+
+        TargetPicker = new FilePickerVM(picker)
+        {
+            Placeholder = "Select instance folder to verify",
+            MustExist = true,
+            Folder = true,
+        };
+        TargetPicker.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(FilePickerVM.IsValid))
+                VerifyCommand.NotifyCanExecuteChanged();
+        };
+    }
+
+    public void SetNavigateHome(Action navigateHome) => _navigateHome = navigateHome;
+
+    [RelayCommand(CanExecute = nameof(CanVerify))]
+    private async Task VerifyAsync()
+    {
+        Log.Clear();
+        Rows.Clear();
+
+        State = VerifyState.Verifying;
+        UpdateVisibility();
+
+        _cts = new CancellationTokenSource();
+
+        try
+        {
+            Report = await _runner.RunAsync(TargetPicker.Path!, _cts.Token);
+
+            RebuildRows();
+            NotifyResultChanged();
+
+            State = VerifyState.Success;
+        }
+        catch (Exception ex) when (CancellationHelper.IsCancellation(ex))
+        {
+            _logger.LogInformation("Verify cancelled by user");
+            ErrorMessage = "Cancelled.";
+            State = VerifyState.Configuration;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Verify failed");
+            ErrorMessage = ex.Message;
+            State = VerifyState.Failure;
+        }
+        finally
+        {
+            _cts?.Dispose();
+            _cts = null;
+            UpdateVisibility();
+        }
+    }
+
+    private bool CanVerify()
+        => State == VerifyState.Configuration && TargetPicker.IsValid;
+
+    [RelayCommand(CanExecute = nameof(CanCancel))]
+    private void Cancel()
+    {
+        _cts?.Cancel();
+    }
+
+    private bool CanCancel() => State == VerifyState.Verifying;
+
+    [RelayCommand]
+    private void Home() => _navigateHome?.Invoke();
+
+    partial void OnStateChanged(VerifyState value)
+    {
+        UpdateVisibility();
+        VerifyCommand.NotifyCanExecuteChanged();
+        CancelCommand.NotifyCanExecuteChanged();
+    }
+
+    partial void OnShowAllChecksChanged(bool value)
+    {
+        if (Report is not null)
+            RebuildRows();
+    }
+
+    private void UpdateVisibility()
+    {
+        IsConfiguring = State == VerifyState.Configuration;
+        IsVerifying = State == VerifyState.Verifying;
+        IsSuccess = State == VerifyState.Success;
+        IsFailure = State == VerifyState.Failure;
+    }
+
+    // ------------------------------------------------------------------
+    //  Построение строк
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// Заполняет Rows. По умолчанию — только Failures.
+    /// При ShowAllChecks — все Checks.
+    /// </summary>
+    private void RebuildRows()
+    {
+        Rows.Clear();
+
+        if (Report is null) return;
+
+        var source = ShowAllChecks ? Report.Checks : Report.Failures;
+
+        foreach (var check in source)
+        {
+            Rows.Add(new VerifyRowVM
+            {
+                Name = check.Name,
+                Passed = check.Passed,
+                Message = check.Message,
+            });
+        }
+    }
+
+    /// <summary>
+    /// Уведомить UI, что производные свойства результата изменились.
+    /// CommunityToolkit не отслеживает computed properties — зовём вручную
+    /// после присвоения Report.
+    /// </summary>
+    private void NotifyResultChanged()
+    {
+        OnPropertyChanged(nameof(IsOk));
+        OnPropertyChanged(nameof(HasFailures));
+        OnPropertyChanged(nameof(PassedCount));
+        OnPropertyChanged(nameof(FailedCount));
+        OnPropertyChanged(nameof(ResultTitle));
+        OnPropertyChanged(nameof(ResultColor));
+        OnPropertyChanged(nameof(TargetPath));
+    }
+}
+
+````
+
+## src/Firelink.Gui.Verify/Views/VerifyView.axaml
+
+````text
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Firelink.Gui.Verify.ViewModels"
+             xmlns:controls="using:Firelink.Gui.Controls.Views"
+             x:Class="Firelink.Gui.Verify.Views.VerifyView"
+             x:DataType="vm:VerifyVM">
+    <Grid RowDefinitions="Auto,*,Auto" Margin="20">
+
+        <!-- Header -->
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,16">
+            <TextBlock Grid.Column="0"
+                       Text="Verify"
+                       FontSize="24"
+                       FontWeight="Bold"
+                       VerticalAlignment="Center" />
+            <Button Grid.Column="1"
+                    Content="Home"
+                    Command="{Binding HomeCommand}"
+                    Padding="12,6"
+                    IsVisible="{Binding IsConfiguring}" />
+        </Grid>
+
+        <!-- Configuration -->
+        <StackPanel Grid.Row="1"
+                    Spacing="16"
+                    IsVisible="{Binding IsConfiguring}"
+                    VerticalAlignment="Top">
+            <controls:FilePickerView DataContext="{Binding TargetPicker}" />
+
+            <TextBlock Text="{Binding ErrorMessage}"
+                       Foreground="#FBBF24"
+                       FontSize="12"
+                       IsVisible="{Binding ErrorMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+            <Button Content="Verify"
+                    Command="{Binding VerifyCommand}"
+                    HorizontalAlignment="Left"
+                    Padding="20,8"
+                    FontWeight="SemiBold" />
+        </StackPanel>
+
+        <!-- Verifying -->
+        <StackPanel Grid.Row="1"
+                    Spacing="20"
+                    IsVisible="{Binding IsVerifying}"
+                    VerticalAlignment="Center"
+                    HorizontalAlignment="Stretch">
+            <TextBlock Text="Verifying…"
+                       FontSize="16"
+                       HorizontalAlignment="Center" />
+            <ProgressBar IsIndeterminate="True"
+                         Height="6" />
+            <Button Content="Cancel"
+                    Command="{Binding CancelCommand}"
+                    HorizontalAlignment="Center"
+                    Padding="20,8" />
+        </StackPanel>
+
+        <!-- Success -->
+        <Grid Grid.Row="1"
+              RowDefinitions="Auto,Auto,*"
+              IsVisible="{Binding IsSuccess}">
+
+            <!-- Result header -->
+            <StackPanel Grid.Row="0"
+                        Spacing="4"
+                        Margin="0,0,0,12">
+                <TextBlock Text="{Binding ResultTitle}"
+                           FontSize="18"
+                           FontWeight="SemiBold"
+                           Foreground="{Binding ResultColor}" />
+                <TextBlock Text="{Binding TargetPath}"
+                           FontFamily="Consolas,Menlo,monospace"
+                           FontSize="12"
+                           Opacity="0.6"
+                           TextTrimming="CharacterEllipsis" />
+                <TextBlock Opacity="0.7" FontSize="12">
+                    <Run Text="Passed: " />
+                    <Run Text="{Binding PassedCount}" />
+                    <Run Text="   Failed: " />
+                    <Run Text="{Binding FailedCount}" />
+                </TextBlock>
+            </StackPanel>
+
+            <!-- Toggle -->
+            <CheckBox Grid.Row="1"
+                      Content="Show all checks (verbose)"
+                      IsChecked="{Binding ShowAllChecks}"
+                      Margin="0,0,0,8" />
+
+            <!-- Rows -->
+            <Border Grid.Row="2"
+                    Background="#0B1116"
+                    BorderBrush="#2A3742"
+                    BorderThickness="1"
+                    CornerRadius="4">
+                <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                              VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding Rows}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="vm:VerifyRowVM">
+                                <Grid ColumnDefinitions="20,*,Auto"
+                                      Margin="10,3">
+                                    <TextBlock Grid.Column="0"
+                                               Text="{Binding StatusGlyph}"
+                                               Foreground="{Binding StatusColor}"
+                                               FontFamily="Consolas,Menlo,monospace"
+                                               FontWeight="Bold" />
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding Name}"
+                                               FontFamily="Consolas,Menlo,monospace"
+                                               FontSize="12"
+                                               TextWrapping="Wrap"
+                                               Margin="4,0,12,0" />
+                                    <TextBlock Grid.Column="2"
+                                               Text="{Binding Message}"
+                                               FontFamily="Consolas,Menlo,monospace"
+                                               FontSize="11"
+                                               Opacity="0.65"
+                                               TextWrapping="Wrap"
+                                               MaxWidth="400" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+
+        <!-- Failure -->
+        <StackPanel Grid.Row="1"
+                    Spacing="12"
+                    IsVisible="{Binding IsFailure}"
+                    VerticalAlignment="Top">
+            <TextBlock Text="Verify failed"
+                       FontSize="18"
+                       FontWeight="SemiBold"
+                       Foreground="#F87171" />
+
+            <Border Background="#1F1414"
+                    BorderBrush="#7F1D1D"
+                    BorderThickness="1"
+                    CornerRadius="4"
+                    Padding="16">
+                <TextBlock Text="{Binding ErrorMessage}"
+                           TextWrapping="Wrap"
+                           FontFamily="Consolas,Menlo,monospace"
+                           FontSize="12" />
+            </Border>
+
+            <Button Content="Home"
+                    Command="{Binding HomeCommand}"
+                    HorizontalAlignment="Left"
+                    Padding="20,8" />
+        </StackPanel>
+
+        <!-- Log panel -->
+        <Border Grid.Row="2"
+                Height="200"
+                Margin="0,16,0,0"
+                IsVisible="{Binding !IsConfiguring}">
+            <controls:LogView DataContext="{Binding Log}" />
+        </Border>
+
+    </Grid>
+</UserControl>
+
+````
+
+## src/Firelink.Gui.Verify/Views/VerifyView.axaml.cs
+
+````csharp
+using Avalonia.Controls;
+
+namespace Firelink.Gui.Verify.Views;
+
+public partial class VerifyView : UserControl
+{
+    public VerifyView()
+    {
+        InitializeComponent();
+    }
+}
+
 ````
 
 ## src/Firelink.Install/InstallInputFactory.cs
@@ -10539,6 +6654,7 @@ using Firelink.Core.Archives.Extraction;
 using Firelink.Install.Downloaders;
 using Firelink.Install.Steps;
 using Firelink.Install.Verify;
+using Firelink.Platform.Nexus;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -10547,18 +6663,25 @@ namespace Firelink.Install;
 /// <summary>
 /// DI-extension: регистрирует все сервисы installer-а.
 ///
-/// Вызывается из Firelink.Cli/Program.cs (и в будущем — из GUI).
-/// Использует TryAddSingleton, чтобы не плодить дубли: FileHashCache
-/// и IArchiveExtractor регистрируются и в AddFirelinkPack тоже.
+/// Скачивание:
+///   - MirrorDownloader и NexusDownloader регистрируются через
+///     TryAddEnumerable(ServiceDescriptor.Singleton&lt;IArchiveDownloader, TConcrete&gt;()).
+///     Это даёт: (а) обе реализации попадают в DownloaderRegistry;
+///     (б) повторный вызов AddFirelinkInstall не плодит дубликаты.
+///   - HttpClient-ы берутся downloader-ами из IHttpClientFactory по имени:
+///       "mirror"    — 10 минут.
+///       "nexus"     — 10 минут.
+///       "nexus-api" — 2 минуты.
 ///
-/// AddHttpClient<MirrorDownloader> требует пакет
-/// Microsoft.Extensions.Http — он явно добавлен в
-/// Firelink.Install.csproj.
+/// ВАЖНО: downloader-ы принимают IHttpClientFactory, а не HttpClient.
+/// Иначе DI создаёт их через активацию конструктора и подставит
+/// безымянный HttpClient с дефолтным таймаутом (100 секунд). Для
+/// гигабайтных архивов с Nexus это критично — 100 секунд не хватит.
 ///
 /// НЕ регистрирует:
 ///   - IAnsiConsole (это CLI/GUI);
 ///   - ParallelOptions (это клиент решает);
-///   - ILogger<T> (это AddLogging в клиенте).
+///   - ILogger&lt;T&gt; (это AddLogging в клиенте).
 /// </summary>
 public static class InstallServices
 {
@@ -10568,14 +6691,48 @@ public static class InstallServices
         services.TryAddSingleton<FileHashCache>();
         services.TryAddSingleton<IArchiveExtractor, SevenZipExtractor>();
 
-        // --- Downloaders ---
-        services.AddHttpClient<MirrorDownloader>(client =>
+        // --- Nexus ---
+        services.TryAddSingleton<INexusApiKeyProvider, NexusApiKeyProvider>();
+
+        // --- HttpClient-ы (именованные) ---
+        services.AddHttpClient(MirrorDownloader.HttpClientName, client =>
         {
             client.Timeout = TimeSpan.FromMinutes(10);
         });
 
-        services.TryAddSingleton<IArchiveDownloader>(sp =>
-            sp.GetRequiredService<MirrorDownloader>());
+        services.AddHttpClient(NexusDownloader.HttpClientName, client =>
+        {
+            client.Timeout = TimeSpan.FromMinutes(10);
+        });
+
+        services.AddHttpClient("nexus-api", client =>
+        {
+            client.Timeout = TimeSpan.FromMinutes(2);
+        });
+
+        // --- NexusClient (API) ---
+        services.TryAddSingleton<NexusClient>(sp =>
+        {
+            var factory = sp.GetRequiredService<IHttpClientFactory>();
+            return new NexusClient(
+                factory.CreateClient("nexus-api"),
+                sp.GetRequiredService<INexusApiKeyProvider>(),
+                sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<NexusClient>>());
+        });
+
+        // --- Downloaders в коллекции IArchiveDownloader ---
+        // TryAddEnumerable с явным ImplementationType — каждая пара
+        // (ServiceType, ImplementationType) регистрируется один раз,
+        // даже если AddFirelinkInstall вызывается дважды.
+        //
+        // DI создаст downloader-ы через активацию конструктора.
+        // Конструкторы принимают IHttpClientFactory — не HttpClient —
+        // чтобы получить именованный клиент с правильным таймаутом.
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<IArchiveDownloader, MirrorDownloader>());
+
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<IArchiveDownloader, NexusDownloader>());
 
         services.TryAddSingleton<DownloaderRegistry>();
 
@@ -10771,6 +6928,7 @@ public sealed class DownloaderRegistry
 
 ````csharp
 using Firelink.Core.Abstractions;
+using Firelink.Core.Archives;
 using Firelink.Core.Models.Hashing;
 using Firelink.Core.Models.Manifest.Sources;
 
@@ -10779,16 +6937,25 @@ namespace Firelink.Install.Downloaders;
 /// <summary>
 /// Скачивание архивов по прямой URL-ссылке (mirror).
 ///
-/// Если в источнике указан hash — downloader его проверяет.
-/// Если не указан — проверка на стороне SyncArchivesStep (по archive.Hash).
+/// HttpClient берётся из IHttpClientFactory по имени "mirror" (таймаут
+/// 10 минут). Это позволяет скачивать большие архивы без риска упасть
+/// по таймауту.
+///
+/// Скачивание идёт в TempFileStream (временный файл на диске), а не в
+/// MemoryStream: у Nexus есть моды на 3+ ГБ, MemoryStream такой размер
+/// не держит (лимит int.MaxValue).
+///
+/// Hash-проверку делает ArchiveDownloadHelper — не здесь.
 /// </summary>
 public sealed class MirrorDownloader : IArchiveDownloader
 {
-    private readonly HttpClient _http;
+    public const string HttpClientName = "mirror";
 
-    public MirrorDownloader(HttpClient http)
+    private readonly IHttpClientFactory _httpClientFactory;
+
+    public MirrorDownloader(IHttpClientFactory httpClientFactory)
     {
-        _http = http;
+        _httpClientFactory = httpClientFactory;
     }
 
     public string SourceType => "mirror";
@@ -10803,7 +6970,9 @@ public sealed class MirrorDownloader : IArchiveDownloader
                 nameof(source));
         }
 
-        using var response = await _http.GetAsync(
+        var http = _httpClientFactory.CreateClient(HttpClientName);
+
+        using var response = await http.GetAsync(
             mirror.Url, HttpCompletionOption.ResponseHeadersRead, ct);
 
         if (!response.IsSuccessStatusCode)
@@ -10813,27 +6982,38 @@ public sealed class MirrorDownloader : IArchiveDownloader
                 $"({response.ReasonPhrase}) for {mirror.Url}");
         }
 
-        var ms = new MemoryStream();
-        await using (var networkStream = await response.Content.ReadAsStreamAsync(ct))
+        var temp = new TempFileStream();
+
+        try
         {
-            await networkStream.CopyToAsync(ms, ct);
+            await using (var networkStream = await response.Content
+                .ReadAsStreamAsync(ct))
+            {
+                await networkStream.CopyToAsync(temp, ct);
+            }
+
+            temp.Position = 0;
+
+            // Проверяем hash сразу, если он указан в mirror-источнике.
+            // Это раннее обнаружение битой загрузки до записи в .part.
+            var actualHash = XxHash64Value.FromStream(temp);
+            temp.Position = 0;
+
+            if (actualHash != mirror.Hash)
+            {
+                await temp.DisposeAsync();
+                throw new InvalidOperationException(
+                    $"Mirror hash mismatch for {mirror.Url}: " +
+                    $"expected {mirror.Hash}, got {actualHash}.");
+            }
+
+            return temp;
         }
-
-        ms.Position = 0;
-
-        // Если в mirror-источнике указан hash — проверяем сразу.
-        // Это раннее обнаружение битой загрузки до записи на диск.
-        var actualHash = XxHash64Value.FromStream(ms);
-        ms.Position = 0;
-
-        if (actualHash != mirror.Hash)
+        catch
         {
-            throw new InvalidOperationException(
-                $"Mirror hash mismatch for {mirror.Url}: " +
-                $"expected {mirror.Hash}, got {actualHash}.");
+            await temp.DisposeAsync();
+            throw;
         }
-
-        return ms;
     }
 }
 
@@ -13897,26 +10077,6 @@ public sealed class VerifyReport
         => Checks.Where(c => !c.Passed);
 }
 
-````
-
-## src/Firelink.Pack/Firelink.Pack.csproj
-
-````xml
-﻿<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\Firelink.Core\Firelink.Core.csproj" />
-    <ProjectReference Include="..\Firelink.Platform.MO2\Firelink.Platform.MO2.csproj" />
-    <ProjectReference Include="..\Firelink.Platform.Nexus\Firelink.Platform.Nexus.csproj" />
-  </ItemGroup>
-  <ItemGroup>
-    <InternalsVisibleTo Include="Firelink.Pack.Tests" />
-  </ItemGroup>
-</Project>
 ````
 
 ## src/Firelink.Pack/PackInputFactory.cs
@@ -17005,26 +13165,6 @@ public sealed class WriteManifestStep : IStep<WriteManifestStep.Input, string>
 
 ````
 
-## src/Firelink.Platform.GitHub/Firelink.Platform.GitHub.csproj
-
-````xml
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\Firelink.Core\Firelink.Core.csproj" />
-  </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="Octokit" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
-    <PackageReference Include="Microsoft.Extensions.Http" />
-  </ItemGroup>
-</Project>
-````
-
 ## src/Firelink.Platform.GitHub/GitHubDownloader.cs
 
 ````csharp
@@ -17104,24 +13244,6 @@ public sealed class GitHubDownloader : IArchiveDownloader
     }
 }
 
-````
-
-## src/Firelink.Platform.MO2/Firelink.Platform.MO2.csproj
-
-````xml
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\Firelink.Core\Firelink.Core.csproj" />
-  </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
-  </ItemGroup>
-</Project>
 ````
 
 ## src/Firelink.Platform.MO2/Models/LoadorderFile.cs
@@ -17869,25 +13991,601 @@ public static class PluginsWriter
 
 ````
 
-## src/Firelink.Platform.Nexus/Firelink.Platform.Nexus.csproj
+## src/Firelink.Platform.Nexus/INexusApiKeyProvider.cs
 
-````xml
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\Firelink.Core\Firelink.Core.csproj" />
-  </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Http" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
-    <PackageReference Include="Polly" />
-    <PackageReference Include="System.Security.Cryptography.ProtectedData" />
-  </ItemGroup>
-</Project>
+````csharp
+namespace Firelink.Platform.Nexus;
+
+/// <summary>
+/// Источник Nexus API-ключа.
+///
+/// Абстракция нужна, чтобы NexusClient и NexusDownloader тестировались
+/// без реального файла в %USERPROFILE%\.firelink\nexus.key.
+/// </summary>
+public interface INexusApiKeyProvider
+{
+    /// <summary>
+    /// Возвращает API-ключ или null, если ключа нет / файл недоступен / файл пуст.
+    /// Никогда не бросает исключение.
+    /// </summary>
+    string? TryGetApiKey();
+}
+
+````
+
+## src/Firelink.Platform.Nexus/NexusApiKeyProvider.cs
+
+````csharp
+using Microsoft.Extensions.Logging;
+
+namespace Firelink.Platform.Nexus;
+
+/// <summary>
+/// Читает Nexus API-ключ из %USERPROFILE%\.firelink\nexus.key.
+///
+/// Формат файла: одна строка с ключом, опционально с BOM, опционально
+/// с trailing \r\n. Пустые строки и пробелы вокруг ключа — обрезаются.
+///
+/// Никаких исключений наружу: если файла нет, путь недоступен, файл пуст —
+/// возвращается null. Это сознательно: absence ключа — валидное состояние,
+/// а не ошибка (пользователь может не иметь Nexus-аккаунта).
+///
+/// v0.2.0: DPAPI-шифрование, SQLite-хранилище.
+/// </summary>
+public sealed class NexusApiKeyProvider : INexusApiKeyProvider
+{
+    private const string FirelinkDirName = ".firelink";
+    private const string KeyFileName = "nexus.key";
+
+    private readonly string _keyFilePath;
+    private readonly ILogger<NexusApiKeyProvider> _logger;
+
+    public NexusApiKeyProvider(ILogger<NexusApiKeyProvider> logger)
+        : this(logger, DefaultKeyFilePath())
+    {
+    }
+
+    /// <summary>
+    /// Для тестов: явный путь к файлу ключа.
+    /// </summary>
+    internal NexusApiKeyProvider(ILogger<NexusApiKeyProvider> logger, string keyFilePath)
+    {
+        _logger = logger;
+        _keyFilePath = keyFilePath;
+    }
+
+    /// <summary>Путь к файлу ключа. Для тестов и диагностики.</summary>
+    public string KeyFilePath => _keyFilePath;
+
+    public string? TryGetApiKey()
+    {
+        try
+        {
+            if (!File.Exists(_keyFilePath))
+            {
+                _logger.LogDebug(
+                    "Nexus API key not found at {Path}", _keyFilePath);
+                return null;
+            }
+
+            var raw = File.ReadAllText(_keyFilePath);
+
+            // Убираем BOM, если он есть (File.ReadAllText сохраняет его в строке).
+            if (raw.Length > 0 && raw[0] == '\uFEFF')
+                raw = raw[1..];
+
+            var trimmed = raw.Trim();
+            if (trimmed.Length == 0)
+            {
+                _logger.LogWarning(
+                    "Nexus API key file is empty: {Path}", _keyFilePath);
+                return null;
+            }
+
+            // Ключ — одна строка. Если в файле что-то ещё (случайный текст,
+            // вторая строка), берём первую непустую.
+            var firstLine = trimmed
+                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .FirstOrDefault();
+
+            if (string.IsNullOrWhiteSpace(firstLine))
+            {
+                _logger.LogWarning(
+                    "Nexus API key file has no usable line: {Path}", _keyFilePath);
+                return null;
+            }
+
+            return firstLine.Trim();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Failed to read Nexus API key from {Path}", _keyFilePath);
+            return null;
+        }
+    }
+
+    private static string DefaultKeyFilePath()
+    {
+        var home = Environment.GetFolderPath(
+            Environment.SpecialFolder.UserProfile);
+
+        return Path.Combine(home, FirelinkDirName, KeyFileName);
+    }
+}
+
+````
+
+## src/Firelink.Platform.Nexus/NexusClient.cs
+
+````csharp
+using System.Net;
+using System.Net.Http.Json;
+using Firelink.Platform.Nexus.Models;
+using Microsoft.Extensions.Logging;
+
+namespace Firelink.Platform.Nexus;
+
+/// <summary>
+/// HTTP-клиент к Nexus API (https://api.nexusmods.com/v1/).
+///
+/// Заголовки на каждый запрос:
+///   apikey: &lt;ключ&gt;
+///   Application-Name: Firelink
+///   Application-Version: 0.1.0
+///   User-Agent: Firelink/0.1.0
+///   Accept: application/json
+///
+/// Обработка ошибок: 401/403/404/429 → InvalidOperationException с внятным
+/// текстом. Остальные не-2xx → HttpRequestException.
+///
+/// IsPremiumAsync кешируется: результат первого успешного запроса
+/// запоминается на всё время жизни инстанса (NexusClient — синглтон в DI).
+/// Параллельные вызовы получают одну и ту же Task — один HTTP-запрос.
+/// Faulted/canceled результат НЕ кешируется: retry должен переспросить.
+///
+/// НЕ делает retry download-ссылок — это ответственность ArchiveDownloadHelper.
+/// НЕ кеширует download-ссылки — они временные.
+/// </summary>
+public sealed class NexusClient
+{
+    private const string BaseUrl = "https://api.nexusmods.com/v1";
+    private const string ApplicationName = "Firelink";
+    private const string ApplicationVersion = "0.1.0";
+    private const string UserAgent = "Firelink/0.1.0";
+
+    private readonly HttpClient _http;
+    private readonly INexusApiKeyProvider _keyProvider;
+    private readonly ILogger<NexusClient> _logger;
+
+    private readonly object _isPremiumLock = new();
+    private Task<bool>? _isPremiumTask;
+
+    public NexusClient(
+        HttpClient http,
+        INexusApiKeyProvider keyProvider,
+        ILogger<NexusClient> logger)
+    {
+        _http = http;
+        _keyProvider = keyProvider;
+        _logger = logger;
+    }
+
+    /// <summary>
+    /// Проверяет, является ли текущий API-ключ Premium-аккаунтом.
+    ///
+    /// Результат кешируется на время жизни клиента: первый успешный
+    /// запрос к /validate.json запоминается, все последующие вызовы
+    /// возвращают его же. Параллельные вызовы ждут одну Task — один
+    /// HTTP-запрос на весь pipeline.
+    ///
+    /// Если предыдущий запрос был отменён или упал — следующий вызов
+    /// сделает новый. Это важно для retry: ArchiveDownloadHelper
+    /// повторит DownloadAsync, и мы не должны «отравить» его
+    /// faulted-результатом.
+    /// </summary>
+    public async Task<bool> IsPremiumAsync(CancellationToken ct)
+    {
+        Task<bool> task;
+
+        lock (_isPremiumLock)
+        {
+            if (_isPremiumTask is null ||
+                _isPremiumTask.IsFaulted ||
+                _isPremiumTask.IsCanceled)
+            {
+                _isPremiumTask = FetchIsPremiumAsync(ct);
+            }
+
+            task = _isPremiumTask;
+        }
+
+        return await task.ConfigureAwait(false);
+    }
+
+    private async Task<bool> FetchIsPremiumAsync(CancellationToken ct)
+    {
+        var validate = await SendAsync<NexusValidateResponse>(
+            "/users/validate.json",
+            notFoundMessage: "Nexus rejected the API key: not a valid account.",
+            ct).ConfigureAwait(false);
+
+        _logger.LogDebug(
+            "Nexus validate: name={Name}, premium={IsPremium}",
+            validate.Name ?? "<unknown>", validate.IsPremium);
+
+        return validate.IsPremium;
+    }
+
+    /// <summary>
+    /// Возвращает список CDN-ссылок для скачивания файла.
+    /// Обычно их несколько (разные CDN-ноды). NexusDownloader перебирает
+    /// их по очереди.
+    /// </summary>
+    public async Task<IReadOnlyList<NexusDownloadLink>> GetDownloadLinksAsync(
+        string game, int modId, int fileId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(game))
+            throw new ArgumentException("Game domain must be non-empty.", nameof(game));
+        if (modId <= 0)
+            throw new ArgumentOutOfRangeException(nameof(modId), "modId must be positive.");
+        if (fileId <= 0)
+            throw new ArgumentOutOfRangeException(nameof(fileId), "fileId must be positive.");
+
+        var path = $"/games/{Uri.EscapeDataString(game)}/mods/{modId}/files/{fileId}/download_link.json";
+
+        var links = await SendAsync<NexusDownloadLink[]>(
+            path,
+            notFoundMessage: $"Nexus mod/file not found: {game}/{modId}/{fileId}.",
+            ct).ConfigureAwait(false);
+
+        // Nexus иногда возвращает null-элементы или элементы без URI —
+        // фильтруем сразу, чтобы NexusDownloader не проверял.
+        var usable = links
+            .Where(l => l?.Uri is not null)
+            .ToArray();
+
+        if (usable.Length != links.Length)
+        {
+            _logger.LogWarning(
+                "Nexus returned {Total} download links for {Game}/{Mod}/{File}, " +
+                "{Usable} of them usable",
+                links.Length, game, modId, fileId, usable.Length);
+        }
+
+        return usable;
+    }
+
+    // ------------------------------------------------------------------
+    //  HTTP
+    // ------------------------------------------------------------------
+
+    private async Task<T> SendAsync<T>(
+        string relativePath,
+        string notFoundMessage,
+        CancellationToken ct)
+    {
+        var key = _keyProvider.TryGetApiKey();
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            throw new InvalidOperationException(
+                "Nexus API key not found. Put your key in " +
+                "%USERPROFILE%\\.firelink\\nexus.key " +
+                "(one line, no quotes).");
+        }
+
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get, BaseUrl + relativePath);
+
+        request.Headers.Add("apikey", key);
+        request.Headers.Add("Application-Name", ApplicationName);
+        request.Headers.Add("Application-Version", ApplicationVersion);
+        request.Headers.Add("User-Agent", UserAgent);
+        request.Headers.Accept.Add(
+            new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+
+        _logger.LogDebug("Nexus API GET {Path}", relativePath);
+
+        using var response = await _http.SendAsync(
+            request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+
+        if (response.IsSuccessStatusCode)
+        {
+            var result = await response.Content
+                .ReadFromJsonAsync<T>(cancellationToken: ct).ConfigureAwait(false);
+
+            if (result is null)
+            {
+                throw new InvalidOperationException(
+                    $"Nexus API returned an empty body for {relativePath}.");
+            }
+
+            return result;
+        }
+
+        switch (response.StatusCode)
+        {
+            case HttpStatusCode.Unauthorized:
+                throw new InvalidOperationException(
+                    "Nexus API key is invalid or revoked. " +
+                    "Check %USERPROFILE%\\.firelink\\nexus.key.");
+
+            case HttpStatusCode.Forbidden:
+                throw new InvalidOperationException(
+                    "Nexus Premium is required for automatic downloads. " +
+                    "Log in with a Premium account or download manually.");
+
+            case HttpStatusCode.NotFound:
+                throw new InvalidOperationException(notFoundMessage);
+
+            case HttpStatusCode.TooManyRequests:
+                throw new InvalidOperationException(
+                    "Nexus API rate limit exceeded. Wait a minute and retry.");
+
+            default:
+                throw new HttpRequestException(
+                    $"Nexus API returned {(int)response.StatusCode} " +
+                    $"({response.ReasonPhrase}) for {relativePath}.");
+        }
+    }
+}
+
+````
+
+## src/Firelink.Platform.Nexus/NexusDownloader.cs
+
+````csharp
+using Firelink.Core.Abstractions;
+using Firelink.Core.Archives;
+using Firelink.Core.Models.Hashing;
+using Firelink.Core.Models.Manifest.Sources;
+using Microsoft.Extensions.Logging;
+
+namespace Firelink.Platform.Nexus;
+
+/// <summary>
+/// Скачивание архивов с Nexus Mods через официальный API.
+///
+/// Логика:
+///   1. Проверить, что аккаунт Premium.
+///   2. Получить список CDN-ссылок через NexusClient.
+///   3. Перебрать ссылки по очереди.
+///   4. Вернуть Stream с содержимым архива.
+///
+/// HttpClient для CDN берётся из IHttpClientFactory по имени "nexus"
+/// (таймаут 10 минут). Это критично для больших архивов — у Nexus
+/// есть моды на 3+ ГБ.
+///
+/// Скачивание идёт в TempFileStream (временный файл на диске), а не в
+/// MemoryStream: MemoryStream не держит больше ~2 ГБ.
+///
+/// Retry / hash-check / .part — на стороне ArchiveDownloadHelper.
+/// </summary>
+public sealed class NexusDownloader : IArchiveDownloader
+{
+    public const string HttpClientName = "nexus";
+
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly NexusClient _client;
+    private readonly ILogger<NexusDownloader> _logger;
+
+    public NexusDownloader(
+        IHttpClientFactory httpClientFactory,
+        NexusClient client,
+        ILogger<NexusDownloader> logger)
+    {
+        _httpClientFactory = httpClientFactory;
+        _client = client;
+        _logger = logger;
+    }
+
+    public string SourceType => "nexus";
+
+    public async Task<Stream> DownloadAsync(
+        ArchiveSourceRef source, CancellationToken ct)
+    {
+        if (source is not NexusSourceRef nexus)
+        {
+            throw new ArgumentException(
+                $"Expected NexusSourceRef, got {source.GetType().Name}.",
+                nameof(source));
+        }
+
+        ct.ThrowIfCancellationRequested();
+
+        _logger.LogInformation(
+            "Downloading from Nexus: {Game}/{ModId}/{FileId}",
+            nexus.Game, nexus.ModId, nexus.FileId);
+
+        // 1. Premium-проверка (кешируется в NexusClient: один запрос
+        // на весь pipeline, сколько бы архивов ни качалось).
+        var isPremium = await _client.IsPremiumAsync(ct);
+
+        ct.ThrowIfCancellationRequested();
+        if (!isPremium)
+        {
+            throw new InvalidOperationException(
+                "Nexus Premium is required for automatic downloads. " +
+                $"Mod {nexus.Game}/{nexus.ModId}/{nexus.FileId} can only be " +
+                "downloaded manually from the Nexus website.");
+        }
+
+        // 2. Получаем список CDN-нод.
+        var links = await _client.GetDownloadLinksAsync(
+            nexus.Game, nexus.ModId, nexus.FileId, ct);
+
+        if (links.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"Nexus returned no download links for " +
+                $"{nexus.Game}/{nexus.ModId}/{nexus.FileId}. " +
+                "The file may be hidden, archived, or restricted.");
+        }
+
+        _logger.LogDebug(
+            "Nexus returned {Count} CDN node(s) for {Game}/{ModId}/{FileId}",
+            links.Count, nexus.Game, nexus.ModId, nexus.FileId);
+
+        // 3. Перебираем по очереди.
+        var http = _httpClientFactory.CreateClient(HttpClientName);
+        Exception? lastError = null;
+
+        for (int i = 0; i < links.Count; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var link = links[i];
+            var label = string.IsNullOrWhiteSpace(link.Name)
+                ? $"#{i + 1}"
+                : link.Name;
+
+            try
+            {
+                var stream = await DownloadFromCdnAsync(http, link.Uri!, ct);
+
+                _logger.LogDebug(
+                    "Nexus CDN node {Label} succeeded for {Game}/{ModId}/{FileId}",
+                    label, nexus.Game, nexus.ModId, nexus.FileId);
+
+                return stream;
+            }
+            catch (OperationCanceledException)
+            {
+                // Отмена — не «ошибка CDN». Пробрасываем как есть.
+                throw;
+            }
+            catch (Exception ex)
+            {
+                lastError = ex;
+
+                _logger.LogWarning(ex,
+                    "Nexus CDN node {Label} failed for {Game}/{ModId}/{FileId}: {Message}",
+                    label, nexus.Game, nexus.ModId, nexus.FileId, ex.Message);
+            }
+        }
+
+        // 4. Все ноды упали.
+        throw new InvalidOperationException(
+            $"All {links.Count} Nexus CDN nodes failed for " +
+            $"{nexus.Game}/{nexus.ModId}/{nexus.FileId}: " +
+            $"{lastError?.Message ?? "unknown error"}",
+            lastError);
+    }
+
+    // ------------------------------------------------------------------
+    //  CDN
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// Скачивает одну CDN-ноду во временный файл. Возвращает TempFileStream
+    /// с Position=0.
+    ///
+    /// Hash не проверяем — это делает ArchiveDownloadHelper по archive.Hash.
+    /// Пишем не в MemoryStream, а в TempFileStream: архивы бывают > 2 ГБ.
+    /// </summary>
+    private static async Task<Stream> DownloadFromCdnAsync(
+        HttpClient http, Uri url, CancellationToken ct)
+    {
+        using var response = await http.GetAsync(
+            url, HttpCompletionOption.ResponseHeadersRead, ct);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new HttpRequestException(
+                $"Nexus CDN returned {(int)response.StatusCode} " +
+                $"({response.ReasonPhrase}) for {url.Host}.");
+        }
+
+        var temp = new TempFileStream();
+
+        try
+        {
+            await using (var networkStream = await response.Content
+                .ReadAsStreamAsync(ct))
+            {
+                await networkStream.CopyToAsync(temp, ct);
+            }
+
+            temp.Position = 0;
+            return temp;
+        }
+        catch
+        {
+            await temp.DisposeAsync();
+            throw;
+        }
+    }
+}
+
+````
+
+## src/Firelink.Platform.Nexus/NullNexusApiKeyProvider.cs
+
+````csharp
+namespace Firelink.Platform.Nexus;
+
+/// <summary>
+/// Никогда не возвращает ключ. Полезен как fallback для DI-регистрации,
+/// а также в тестах, где проверяется поведение «ключа нет».
+/// </summary>
+public sealed class NullNexusApiKeyProvider : INexusApiKeyProvider
+{
+    public string? TryGetApiKey() => null;
+}
+
+````
+
+## src/Firelink.Platform.Nexus/Models/NexusDownloadLink.cs
+
+````csharp
+using System.Text.Json.Serialization;
+
+namespace Firelink.Platform.Nexus.Models;
+
+/// <summary>
+/// Один CDN-узел Nexus из ответа /download_link.json.
+///
+/// Nexus возвращает массив таких объектов (обычно несколько CDN-нод).
+/// NexusDownloader перебирает их по очереди: если одна упала —
+/// пробует следующую.
+///
+/// Имена полей — точно как у Nexus: "name", "short_name", "URI".
+/// </summary>
+public sealed class NexusDownloadLink
+{
+    [JsonPropertyName("name")]
+    public string? Name { get; init; }
+
+    [JsonPropertyName("short_name")]
+    public string? ShortName { get; init; }
+
+    [JsonPropertyName("URI")]
+    public Uri? Uri { get; init; }
+}
+
+````
+
+## src/Firelink.Platform.Nexus/Models/NexusValidateResponse.cs
+
+````csharp
+using System.Text.Json.Serialization;
+
+namespace Firelink.Platform.Nexus.Models;
+
+/// <summary>
+/// Ответ /v1/users/validate.json.
+/// Берём только то, что нужно: is_premium (для проверки перед скачиванием)
+/// и name (для логов).
+/// </summary>
+internal sealed class NexusValidateResponse
+{
+    [JsonPropertyName("is_premium")]
+    public bool IsPremium { get; init; }
+
+    [JsonPropertyName("name")]
+    public string? Name { get; init; }
+}
+
 ````
 
 ## tests/Firelink.Core.Tests/ArchiveIdTests.cs
@@ -17956,39 +14654,6 @@ public class ArchiveIdTests
     }
 }
 
-````
-
-## tests/Firelink.Core.Tests/Firelink.Core.Tests.csproj
-
-````xml
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <IsPackable>false</IsPackable>
-  </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="coverlet.collector" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" />
-    <PackageReference Include="xunit" />
-    <PackageReference Include="xunit.runner.visualstudio" />
-  </ItemGroup>
-  <ItemGroup>
-    <Using Include="Xunit" />
-  </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="FluentAssertions" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\..\src\Firelink.Core\Firelink.Core.csproj" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="..\..\samples\**\*.json"
-          Link="samples\%(RecursiveDir)%(Filename)%(Extension)"
-          CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
-</Project>
 ````
 
 ## tests/Firelink.Core.Tests/InstancePathValidatorTests.cs
@@ -19291,6 +15956,129 @@ public class SlugTests
 
 ````
 
+## tests/Firelink.Core.Tests/TempFileStreamTests.cs
+
+````csharp
+using FluentAssertions;
+using Firelink.Core.Archives;
+
+namespace Firelink.Core.Tests;
+
+public class TempFileStreamTests
+{
+    [Fact]
+    public void NewStream_IsEmpty()
+    {
+        using var s = new TempFileStream();
+        s.Length.Should().Be(0);
+        s.Position.Should().Be(0);
+    }
+
+    [Fact]
+    public void WriteThenRead_Works()
+    {
+        using var s = new TempFileStream();
+        var data = new byte[] { 1, 2, 3, 4, 5 };
+
+        s.Write(data, 0, data.Length);
+        s.Position = 0;
+
+        var read = new byte[data.Length];
+        var n = s.Read(read, 0, read.Length);
+
+        n.Should().Be(data.Length);
+        read.Should().Equal(data);
+    }
+
+    [Fact]
+    public void SeekAndOverwrite_Works()
+    {
+        using var s = new TempFileStream();
+        s.Write(new byte[] { 1, 2, 3, 4, 5 }, 0, 5);
+        s.Position = 2;
+        s.Write(new byte[] { 99 }, 0, 1);
+        s.Position = 0;
+
+        var read = new byte[5];
+        s.ReadExactly(read, 0, 5);
+
+        read.Should().Equal(new byte[] { 1, 2, 99, 4, 5 });
+    }
+
+    [Fact]
+    public async Task AsyncWriteThenRead_Works()
+    {
+        await using var s = new TempFileStream();
+        var data = new byte[] { 10, 20, 30 };
+
+        await s.WriteAsync(data, 0, data.Length);
+        s.Position = 0;
+
+        var read = new byte[data.Length];
+        var n = await s.ReadAsync(read, 0, read.Length);
+
+        n.Should().Be(data.Length);
+        read.Should().Equal(data);
+    }
+
+    [Fact]
+    public void Dispose_RemovesFile()
+    {
+        string path;
+        using (var s = new TempFileStream())
+        {
+            path = s.TempPath;
+            s.Write(new byte[] { 1, 2, 3 }, 0, 3);
+            File.Exists(path).Should().BeTrue();
+        }
+        File.Exists(path).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task DisposeAsync_RemovesFile()
+    {
+        string path;
+        await using (var s = new TempFileStream())
+        {
+            path = s.TempPath;
+            await s.WriteAsync(new byte[] { 1, 2, 3 }, 0, 3);
+        }
+        File.Exists(path).Should().BeFalse();
+    }
+
+    [Fact]
+    public void MultipleStreams_HaveUniquePaths()
+    {
+        using var a = new TempFileStream();
+        using var b = new TempFileStream();
+
+        a.TempPath.Should().NotBe(b.TempPath);
+    }
+
+    [Fact]
+    public void CanSeekAndGetLength()
+    {
+        using var s = new TempFileStream();
+        s.Write(new byte[1024], 0, 1024);
+
+        s.Length.Should().Be(1024);
+        s.Seek(512, SeekOrigin.Begin).Should().Be(512);
+        s.Seek(10, SeekOrigin.Current).Should().Be(522);
+        s.Seek(-22, SeekOrigin.End).Should().Be(1002);
+    }
+
+    [Fact]
+    public void DisposeIsIdempotent()
+    {
+        var s = new TempFileStream();
+        s.Dispose();
+        var act = () => s.Dispose();
+        act.Should().NotThrow();
+    }
+}
+
+````
+
 ## tests/Firelink.Core.Tests/TempWorkspaceTests.cs
 
 ````csharp
@@ -19545,6 +16333,2157 @@ public class XxHash64ValueParseTests
 
         h1.ToString().Should().Be("xxh64:0000000000000001");
         h2.ToString().Should().Be("xxh64:ffffffffffffffff");
+    }
+}
+
+````
+
+## tests/Firelink.Gui.Install.Tests/Fakes/FakeFilePickerService.cs
+
+````csharp
+using Firelink.Gui.Shared.Services;
+
+namespace Firelink.Gui.Install.Tests.Fakes;
+
+public sealed class FakeFilePickerService : IFilePickerService
+{
+    public string? FileToReturn { get; set; }
+    public string? FolderToReturn { get; set; }
+
+    public Task<string?> PickFileAsync(string title, string? filterHint = null)
+        => Task.FromResult(FileToReturn);
+
+    public Task<string?> PickFolderAsync(string title)
+        => Task.FromResult(FolderToReturn);
+}
+
+````
+
+## tests/Firelink.Gui.Install.Tests/Fakes/FakeInstallRunner.cs
+
+````csharp
+using Firelink.Core.Progress;
+using Firelink.Gui.Install.Services;
+using Firelink.Install;
+
+namespace Firelink.Gui.Install.Tests.Fakes;
+
+public sealed class FakeInstallRunner : IInstallRunner
+{
+    public InstallSummary? ResultToReturn { get; set; }
+    public Exception? ExceptionToThrow { get; set; }
+    public TaskCompletionSource? Gate { get; set; }
+    public List<StepProgress> ReportedProgress { get; } = new();
+    public CancellationToken LastToken { get; private set; }
+    public string? LastManifestPath { get; private set; }
+    public string? LastTarget { get; private set; }
+
+    public async Task<InstallSummary> RunAsync(
+        string manifestPath,
+        string? target,
+        IProgress<StepProgress> progress,
+        CancellationToken ct)
+    {
+        LastManifestPath = manifestPath;
+        LastTarget = target;
+        LastToken = ct;
+
+        // Если задан Gate — ждём его, чтобы тест мог проверить состояние "Installing".
+        if (Gate is not null)
+        {
+            using var reg = ct.Register(() => Gate.TrySetCanceled(ct));
+            await Gate.Task;
+        }
+
+        if (ExceptionToThrow is not null)
+            throw ExceptionToThrow;
+
+        if (ResultToReturn is null)
+            throw new InvalidOperationException("FakeInstallRunner.ResultToReturn is null.");
+
+        return ResultToReturn;
+    }
+
+    public static InstallSummary MakeSummary(
+        string name = "Test Pack",
+        string version = "1.0.0",
+        string game = "skyrimspecialedition",
+        string instancePath = "/test/instance",
+        int modsCreated = 0,
+        int modsSkipped = 0,
+        int archivesDownloaded = 0,
+        int archivesPresent = 0,
+        int metaIniWritten = 0)
+    {
+        return new InstallSummary
+        {
+            Name = name,
+            Version = version,
+            Game = game,
+            InstancePath = instancePath,
+            ManifestPathInInstance = Path.Combine(instancePath, "modlist.json"),
+            ArchivesAlreadyPresent = archivesPresent,
+            ArchivesDownloaded = archivesDownloaded,
+            ArchivesSkipped = 0,
+            ModsCreated = modsCreated,
+            ModsRecreated = 0,
+            ModsSkipped = modsSkipped,
+            ModsDeleted = 0,
+            MetaIniWritten = metaIniWritten,
+            MetaIniDeleted = 0,
+            ExtensionsWritten = 0,
+            ExtensionsSkipped = 0,
+            ExtrasWritten = 0,
+            ExtrasSkipped = 0,
+            ProfileMods = 0,
+            ProfilePlugins = 0,
+            ProfileLoadorder = 0,
+        };
+    }
+}
+
+````
+
+## tests/Firelink.Gui.Install.Tests/Fakes/InstallVMTests.cs
+
+````csharp
+using FluentAssertions;
+using Firelink.Gui.Install.Tests.Fakes;
+using Firelink.Gui.Install.ViewModels;
+using Firelink.Gui.Shared.Logging;
+using Firelink.Gui.Shared.State;
+using Firelink.Gui.Shared.ViewModels;
+using Microsoft.Extensions.Logging.Abstractions;
+
+namespace Firelink.Gui.Install.Tests;
+
+public class InstallVMTests
+{
+    private static (InstallVM vm, FakeInstallRunner runner, FakeFilePickerService picker)
+        Make()
+    {
+        var runner = new FakeInstallRunner();
+        var picker = new FakeFilePickerService();
+        var sink = new ObservableLogSink();
+        var log = new LogVM(sink);
+
+        var vm = new InstallVM(
+            runner, picker, log,
+            NullLogger<InstallVM>.Instance);
+
+        return (vm, runner, picker);
+    }
+
+    private static string MakeTempJson()
+    {
+        var tmp = Path.GetTempFileName();
+        File.WriteAllText(tmp, "{}");
+        return tmp;
+    }
+
+    // ------------------------------------------------------------------
+    //  Configuration
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void InitialState_IsConfiguration()
+    {
+        var (vm, _, _) = Make();
+
+        vm.State.Should().Be(InstallState.Configuration);
+        vm.IsConfiguring.Should().BeTrue();
+        vm.IsInstalling.Should().BeFalse();
+        vm.IsSuccess.Should().BeFalse();
+        vm.IsFailure.Should().BeFalse();
+        vm.Summary.Should().BeNull();
+        vm.ErrorMessage.Should().BeNull();
+    }
+
+    [Fact]
+    public void InstallCommand_NoModlist_CannotExecute()
+    {
+        var (vm, _, _) = Make();
+
+        vm.InstallCommand.CanExecute(null).Should().BeFalse();
+    }
+
+    [Fact]
+    public void InstallCommand_InvalidModlist_CannotExecute()
+    {
+        var (vm, _, _) = Make();
+
+        vm.ModlistPicker.SetPath(@"C:\nope\does-not-exist.json");
+
+        vm.InstallCommand.CanExecute(null).Should().BeFalse();
+    }
+
+    [Fact]
+    public void InstallCommand_ValidModlist_CanExecute()
+    {
+        var tmp = MakeTempJson();
+        try
+        {
+            var (vm, _, _) = Make();
+            vm.ModlistPicker.SetPath(tmp);
+
+            vm.InstallCommand.CanExecute(null).Should().BeTrue();
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    //  Run — success
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task InstallAsync_Success_TransitionsToSuccess()
+    {
+        var tmp = MakeTempJson();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ResultToReturn = FakeInstallRunner.MakeSummary(
+                modsCreated: 5, archivesPresent: 3);
+
+            vm.ModlistPicker.SetPath(tmp);
+            await vm.InstallCommand.ExecuteAsync(null);
+
+            vm.State.Should().Be(InstallState.Success);
+            vm.IsSuccess.Should().BeTrue();
+            vm.Summary.Should().NotBeNull();
+            vm.Summary!.ModsCreated.Should().Be(5);
+            vm.Summary!.ArchivesAlreadyPresent.Should().Be(3);
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
+    }
+
+    [Fact]
+    public async Task InstallAsync_PassesManifestPathToRunner()
+    {
+        var tmp = MakeTempJson();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ResultToReturn = FakeInstallRunner.MakeSummary();
+
+            vm.ModlistPicker.SetPath(tmp);
+            await vm.InstallCommand.ExecuteAsync(null);
+
+            runner.LastManifestPath.Should().Be(tmp);
+            runner.LastTarget.Should().BeNull();
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
+    }
+
+    [Fact]
+    public async Task InstallAsync_WithTarget_PassesTargetToRunner()
+    {
+        var tmp = MakeTempJson();
+        var dir = Path.Combine(Path.GetTempPath(), "firelink-target-" + Guid.NewGuid());
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ResultToReturn = FakeInstallRunner.MakeSummary();
+
+            vm.ModlistPicker.SetPath(tmp);
+            vm.TargetPicker.SetPath(dir);
+            await vm.InstallCommand.ExecuteAsync(null);
+
+            runner.LastTarget.Should().Be(dir);
+        }
+        finally
+        {
+            File.Delete(tmp);
+            Directory.Delete(dir);
+        }
+    }
+
+    [Fact]
+    public async Task InstallAsync_WithoutTarget_PassesNullToRunner()
+    {
+        var tmp = MakeTempJson();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ResultToReturn = FakeInstallRunner.MakeSummary();
+
+            vm.ModlistPicker.SetPath(tmp);
+            await vm.InstallCommand.ExecuteAsync(null);
+
+            runner.LastTarget.Should().BeNull();
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
+    }
+
+    [Fact]
+    public async Task InstallAsync_ClearsLogOnStart()
+    {
+        var tmp = MakeTempJson();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ResultToReturn = FakeInstallRunner.MakeSummary();
+
+            vm.Log.Entries.Add(new LogEntry(
+                DateTimeOffset.Now, Microsoft.Extensions.Logging.LogLevel.Information,
+                "old entry"));
+
+            vm.ModlistPicker.SetPath(tmp);
+            await vm.InstallCommand.ExecuteAsync(null);
+
+            vm.Log.Entries.Should().BeEmpty();
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    //  Run — failure
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task InstallAsync_RunnerThrows_TransitionsToFailure()
+    {
+        var tmp = MakeTempJson();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ExceptionToThrow = new InvalidOperationException("boom");
+
+            vm.ModlistPicker.SetPath(tmp);
+            await vm.InstallCommand.ExecuteAsync(null);
+
+            vm.State.Should().Be(InstallState.Failure);
+            vm.IsFailure.Should().BeTrue();
+            vm.ErrorMessage.Should().Contain("boom");
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
+    }
+
+    [Fact]
+    public async Task InstallAsync_Cancelled_ReturnsToConfiguration()
+    {
+        var tmp = MakeTempJson();
+        try
+        {
+            var (vm, runner, _) = Make();
+
+            // Runner бросит OperationCanceledException.
+            runner.ExceptionToThrow = new OperationCanceledException();
+
+            vm.ModlistPicker.SetPath(tmp);
+            await vm.InstallCommand.ExecuteAsync(null);
+
+            vm.State.Should().Be(InstallState.Configuration);
+            vm.ErrorMessage.Should().Be("Cancelled.");
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    //  Cancel
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task CancelCommand_CancelsRunningInstall()
+    {
+        var tmp = MakeTempJson();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.Gate = new TaskCompletionSource();
+
+            vm.ModlistPicker.SetPath(tmp);
+
+            // Запускаем InstallAsync и не ждём его завершения.
+            var installTask = vm.InstallCommand.ExecuteAsync(null);
+
+            // Убеждаемся, что мы в Installing.
+            vm.State.Should().Be(InstallState.Installing);
+            vm.CancelCommand.CanExecute(null).Should().BeTrue();
+
+            // Отменяем.
+            vm.CancelCommand.Execute(null);
+
+            await installTask;
+
+            vm.State.Should().Be(InstallState.Configuration);
+            vm.ErrorMessage.Should().Be("Cancelled.");
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
+    }
+
+    [Fact]
+    public void CancelCommand_NotInstalling_CannotExecute()
+    {
+        var (vm, _, _) = Make();
+
+        vm.CancelCommand.CanExecute(null).Should().BeFalse();
+    }
+
+    // ------------------------------------------------------------------
+    //  Home
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void HomeCommand_InvokesNavigateHome()
+    {
+        var (vm, _, _) = Make();
+        var navigated = false;
+
+        vm.SetNavigateHome(() => navigated = true);
+        vm.HomeCommand.Execute(null);
+
+        navigated.Should().BeTrue();
+    }
+
+    // ------------------------------------------------------------------
+    //  Visibility
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task State_TransitionsUpdateVisibilityFlags()
+    {
+        var tmp = MakeTempJson();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ResultToReturn = FakeInstallRunner.MakeSummary();
+
+            // Configuration.
+            vm.IsConfiguring.Should().BeTrue();
+            vm.IsInstalling.Should().BeFalse();
+
+            vm.ModlistPicker.SetPath(tmp);
+            await vm.InstallCommand.ExecuteAsync(null);
+
+            // Success.
+            vm.IsConfiguring.Should().BeFalse();
+            vm.IsInstalling.Should().BeFalse();
+            vm.IsSuccess.Should().BeTrue();
+            vm.IsFailure.Should().BeFalse();
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
+    }
+}
+
+````
+
+## tests/Firelink.Gui.Pack.Tests/PackVMTests.cs
+
+````csharp
+using Firelink.Gui.Pack.Tests.Fakes;
+using Firelink.Gui.Pack.ViewModels;
+using Firelink.Gui.Shared.Logging;
+using Firelink.Gui.Shared.State;
+using Firelink.Gui.Shared.ViewModels;
+using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
+using Xunit;
+
+namespace Firelink.Gui.Pack.Tests;
+
+public class PackVMTests
+{
+    private static (PackVM vm, FakePackRunner runner, FakeFilePickerService picker)
+        Make()
+    {
+        var runner = new FakePackRunner();
+        var picker = new FakeFilePickerService();
+        var sink = new ObservableLogSink();
+        var log = new LogVM(sink);
+
+        var vm = new PackVM(
+            runner, picker, log,
+            NullLogger<PackVM>.Instance);
+
+        return (vm, runner, picker);
+    }
+
+    private static string MakeTempJson()
+    {
+        var tmp = Path.GetTempFileName();
+        File.WriteAllText(tmp, "{}");
+        return tmp;
+    }
+
+    // ------------------------------------------------------------------
+    //  Configuration
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void InitialState_IsConfiguration()
+    {
+        var (vm, _, _) = Make();
+
+        vm.State.Should().Be(PackState.Configuration);
+        vm.IsConfiguring.Should().BeTrue();
+        vm.IsPacking.Should().BeFalse();
+        vm.IsSuccess.Should().BeFalse();
+        vm.IsFailure.Should().BeFalse();
+        vm.Summary.Should().BeNull();
+        vm.ErrorMessage.Should().BeNull();
+    }
+
+    [Fact]
+    public void PackCommand_NoConfig_CannotExecute()
+    {
+        var (vm, _, _) = Make();
+
+        vm.PackCommand.CanExecute(null).Should().BeFalse();
+    }
+
+    [Fact]
+    public void PackCommand_InvalidConfig_CannotExecute()
+    {
+        var (vm, _, _) = Make();
+
+        vm.ConfigPicker.SetPath(@"C:\nope\does-not-exist.json");
+
+        vm.PackCommand.CanExecute(null).Should().BeFalse();
+    }
+
+    [Fact]
+    public void PackCommand_ValidConfig_CanExecute()
+    {
+        var tmp = MakeTempJson();
+        try
+        {
+            var (vm, _, _) = Make();
+            vm.ConfigPicker.SetPath(tmp);
+
+            vm.PackCommand.CanExecute(null).Should().BeTrue();
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    //  Run — success
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task PackAsync_Success_TransitionsToSuccess()
+    {
+        var tmp = MakeTempJson();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ResultToReturn = FakePackRunner.MakeSummary(
+                modsScanned: 5, filesScanned: 100);
+
+            vm.ConfigPicker.SetPath(tmp);
+            await vm.PackCommand.ExecuteAsync(null);
+
+            vm.State.Should().Be(PackState.Success);
+            vm.IsSuccess.Should().BeTrue();
+            vm.Summary.Should().NotBeNull();
+            vm.Summary!.ModsScanned.Should().Be(5);
+            vm.Summary!.FilesScanned.Should().Be(100);
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
+    }
+
+    [Fact]
+    public async Task PackAsync_PassesConfigPathToRunner()
+    {
+        var tmp = MakeTempJson();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ResultToReturn = FakePackRunner.MakeSummary();
+
+            vm.ConfigPicker.SetPath(tmp);
+            await vm.PackCommand.ExecuteAsync(null);
+
+            runner.LastConfigPath.Should().Be(tmp);
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
+    }
+
+    [Fact]
+    public async Task PackAsync_ClearsLogOnStart()
+    {
+        var tmp = MakeTempJson();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ResultToReturn = FakePackRunner.MakeSummary();
+
+            vm.Log.Entries.Add(new LogEntry(
+                DateTimeOffset.Now, Microsoft.Extensions.Logging.LogLevel.Information,
+                "old entry"));
+
+            vm.ConfigPicker.SetPath(tmp);
+            await vm.PackCommand.ExecuteAsync(null);
+
+            vm.Log.Entries.Should().BeEmpty();
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    //  Run — failure
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task PackAsync_RunnerThrows_TransitionsToFailure()
+    {
+        var tmp = MakeTempJson();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ExceptionToThrow = new InvalidOperationException("boom");
+
+            vm.ConfigPicker.SetPath(tmp);
+            await vm.PackCommand.ExecuteAsync(null);
+
+            vm.State.Should().Be(PackState.Failure);
+            vm.IsFailure.Should().BeTrue();
+            vm.ErrorMessage.Should().Contain("boom");
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
+    }
+
+    [Fact]
+    public async Task PackAsync_Cancelled_ReturnsToConfiguration()
+    {
+        var tmp = MakeTempJson();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ExceptionToThrow = new OperationCanceledException();
+
+            vm.ConfigPicker.SetPath(tmp);
+            await vm.PackCommand.ExecuteAsync(null);
+
+            vm.State.Should().Be(PackState.Configuration);
+            vm.ErrorMessage.Should().Be("Cancelled.");
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    //  Cancel
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task CancelCommand_CancelsRunningPack()
+    {
+        var tmp = MakeTempJson();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.Gate = new TaskCompletionSource();
+
+            vm.ConfigPicker.SetPath(tmp);
+
+            var packTask = vm.PackCommand.ExecuteAsync(null);
+
+            vm.State.Should().Be(PackState.Packing);
+            vm.CancelCommand.CanExecute(null).Should().BeTrue();
+
+            vm.CancelCommand.Execute(null);
+
+            await packTask;
+
+            vm.State.Should().Be(PackState.Configuration);
+            vm.ErrorMessage.Should().Be("Cancelled.");
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
+    }
+
+    [Fact]
+    public void CancelCommand_NotPacking_CannotExecute()
+    {
+        var (vm, _, _) = Make();
+
+        vm.CancelCommand.CanExecute(null).Should().BeFalse();
+    }
+
+    // ------------------------------------------------------------------
+    //  Home
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void HomeCommand_InvokesNavigateHome()
+    {
+        var (vm, _, _) = Make();
+        var navigated = false;
+
+        vm.SetNavigateHome(() => navigated = true);
+        vm.HomeCommand.Execute(null);
+
+        navigated.Should().BeTrue();
+    }
+
+    // ------------------------------------------------------------------
+    //  Visibility
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task State_TransitionsUpdateVisibilityFlags()
+    {
+        var tmp = MakeTempJson();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ResultToReturn = FakePackRunner.MakeSummary();
+
+            vm.IsConfiguring.Should().BeTrue();
+            vm.IsPacking.Should().BeFalse();
+
+            vm.ConfigPicker.SetPath(tmp);
+            await vm.PackCommand.ExecuteAsync(null);
+
+            vm.IsConfiguring.Should().BeFalse();
+            vm.IsPacking.Should().BeFalse();
+            vm.IsSuccess.Should().BeTrue();
+            vm.IsFailure.Should().BeFalse();
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
+    }
+}
+
+````
+
+## tests/Firelink.Gui.Pack.Tests/Fakes/FakeFilePickerService.cs
+
+````csharp
+using Firelink.Gui.Shared.Services;
+
+namespace Firelink.Gui.Pack.Tests.Fakes;
+
+public sealed class FakeFilePickerService : IFilePickerService
+{
+    public string? FileToReturn { get; set; }
+    public string? FolderToReturn { get; set; }
+
+    public Task<string?> PickFileAsync(string title, string? filterHint = null)
+        => Task.FromResult(FileToReturn);
+
+    public Task<string?> PickFolderAsync(string title)
+        => Task.FromResult(FolderToReturn);
+}
+
+````
+
+## tests/Firelink.Gui.Pack.Tests/Fakes/FakePackRunner.cs
+
+````csharp
+using Firelink.Core.Progress;
+using Firelink.Gui.Pack.Services;
+using Firelink.Pack;
+
+namespace Firelink.Gui.Pack.Tests.Fakes;
+
+public sealed class FakePackRunner : IPackRunner
+{
+    public PackSummary? ResultToReturn { get; set; }
+    public Exception? ExceptionToThrow { get; set; }
+    public TaskCompletionSource? Gate { get; set; }
+    public List<StepProgress> ReportedProgress { get; } = new();
+    public CancellationToken LastToken { get; private set; }
+    public string? LastConfigPath { get; private set; }
+
+    public async Task<PackSummary> RunAsync(
+        string configPath,
+        IProgress<StepProgress> progress,
+        CancellationToken ct)
+    {
+        LastConfigPath = configPath;
+        LastToken = ct;
+
+        if (Gate is not null)
+        {
+            using var reg = ct.Register(() => Gate.TrySetCanceled(ct));
+            await Gate.Task;
+        }
+
+        if (ExceptionToThrow is not null)
+            throw ExceptionToThrow;
+
+        if (ResultToReturn is null)
+            throw new InvalidOperationException("FakePackRunner.ResultToReturn is null.");
+
+        return ResultToReturn;
+    }
+
+    public static PackSummary MakeSummary(
+        string name = "Test Pack",
+        string version = "1.0.0",
+        string game = "skyrimspecialedition",
+        string instancePath = "/test/instance",
+        int modsScanned = 0,
+        int filesScanned = 0,
+        int directivesTotal = 0,
+        int directivesFromArchive = 0,
+        int archivesResolved = 0,
+        int archivesUnresolved = 0,
+        int unmatchedFiles = 0,
+        int metaIniCount = 0,
+        int manifestMods = 0,
+        int manifestArchives = 0,
+        int manifestExtensions = 0,
+        int manifestExtras = 0,
+        string? unmatchedWrittenTo = null,
+        string manifestPath = "/test/instance/__Firelink_Output/modlist.json")
+    {
+        return new PackSummary
+        {
+            Name = name,
+            Version = version,
+            Game = game,
+            InstancePath = instancePath,
+            ModsTotal = modsScanned,
+            PluginsTotal = 0,
+            LoadorderTotal = 0,
+            ArchivesResolved = archivesResolved,
+            ArchivesUnresolved = archivesUnresolved,
+            ModsScanned = modsScanned,
+            FilesScanned = filesScanned,
+            DirectivesTotal = directivesTotal,
+            DirectivesFromArchive = directivesFromArchive,
+            UnmatchedFiles = unmatchedFiles,
+            MetaIniCount = metaIniCount,
+            ManifestMods = manifestMods,
+            ManifestArchives = manifestArchives,
+            ManifestExtensions = manifestExtensions,
+            ManifestExtras = manifestExtras,
+            UnmatchedWrittenTo = unmatchedWrittenTo,
+            ManifestPath = manifestPath,
+        };
+    }
+}
+
+````
+
+## tests/Firelink.Gui.Shared.Tests/FilePickerVMTests.cs
+
+````csharp
+using FluentAssertions;
+using Firelink.Gui.Shared.Tests.Fakes;
+using Firelink.Gui.Shared.ViewModels.Controls;
+
+namespace Firelink.Gui.Shared.Tests;
+
+public class FilePickerVMTests
+{
+    private static FilePickerVM Make(
+        FakeFilePickerService? picker = null,
+        bool mustExist = true,
+        bool folder = false)
+    {
+        return new FilePickerVM(picker ?? new FakeFilePickerService())
+        {
+            MustExist = mustExist,
+            Folder = folder,
+        };
+    }
+
+    [Fact]
+    public void InitialState_NoPath_Invalid()
+    {
+        var vm = Make();
+        vm.Path.Should().BeNull();
+        vm.IsValid.Should().BeFalse();
+        vm.Error.Should().BeNull();
+    }
+
+    [Fact]
+    public void SetPath_NonExistentFile_InvalidWithError()
+    {
+        var vm = Make();
+        vm.SetPath(@"C:\does\not\exist\file.json");
+
+        vm.IsValid.Should().BeFalse();
+        vm.Error.Should().Be("File not found");
+    }
+
+    [Fact]
+    public void SetPath_ExistingFile_Valid()
+    {
+        var tmp = Path.GetTempFileName();
+        try
+        {
+            var vm = Make();
+            vm.SetPath(tmp);
+
+            vm.IsValid.Should().BeTrue();
+            vm.Error.Should().BeNull();
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
+    }
+
+    [Fact]
+    public void SetPath_MustExistFalse_AnyPathValid()
+    {
+        var vm = Make(mustExist: false);
+        vm.SetPath(@"Z:\any\path\at\all.json");
+
+        vm.IsValid.Should().BeTrue();
+        vm.Error.Should().BeNull();
+    }
+
+    [Fact]
+    public void SetPath_FolderMode_NonExistentFolder_InvalidWithFolderError()
+    {
+        var vm = Make(folder: true);
+        vm.SetPath(@"C:\does\not\exist\folder");
+
+        vm.IsValid.Should().BeFalse();
+        vm.Error.Should().Be("Folder not found");
+    }
+
+    [Fact]
+    public void SetPath_FolderMode_ExistingFolder_Valid()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "firelink-fp-" + Guid.NewGuid());
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var vm = Make(folder: true);
+            vm.SetPath(dir);
+
+            vm.IsValid.Should().BeTrue();
+            vm.Error.Should().BeNull();
+        }
+        finally
+        {
+            Directory.Delete(dir);
+        }
+    }
+
+    [Fact]
+    public void Clear_ResetsState()
+    {
+        var vm = Make(mustExist: false);
+        vm.SetPath(@"C:\some\path.json");
+        vm.Clear();
+
+        vm.Path.Should().BeNull();
+        vm.IsValid.Should().BeFalse();
+        vm.Error.Should().BeNull();
+    }
+
+    [Fact]
+    public void SetPath_EmptyString_InvalidNoError()
+    {
+        var vm = Make();
+        vm.SetPath("");
+
+        vm.IsValid.Should().BeFalse();
+        vm.Error.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task PickAsync_FileMode_SetsPathFromService()
+    {
+        var tmp = Path.GetTempFileName();
+        try
+        {
+            var picker = new FakeFilePickerService { FileToReturn = tmp };
+            var vm = Make(picker);
+
+            await vm.PickCommand.ExecuteAsync(null);
+
+            picker.FilePickCalls.Should().Be(1);
+            vm.Path.Should().Be(tmp);
+            vm.IsValid.Should().BeTrue();
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
+    }
+
+    [Fact]
+    public async Task PickAsync_FileMode_Cancelled_PathUnchanged()
+    {
+        var picker = new FakeFilePickerService { FileToReturn = null };
+        var vm = Make(picker, mustExist: false);
+
+        await vm.PickCommand.ExecuteAsync(null);
+
+        picker.FilePickCalls.Should().Be(1);
+        vm.Path.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task PickAsync_FolderMode_CallsFolderPicker()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "firelink-fp-" + Guid.NewGuid());
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var picker = new FakeFilePickerService { FolderToReturn = dir };
+            var vm = Make(picker, folder: true);
+
+            await vm.PickCommand.ExecuteAsync(null);
+
+            picker.FolderPickCalls.Should().Be(1);
+            picker.FilePickCalls.Should().Be(0);
+            vm.Path.Should().Be(dir);
+        }
+        finally
+        {
+            Directory.Delete(dir);
+        }
+    }
+}
+
+````
+
+## tests/Firelink.Gui.Shared.Tests/LoadingLockTests.cs
+
+````csharp
+using FluentAssertions;
+using Firelink.Gui.Shared.ViewModels;
+
+namespace Firelink.Gui.Shared.Tests;
+
+public class LoadingLockTests
+{
+    [Fact]
+    public void InitialState_NotLoading()
+    {
+        var @lock = new LoadingLock();
+        @lock.IsLoading.Should().BeFalse();
+    }
+
+    [Fact]
+    public void SingleLock_SetsIsLoading()
+    {
+        var @lock = new LoadingLock();
+        using (@lock.Lock())
+        {
+            @lock.IsLoading.Should().BeTrue();
+        }
+    }
+
+    [Fact]
+    public void Lock_Released_ResetsIsLoading()
+    {
+        var @lock = new LoadingLock();
+        using (@lock.Lock()) { }
+        @lock.IsLoading.Should().BeFalse();
+    }
+
+    [Fact]
+    public void NestedLocks_StayLoadingUntilLastRelease()
+    {
+        var @lock = new LoadingLock();
+        var a = @lock.Lock();
+        var b = @lock.Lock();
+
+        @lock.IsLoading.Should().BeTrue();
+
+        a.Dispose();
+        @lock.IsLoading.Should().BeTrue();
+
+        b.Dispose();
+        @lock.IsLoading.Should().BeFalse();
+    }
+
+    [Fact]
+    public void DoubleDispose_DoesNotCorruptCounter()
+    {
+        var @lock = new LoadingLock();
+        var handle = @lock.Lock();
+        handle.Dispose();
+        handle.Dispose(); // idempotent
+
+        @lock.IsLoading.Should().BeFalse();
+
+        using (@lock.Lock())
+        {
+            @lock.IsLoading.Should().BeTrue();
+        }
+    }
+}
+
+````
+
+## tests/Firelink.Gui.Shared.Tests/LogVMTests.cs
+
+````csharp
+using FluentAssertions;
+using Firelink.Gui.Shared.Logging;
+using Firelink.Gui.Shared.ViewModels;
+using Microsoft.Extensions.Logging;
+
+namespace Firelink.Gui.Shared.Tests;
+
+public class LogVMTests
+{
+    [Fact]
+    public void Entries_ProxiesSink()
+    {
+        var sink = new ObservableLogSink();
+        var vm = new LogVM(sink);
+
+        sink.Add(new LogEntry(DateTimeOffset.Now, LogLevel.Information, "x"));
+
+        vm.Entries.Should().HaveCount(1);
+        vm.Entries[0].Message.Should().Be("x");
+    }
+
+    [Fact]
+    public void ClearCommand_EmptiesCollection()
+    {
+        var sink = new ObservableLogSink();
+        var vm = new LogVM(sink);
+        sink.Add(new LogEntry(DateTimeOffset.Now, LogLevel.Information, "x"));
+        sink.Add(new LogEntry(DateTimeOffset.Now, LogLevel.Information, "y"));
+
+        vm.ClearCommand.Execute(null);
+
+        vm.Entries.Should().BeEmpty();
+    }
+}
+
+````
+
+## tests/Firelink.Gui.Shared.Tests/MainWindowVMTests.cs
+
+````csharp
+using Firelink.Gui.Shared.Logging;
+using Firelink.Gui.Shared.Navigation;
+using Firelink.Gui.Shared.Tests.Fakes;
+using Firelink.Gui.Shared.ViewModels;
+using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+
+namespace Firelink.Gui.Shared.Tests;
+
+public class MainWindowVMTests
+{
+    private static ServiceProvider BuildProvider()
+    {
+        var services = new ServiceCollection();
+
+        services.AddLogging();
+        services.AddSingleton<IUiDispatcher, FakeUiDispatcher>();
+        services.AddGuiShared();
+
+        services.AddSingleton<IScreenFactory>(sp => new FakeScreenFactory(sp));
+        services.AddSingleton<MainWindowVM>();
+
+        return services.BuildServiceProvider();
+    }
+
+    [Fact]
+    public void Constructor_ActivePane_IsHome()
+    {
+        using var sp = BuildProvider();
+        var vm = sp.GetRequiredService<MainWindowVM>();
+
+        vm.ActivePane.Should().BeOfType<HomeVM>();
+        vm.Navigation.SelectedItem!.Screen.Should().Be(ScreenType.Home);
+    }
+
+    [Fact]
+    public void NavigateTo_Home_ReturnsSameInstance()
+    {
+        using var sp = BuildProvider();
+        var vm = sp.GetRequiredService<MainWindowVM>();
+        var home = vm.Home;
+
+        vm.NavigateTo(ScreenType.Install);
+        vm.NavigateTo(ScreenType.Home);
+
+        vm.ActivePane.Should().BeSameAs(home);
+    }
+
+    [Fact]
+    public void NavigateTo_SameScreenTwice_ReturnsSameInstance()
+    {
+        using var sp = BuildProvider();
+        var vm = sp.GetRequiredService<MainWindowVM>();
+
+        vm.NavigateTo(ScreenType.Install);
+        var first = vm.ActivePane;
+        vm.NavigateTo(ScreenType.Install);
+        var second = vm.ActivePane;
+
+        second.Should().BeSameAs(first);
+    }
+}
+
+````
+
+## tests/Firelink.Gui.Shared.Tests/NavigationVMTests.cs
+
+````csharp
+using FluentAssertions;
+using Firelink.Gui.Shared.Navigation;
+using Firelink.Gui.Shared.ViewModels;
+
+namespace Firelink.Gui.Shared.Tests;
+
+public class NavigationVMTests
+{
+    [Fact]
+    public void Constructor_PopulatesFourItems()
+    {
+        var vm = new NavigationVM(_ => { });
+
+        vm.Items.Should().HaveCount(4);
+        vm.Items.Select(i => i.Screen).Should().Equal(
+            ScreenType.Home,
+            ScreenType.Install,
+            ScreenType.Pack,
+            ScreenType.Verify);
+    }
+
+    [Fact]
+    public void SelectedItem_InvokesCallback()
+    {
+        ScreenType? captured = null;
+        var vm = new NavigationVM(s => captured = s);
+
+        vm.SelectedItem = vm.Items[1]; // Install
+
+        captured.Should().Be(ScreenType.Install);
+    }
+
+    [Fact]
+    public void SelectScreen_SetsSelectedItem_WithoutInvokingCallback()
+    {
+        ScreenType? captured = null;
+        var vm = new NavigationVM(s => captured = s);
+
+        vm.SelectScreen(ScreenType.Pack);
+
+        vm.SelectedItem.Should().NotBeNull();
+        vm.SelectedItem!.Screen.Should().Be(ScreenType.Pack);
+        captured.Should().BeNull("SelectScreen должен подавлять callback");
+    }
+
+    [Fact]
+    public void SelectScreen_UnknownScreen_DoesNothing()
+    {
+        var vm = new NavigationVM(_ => { });
+        vm.SelectScreen((ScreenType)999);
+        vm.SelectedItem.Should().BeNull();
+    }
+
+    [Fact]
+    public void SelectedItem_Null_DoesNotInvokeCallback()
+    {
+        ScreenType? captured = null;
+        var vm = new NavigationVM(s => captured = s);
+
+        vm.SelectedItem = null;
+
+        captured.Should().BeNull();
+    }
+}
+
+````
+
+## tests/Firelink.Gui.Shared.Tests/ObservableLoggerProviderTests.cs
+
+````csharp
+using FluentAssertions;
+using Firelink.Gui.Shared.Logging;
+using Microsoft.Extensions.Logging;
+
+namespace Firelink.Gui.Shared.Tests;
+
+public class ObservableLoggerProviderTests
+{
+    [Fact]
+    public void Logger_WritesToSink()
+    {
+        var sink = new ObservableLogSink();
+        var provider = new ObservableLoggerProvider(sink, LogLevel.Information);
+        var logger = provider.CreateLogger("Test");
+
+        logger.LogInformation("hello");
+
+        sink.Entries.Should().HaveCount(1);
+        sink.Entries[0].Message.Should().Be("hello");
+        sink.Entries[0].Level.Should().Be(LogLevel.Information);
+    }
+
+    [Fact]
+    public void IsEnabled_RespectsMinLevel()
+    {
+        var sink = new ObservableLogSink();
+        var provider = new ObservableLoggerProvider(sink, LogLevel.Warning);
+        var logger = provider.CreateLogger("Test");
+
+        logger.IsEnabled(LogLevel.Debug).Should().BeFalse();
+        logger.IsEnabled(LogLevel.Information).Should().BeFalse();
+        logger.IsEnabled(LogLevel.Warning).Should().BeTrue();
+        logger.IsEnabled(LogLevel.Error).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Logger_BelowMinLevel_NotWritten()
+    {
+        var sink = new ObservableLogSink();
+        var provider = new ObservableLoggerProvider(sink, LogLevel.Warning);
+        var logger = provider.CreateLogger("Test");
+
+        logger.LogInformation("nope");
+        logger.LogWarning("yes");
+
+        sink.Entries.Should().HaveCount(1);
+        sink.Entries[0].Message.Should().Be("yes");
+    }
+
+    [Fact]
+    public void Logger_Exception_AppendedToMessage()
+    {
+        var sink = new ObservableLogSink();
+        var provider = new ObservableLoggerProvider(sink, LogLevel.Information);
+        var logger = provider.CreateLogger("Test");
+
+        logger.LogError(new InvalidOperationException("boom"), "failed");
+
+        sink.Entries.Should().HaveCount(1);
+        sink.Entries[0].Message.Should().Contain("failed");
+        sink.Entries[0].Message.Should().Contain("InvalidOperationException");
+        sink.Entries[0].Message.Should().Contain("boom");
+    }
+
+    [Fact]
+    public void BeginScope_ReturnsNull()
+    {
+        var sink = new ObservableLogSink();
+        var provider = new ObservableLoggerProvider(sink);
+        var logger = provider.CreateLogger("Test");
+
+        using var scope = logger.BeginScope("scope");
+        scope.Should().BeNull();
+    }
+}
+
+````
+
+## tests/Firelink.Gui.Shared.Tests/ObservableLogSinkTests.cs
+
+````csharp
+using FluentAssertions;
+using Firelink.Gui.Shared.Logging;
+using Firelink.Gui.Shared.Tests.Fakes;
+using Microsoft.Extensions.Logging;
+
+namespace Firelink.Gui.Shared.Tests;
+
+// Существующий класс ObservableLogSinkTests — оставить.
+// Ниже — новые тесты, добавить в тот же файл.
+
+public class ObservableLogSinkDispatcherTests
+{
+    private static LogEntry Entry(string msg, LogLevel level = LogLevel.Information)
+        => new(DateTimeOffset.Now, level, msg);
+
+    [Fact]
+    public void WithDispatcher_Add_InvokesDispatcher()
+    {
+        var dispatcher = new FakeUiDispatcher();
+        var sink = new ObservableLogSink(dispatcher);
+
+        sink.Add(Entry("a"));
+
+        // FakeUiDispatcher выполняет action синхронно,
+        // поэтому запись уже в коллекции.
+        sink.Entries.Should().HaveCount(1);
+        sink.Entries[0].Message.Should().Be("a");
+    }
+
+    [Fact]
+    public void WithDispatcher_Clear_InvokesDispatcher()
+    {
+        var dispatcher = new FakeUiDispatcher();
+        var sink = new ObservableLogSink(dispatcher);
+
+        sink.Add(Entry("a"));
+        sink.Add(Entry("b"));
+        sink.Clear();
+
+        sink.Entries.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void WithoutDispatcher_Add_Synchronous()
+    {
+        var sink = new ObservableLogSink();
+        sink.Add(Entry("a"));
+
+        sink.Entries.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public void WithDispatcher_Trim_StillWorks()
+    {
+        var dispatcher = new FakeUiDispatcher();
+        var sink = new ObservableLogSink(dispatcher);
+
+        for (int i = 0; i < 250; i++)
+            sink.Add(Entry($"msg-{i}"));
+
+        sink.Entries.Should().HaveCount(200);
+        sink.Entries[0].Message.Should().Be("msg-50");
+        sink.Entries[^1].Message.Should().Be("msg-249");
+    }
+
+    /// <summary>
+    /// Симулирует «настоящий» UI-диспетчер: action не выполняется
+    /// синхронно, а копится в очередь. Проверяем, что до Flush
+    /// коллекция не тронута — то есть Add реально маршалится.
+    /// </summary>
+    [Fact]
+    public void WithDeferredDispatcher_Add_DoesNotMutateUntilFlush()
+    {
+        var dispatcher = new DeferredUiDispatcher();
+        var sink = new ObservableLogSink(dispatcher);
+
+        sink.Add(Entry("a"));
+        sink.Add(Entry("b"));
+
+        // До flush — пусто.
+        sink.Entries.Should().BeEmpty();
+
+        dispatcher.Flush();
+
+        sink.Entries.Should().HaveCount(2);
+        sink.Entries[0].Message.Should().Be("a");
+        sink.Entries[1].Message.Should().Be("b");
+    }
+
+    private sealed class DeferredUiDispatcher : IUiDispatcher
+    {
+        private readonly List<Action> _queue = new();
+
+        public void Post(Action action) => _queue.Add(action);
+
+        public void Flush()
+        {
+            var copy = _queue.ToList();
+            _queue.Clear();
+            foreach (var a in copy) a();
+        }
+    }
+}
+
+````
+
+## tests/Firelink.Gui.Shared.Tests/ProgressViewModelTests.cs
+
+````csharp
+using FluentAssertions;
+using Firelink.Gui.Shared.ViewModels;
+
+namespace Firelink.Gui.Shared.Tests;
+
+public class ProgressViewModelTests
+{
+    private sealed class TestProgressVM : ProgressViewModel { }
+
+    [Fact]
+    public void Report_SetsAllFields()
+    {
+        var vm = new TestProgressVM();
+        vm.Report(3, 11, "SyncMods");
+
+        vm.CurrentStep.Should().Be(3);
+        vm.TotalSteps.Should().Be(11);
+        vm.StepName.Should().Be("SyncMods");
+        vm.Percent.Should().BeApproximately(300.0 / 11.0, 0.01);
+    }
+
+    [Fact]
+    public void Report_TotalZero_PercentIsZero()
+    {
+        var vm = new TestProgressVM();
+        vm.Report(0, 0, "");
+
+        vm.Percent.Should().Be(0);
+    }
+
+    [Fact]
+    public void Reset_ClearsAllFields()
+    {
+        var vm = new TestProgressVM();
+        vm.Report(5, 10, "X");
+        vm.IsBusy = true;
+        vm.Reset();
+
+        vm.CurrentStep.Should().Be(0);
+        vm.TotalSteps.Should().Be(0);
+        vm.StepName.Should().Be("");
+        vm.Percent.Should().Be(0);
+        vm.IsBusy.Should().BeFalse();
+    }
+}
+
+````
+
+## tests/Firelink.Gui.Shared.Tests/Fakes/FakeFilePickerService.cs
+
+````csharp
+using Firelink.Gui.Shared.Services;
+
+namespace Firelink.Gui.Shared.Tests.Fakes;
+
+public sealed class FakeFilePickerService : IFilePickerService
+{
+    public string? FileToReturn { get; set; }
+    public string? FolderToReturn { get; set; }
+    public int FilePickCalls { get; private set; }
+    public int FolderPickCalls { get; private set; }
+
+    public Task<string?> PickFileAsync(string title, string? filterHint = null)
+    {
+        FilePickCalls++;
+        return Task.FromResult(FileToReturn);
+    }
+
+    public Task<string?> PickFolderAsync(string title)
+    {
+        FolderPickCalls++;
+        return Task.FromResult(FolderToReturn);
+    }
+}
+
+````
+
+## tests/Firelink.Gui.Shared.Tests/Fakes/FakeScreenFactory.cs
+
+````csharp
+using Firelink.Gui.Shared.Navigation;
+using Firelink.Gui.Shared.ViewModels;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Firelink.Gui.Shared.Tests.Fakes;
+
+/// <summary>
+/// FakeScreenFactory для тестов MainWindowVM в Firelink.Gui.Shared.Tests.
+///
+/// В этом проекте нет ссылок на Firelink.Gui.Pack / Firelink.Gui.Verify
+/// (они Avalonia-зависимые, а Gui.Shared.Tests — нет). Поэтому фабрика
+/// умеет только Home; для остальных экранов возвращает Home.
+///
+/// Реальная маршрутизация Pack/Install/Verify тестируется в их
+/// собственных тестовых проектах.
+/// </summary>
+public sealed class FakeScreenFactory : IScreenFactory
+{
+    private readonly IServiceProvider _sp;
+
+    public FakeScreenFactory(IServiceProvider sp) => _sp = sp;
+
+    public object Create(ScreenType screen) => screen switch
+    {
+        ScreenType.Home => _sp.GetRequiredService<HomeVM>(),
+        _ => _sp.GetRequiredService<HomeVM>(),
+    };
+}
+
+````
+
+## tests/Firelink.Gui.Shared.Tests/Fakes/FakeUiDispatcher.cs
+
+````csharp
+using Firelink.Gui.Shared.Logging;
+
+namespace Firelink.Gui.Shared.Tests.Fakes;
+
+/// <summary>
+/// Тестовый IUiDispatcher: выполняет action синхронно.
+/// Никакого UI-потока нет — но контракт (Post вызывает action) соблюдён.
+///
+/// Используется в тестах, где ObservableLogSink идёт через DI
+/// (например, MainWindowVMTests): без этого DI не соберёт граф.
+/// </summary>
+public sealed class FakeUiDispatcher : IUiDispatcher
+{
+    public void Post(Action action) => action();
+}
+
+````
+
+## tests/Firelink.Gui.Verify.Tests/VerifyVMTests.cs
+
+````csharp
+using Firelink.Gui.Shared.Logging;
+using Firelink.Gui.Shared.State;
+using Firelink.Gui.Shared.ViewModels;
+using Firelink.Gui.Verify.Tests.Fakes;
+using Firelink.Gui.Verify.ViewModels;
+using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
+using Xunit;
+
+namespace Firelink.Gui.Verify.Tests;
+
+public class VerifyVMTests
+{
+    private static (VerifyVM vm, FakeVerifyRunner runner, FakeFilePickerService picker)
+        Make()
+    {
+        var runner = new FakeVerifyRunner();
+        var picker = new FakeFilePickerService();
+        var sink = new ObservableLogSink();
+        var log = new LogVM(sink);
+
+        var vm = new VerifyVM(
+            runner, picker, log,
+            NullLogger<VerifyVM>.Instance);
+
+        return (vm, runner, picker);
+    }
+
+    private static string MakeTempDir()
+    {
+        var dir = Path.Combine(
+            Path.GetTempPath(), "firelink-verify-test-" + Guid.NewGuid());
+        Directory.CreateDirectory(dir);
+        return dir;
+    }
+
+    // ------------------------------------------------------------------
+    //  Configuration
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void InitialState_IsConfiguration()
+    {
+        var (vm, _, _) = Make();
+
+        vm.State.Should().Be(VerifyState.Configuration);
+        vm.IsConfiguring.Should().BeTrue();
+        vm.IsVerifying.Should().BeFalse();
+        vm.IsSuccess.Should().BeFalse();
+        vm.IsFailure.Should().BeFalse();
+        vm.Report.Should().BeNull();
+        vm.ErrorMessage.Should().BeNull();
+        vm.Rows.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void VerifyCommand_NoTarget_CannotExecute()
+    {
+        var (vm, _, _) = Make();
+
+        vm.VerifyCommand.CanExecute(null).Should().BeFalse();
+    }
+
+    [Fact]
+    public void VerifyCommand_InvalidTarget_CannotExecute()
+    {
+        var (vm, _, _) = Make();
+
+        vm.TargetPicker.SetPath(@"C:\nope\does-not-exist");
+
+        vm.VerifyCommand.CanExecute(null).Should().BeFalse();
+    }
+
+    [Fact]
+    public void VerifyCommand_ValidTarget_CanExecute()
+    {
+        var dir = MakeTempDir();
+        try
+        {
+            var (vm, _, _) = Make();
+            vm.TargetPicker.SetPath(dir);
+
+            vm.VerifyCommand.CanExecute(null).Should().BeTrue();
+        }
+        finally
+        {
+            Directory.Delete(dir);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    //  Success, IsOk
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task VerifyAsync_OkReport_TransitionsToSuccess()
+    {
+        var dir = MakeTempDir();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ResultToReturn = FakeVerifyRunner.OkReport(
+                targetPath: dir, passedCount: 10);
+
+            vm.TargetPicker.SetPath(dir);
+            await vm.VerifyCommand.ExecuteAsync(null);
+
+            vm.State.Should().Be(VerifyState.Success);
+            vm.IsSuccess.Should().BeTrue();
+            vm.IsOk.Should().BeTrue();
+            vm.HasFailures.Should().BeFalse();
+            vm.PassedCount.Should().Be(10);
+            vm.FailedCount.Should().Be(0);
+            vm.ResultTitle.Should().Be("All checks passed");
+        }
+        finally
+        {
+            Directory.Delete(dir);
+        }
+    }
+
+    [Fact]
+    public async Task VerifyAsync_OkReport_NoRowsByDefault()
+    {
+        var dir = MakeTempDir();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ResultToReturn = FakeVerifyRunner.OkReport(passedCount: 5);
+
+            vm.TargetPicker.SetPath(dir);
+            await vm.VerifyCommand.ExecuteAsync(null);
+
+            // ShowAllChecks = false → только failures (их нет) → пусто.
+            vm.Rows.Should().BeEmpty();
+        }
+        finally
+        {
+            Directory.Delete(dir);
+        }
+    }
+
+    [Fact]
+    public async Task VerifyAsync_OkReport_ShowAllChecks_FillsRows()
+    {
+        var dir = MakeTempDir();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ResultToReturn = FakeVerifyRunner.OkReport(passedCount: 5);
+
+            vm.TargetPicker.SetPath(dir);
+            vm.ShowAllChecks = true;
+            await vm.VerifyCommand.ExecuteAsync(null);
+
+            vm.Rows.Should().HaveCount(5);
+            vm.Rows.Should().AllSatisfy(r => r.Passed.Should().BeTrue());
+        }
+        finally
+        {
+            Directory.Delete(dir);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    //  Success, NotOk
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task VerifyAsync_FailingReport_TransitionsToSuccessWithFailures()
+    {
+        var dir = MakeTempDir();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ResultToReturn = FakeVerifyRunner.FailingReport(
+                targetPath: dir,
+                passedCount: 5,
+                ("Mod: SkyUI", "Mod directory not found"),
+                ("Profile: modlist.txt", "Content differs"));
+
+            vm.TargetPicker.SetPath(dir);
+            await vm.VerifyCommand.ExecuteAsync(null);
+
+            vm.State.Should().Be(VerifyState.Success);
+            vm.IsSuccess.Should().BeTrue();
+            vm.IsOk.Should().BeFalse();
+            vm.HasFailures.Should().BeTrue();
+            vm.PassedCount.Should().Be(5);
+            vm.FailedCount.Should().Be(2);
+            vm.ResultTitle.Should().Be("2 check(s) failed");
+
+            // По умолчанию — только failures.
+            vm.Rows.Should().HaveCount(2);
+            vm.Rows.Should().OnlyContain(r => !r.Passed);
+        }
+        finally
+        {
+            Directory.Delete(dir);
+        }
+    }
+
+    [Fact]
+    public async Task VerifyAsync_FailingReport_ShowAllChecks_IncludesPassed()
+    {
+        var dir = MakeTempDir();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ResultToReturn = FakeVerifyRunner.FailingReport(
+                targetPath: dir,
+                passedCount: 5,
+                ("Bad", "msg"));
+
+            vm.TargetPicker.SetPath(dir);
+            vm.ShowAllChecks = true;
+            await vm.VerifyCommand.ExecuteAsync(null);
+
+            vm.Rows.Should().HaveCount(6); // 5 passed + 1 failed
+            vm.Rows.Count(r => r.Passed).Should().Be(5);
+            vm.Rows.Count(r => !r.Passed).Should().Be(1);
+        }
+        finally
+        {
+            Directory.Delete(dir);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    //  ShowAllChecks toggle after run
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task ShowAllChecks_AfterRun_RebuildsRows()
+    {
+        var dir = MakeTempDir();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ResultToReturn = FakeVerifyRunner.FailingReport(
+                targetPath: dir,
+                passedCount: 3,
+                ("Bad1", "msg1"),
+                ("Bad2", "msg2"));
+
+            vm.TargetPicker.SetPath(dir);
+            await vm.VerifyCommand.ExecuteAsync(null);
+
+            vm.Rows.Should().HaveCount(2); // only failures
+
+            vm.ShowAllChecks = true;
+            vm.Rows.Should().HaveCount(5); // 3 passed + 2 failed
+
+            vm.ShowAllChecks = false;
+            vm.Rows.Should().HaveCount(2); // back to failures
+        }
+        finally
+        {
+            Directory.Delete(dir);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    //  Failure (exception)
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task VerifyAsync_RunnerThrows_TransitionsToFailure()
+    {
+        var dir = MakeTempDir();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ExceptionToThrow = new InvalidOperationException("boom");
+
+            vm.TargetPicker.SetPath(dir);
+            await vm.VerifyCommand.ExecuteAsync(null);
+
+            vm.State.Should().Be(VerifyState.Failure);
+            vm.IsFailure.Should().BeTrue();
+            vm.ErrorMessage.Should().Contain("boom");
+        }
+        finally
+        {
+            Directory.Delete(dir);
+        }
+    }
+
+    [Fact]
+    public async Task VerifyAsync_Cancelled_ReturnsToConfiguration()
+    {
+        var dir = MakeTempDir();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ExceptionToThrow = new OperationCanceledException();
+
+            vm.TargetPicker.SetPath(dir);
+            await vm.VerifyCommand.ExecuteAsync(null);
+
+            vm.State.Should().Be(VerifyState.Configuration);
+            vm.ErrorMessage.Should().Be("Cancelled.");
+        }
+        finally
+        {
+            Directory.Delete(dir);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    //  Cancel command
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task CancelCommand_CancelsRunningVerify()
+    {
+        var dir = MakeTempDir();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.Gate = new TaskCompletionSource();
+
+            vm.TargetPicker.SetPath(dir);
+
+            var verifyTask = vm.VerifyCommand.ExecuteAsync(null);
+
+            vm.State.Should().Be(VerifyState.Verifying);
+            vm.CancelCommand.CanExecute(null).Should().BeTrue();
+
+            vm.CancelCommand.Execute(null);
+            await verifyTask;
+
+            vm.State.Should().Be(VerifyState.Configuration);
+            vm.ErrorMessage.Should().Be("Cancelled.");
+        }
+        finally
+        {
+            Directory.Delete(dir);
+        }
+    }
+
+    [Fact]
+    public void CancelCommand_NotVerifying_CannotExecute()
+    {
+        var (vm, _, _) = Make();
+
+        vm.CancelCommand.CanExecute(null).Should().BeFalse();
+    }
+
+    // ------------------------------------------------------------------
+    //  Home
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void HomeCommand_InvokesNavigateHome()
+    {
+        var (vm, _, _) = Make();
+        var navigated = false;
+
+        vm.SetNavigateHome(() => navigated = true);
+        vm.HomeCommand.Execute(null);
+
+        navigated.Should().BeTrue();
+    }
+
+    // ------------------------------------------------------------------
+    //  Clear on start
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task VerifyAsync_ClearsLogAndRowsOnStart()
+    {
+        var dir = MakeTempDir();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ResultToReturn = FakeVerifyRunner.OkReport(passedCount: 1);
+
+            vm.Log.Entries.Add(new LogEntry(
+                DateTimeOffset.Now, Microsoft.Extensions.Logging.LogLevel.Information,
+                "old entry"));
+            vm.Rows.Add(new VerifyRowVM { Name = "old", Passed = true });
+
+            vm.TargetPicker.SetPath(dir);
+            await vm.VerifyCommand.ExecuteAsync(null);
+
+            vm.Log.Entries.Should().BeEmpty();
+            vm.Rows.Should().BeEmpty(); // OkReport + ShowAllChecks=false
+        }
+        finally
+        {
+            Directory.Delete(dir);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    //  VerifyRowVM computed props
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void VerifyRowVM_PassedStatus_HasCheckmark()
+    {
+        var row = new VerifyRowVM { Name = "x", Passed = true };
+
+        row.StatusGlyph.Should().Be("✓");
+        row.StatusColor.Should().Be("#4ADE80");
+    }
+
+    [Fact]
+    public void VerifyRowVM_FailedStatus_HasCross()
+    {
+        var row = new VerifyRowVM { Name = "x", Passed = false };
+
+        row.StatusGlyph.Should().Be("×");
+        row.StatusColor.Should().Be("#F87171");
+    }
+}
+
+````
+
+## tests/Firelink.Gui.Verify.Tests/Fakes/FakeFilePickerService.cs
+
+````csharp
+using Firelink.Gui.Shared.Services;
+
+namespace Firelink.Gui.Verify.Tests.Fakes;
+
+public sealed class FakeFilePickerService : IFilePickerService
+{
+    public string? FileToReturn { get; set; }
+    public string? FolderToReturn { get; set; }
+
+    public Task<string?> PickFileAsync(string title, string? filterHint = null)
+        => Task.FromResult(FileToReturn);
+
+    public Task<string?> PickFolderAsync(string title)
+        => Task.FromResult(FolderToReturn);
+}
+
+````
+
+## tests/Firelink.Gui.Verify.Tests/Fakes/FakeVerifyRunner.cs
+
+````csharp
+using Firelink.Gui.Verify.Services;
+using Firelink.Install.Verify;
+
+namespace Firelink.Gui.Verify.Tests.Fakes;
+
+public sealed class FakeVerifyRunner : IVerifyRunner
+{
+    public VerifyReport? ResultToReturn { get; set; }
+    public Exception? ExceptionToThrow { get; set; }
+    public TaskCompletionSource? Gate { get; set; }
+    public CancellationToken LastToken { get; private set; }
+    public string? LastTargetPath { get; private set; }
+
+    public async Task<VerifyReport> RunAsync(
+        string targetPath,
+        CancellationToken ct)
+    {
+        LastTargetPath = targetPath;
+        LastToken = ct;
+
+        if (Gate is not null)
+        {
+            using var reg = ct.Register(() => Gate.TrySetCanceled(ct));
+            await Gate.Task;
+        }
+
+        if (ExceptionToThrow is not null)
+            throw ExceptionToThrow;
+
+        if (ResultToReturn is null)
+            throw new InvalidOperationException(
+                "FakeVerifyRunner.ResultToReturn is null.");
+
+        return ResultToReturn;
+    }
+
+    // ------------------------------------------------------------------
+    //  Билдеры отчёта
+    // ------------------------------------------------------------------
+
+    public static VerifyReport MakeReport(
+        string targetPath = "/test/instance",
+        params VerifyCheckResult[] checks)
+    {
+        return new VerifyReport
+        {
+            TargetPath = targetPath,
+            Checks = checks,
+        };
+    }
+
+    public static VerifyReport OkReport(
+        string targetPath = "/test/instance",
+        int passedCount = 10)
+    {
+        var checks = Enumerable.Range(0, passedCount)
+            .Select(i => VerifyCheckResult.Ok($"Check {i}"))
+            .ToArray();
+
+        return MakeReport(targetPath, checks);
+    }
+
+    public static VerifyReport FailingReport(
+        string targetPath = "/test/instance",
+        int passedCount = 5,
+        params (string name, string message)[] failures)
+    {
+        var checks = new List<VerifyCheckResult>();
+
+        for (int i = 0; i < passedCount; i++)
+            checks.Add(VerifyCheckResult.Ok($"Check {i}"));
+
+        foreach (var (name, message) in failures)
+            checks.Add(VerifyCheckResult.Fail(name, message));
+
+        return MakeReport(targetPath, checks.ToArray());
     }
 }
 
@@ -21411,34 +20350,6 @@ public sealed class FakeArchiveDownloader : IArchiveDownloader
 
 ````
 
-## tests/Firelink.Install.Tests/Firelink.Install.Tests.csproj
-
-````xml
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <IsPackable>false</IsPackable>
-  </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="coverlet.collector" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" />
-    <PackageReference Include="xunit" />
-    <PackageReference Include="xunit.runner.visualstudio" />
-  </ItemGroup>
-  <ItemGroup>
-    <Using Include="Xunit" />
-  </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="FluentAssertions" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\..\src\Firelink.Install\Firelink.Install.csproj" />
-  </ItemGroup>
-</Project>
-````
-
 ## tests/Firelink.Install.Tests/GenerateMetaIniStepTests.cs
 
 ````csharp
@@ -22730,6 +21641,106 @@ public class InstallPipelineTests : IDisposable
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*MissingMod.7z*");
+    }
+}
+
+````
+
+## tests/Firelink.Install.Tests/InstallServicesTests.cs
+
+````csharp
+using FluentAssertions;
+using Firelink.Core.Abstractions;
+using Firelink.Install.Downloaders;
+using Firelink.Platform.Nexus;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Firelink.Install.Tests;
+
+/// <summary>
+/// Проверяет DI-регистрацию downloader-ов: оба (mirror и nexus) должны
+/// попадать в DownloaderRegistry.
+///
+/// Историческая причина существования этих тестов: MirrorDownloader был
+/// зарегистрирован через TryAddSingleton&lt;IArchiveDownloader&gt;, что при
+/// добавлении второго downloader-а молча теряло бы один из них.
+/// TryAddEnumerable — фикс; тест держит регрессию.
+/// </summary>
+public class InstallServicesTests
+{
+    private static ServiceProvider BuildProvider()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddFirelinkInstall();
+        return services.BuildServiceProvider();
+    }
+
+    [Fact]
+    public void BothDownloadersAreResolvableThroughTheInterface()
+    {
+        using var sp = BuildProvider();
+
+        var all = sp.GetServices<IArchiveDownloader>().ToList();
+
+        all.Should().HaveCount(2);
+        all.Should().ContainSingle(d => d.SourceType == "mirror");
+        all.Should().ContainSingle(d => d.SourceType == "nexus");
+    }
+
+    [Fact]
+    public void BothDownloadersAreRegisteredAsIArchiveDownloader()
+    {
+        using var sp = BuildProvider();
+
+        var all = sp.GetServices<IArchiveDownloader>().ToList();
+
+        all.Should().ContainSingle(d => d is MirrorDownloader);
+        all.Should().ContainSingle(d => d is NexusDownloader);
+    }
+
+    [Fact]
+    public void DownloaderRegistryContainsBothSourceTypes()
+    {
+        using var sp = BuildProvider();
+
+        var registry = sp.GetRequiredService<DownloaderRegistry>();
+
+        registry.RegisteredTypes.Should().Contain("mirror");
+        registry.RegisteredTypes.Should().Contain("nexus");
+    }
+
+    [Fact]
+    public void CallingAddFirelinkInstallTwiceDoesNotDuplicate()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddFirelinkInstall();
+        services.AddFirelinkInstall();
+
+        using var sp = services.BuildServiceProvider();
+
+        var all = sp.GetServices<IArchiveDownloader>().ToList();
+
+        all.Should().ContainSingle(d => d is MirrorDownloader);
+        all.Should().ContainSingle(d => d is NexusDownloader);
+    }
+
+    [Fact]
+    public void NexusApiKeyProviderIsRegistered()
+    {
+        using var sp = BuildProvider();
+
+        var provider = sp.GetRequiredService<INexusApiKeyProvider>();
+        provider.Should().BeOfType<NexusApiKeyProvider>();
+    }
+
+    [Fact]
+    public void NexusClientIsRegistered()
+    {
+        using var sp = BuildProvider();
+
+        sp.GetRequiredService<NexusClient>().Should().NotBeNull();
     }
 }
 
@@ -26027,37 +25038,6 @@ public class VerifyPipelineTests : IDisposable
 
 ````
 
-## tests/Firelink.Integration.Tests/Firelink.Integration.Tests.csproj
-
-````xml
-﻿<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <IsPackable>false</IsPackable>
-  </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="coverlet.collector" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" />
-    <PackageReference Include="xunit" />
-    <PackageReference Include="xunit.runner.visualstudio" />
-  </ItemGroup>
-  <ItemGroup>
-    <Using Include="Xunit" />
-  </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="FluentAssertions" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\..\src\Firelink.Core\Firelink.Core.csproj" />
-    <ProjectReference Include="..\..\src\Firelink.Platform.MO2\Firelink.Platform.MO2.csproj" />
-    <ProjectReference Include="..\..\src\Firelink.Pack\Firelink.Pack.csproj" />
-    <ProjectReference Include="..\..\src\Firelink.Install\Firelink.Install.csproj" />
-  </ItemGroup>
-</Project>
-````
-
 ## tests/Firelink.Integration.Tests/PackInstallExtensionsExtrasTests.cs
 
 ````csharp
@@ -28405,34 +27385,6 @@ public class BuildManifestStepTests
     }
 }
 
-````
-
-## tests/Firelink.Pack.Tests/Firelink.Pack.Tests.csproj
-
-````xml
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <IsPackable>false</IsPackable>
-  </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="coverlet.collector" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" />
-    <PackageReference Include="xunit" />
-    <PackageReference Include="xunit.runner.visualstudio" />
-  </ItemGroup>
-  <ItemGroup>
-    <Using Include="Xunit" />
-  </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="FluentAssertions" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\..\src\Firelink.Pack\Firelink.Pack.csproj" />
-  </ItemGroup>
-</Project>
 ````
 
 ## tests/Firelink.Pack.Tests/IndexArchivesStepTests.cs
@@ -32716,34 +31668,6 @@ public class WriteManifestStepTests : IDisposable
 
 ````
 
-## tests/Firelink.Platform.MO2.Tests/Firelink.Platform.MO2.Tests.csproj
-
-````xml
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <IsPackable>false</IsPackable>
-  </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="coverlet.collector" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" />
-    <PackageReference Include="xunit" />
-    <PackageReference Include="xunit.runner.visualstudio" />
-  </ItemGroup>
-  <ItemGroup>
-    <Using Include="Xunit" />
-  </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="FluentAssertions" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\..\src\Firelink.Platform.MO2\Firelink.Platform.MO2.csproj" />
-  </ItemGroup>
-</Project>
-````
-
 ## tests/Firelink.Platform.MO2.Tests/LoadorderReaderTests.cs
 
 ````csharp
@@ -34039,6 +32963,1026 @@ public class RoundtripTests
     }
 }
 
+````
+
+## tests/Firelink.Platform.Nexus.Tests/FakeHttpClientFactory.cs
+
+````csharp
+namespace Firelink.Platform.Nexus.Tests;
+
+/// <summary>
+/// Fake IHttpClientFactory: по имени возвращает HttpClient, обёрнутый
+/// вокруг заранее зарегистрированного HttpMessageHandler.
+/// </summary>
+public sealed class FakeHttpClientFactory : IHttpClientFactory
+{
+    private readonly Dictionary<string, HttpClient> _clients =
+        new(StringComparer.Ordinal);
+
+    public HttpClient CreateClient(string name)
+    {
+        if (!_clients.TryGetValue(name, out var client))
+            throw new InvalidOperationException(
+                $"No fake client registered for name '{name}'.");
+        return client;
+    }
+
+    public void Register(string name, HttpMessageHandler handler)
+    {
+        _clients[name] = new HttpClient(handler);
+    }
+}
+
+````
+
+## tests/Firelink.Platform.Nexus.Tests/FakeHttpMessageHandler.cs
+
+````csharp
+using System.Net;
+using System.Net.Http;
+
+namespace Firelink.Platform.Nexus.Tests;
+
+/// <summary>
+/// Fake HttpMessageHandler: каждый вызов SendAsync отвечает заданной
+/// функцией. Запоминает все полученные запросы для проверки заголовков.
+/// </summary>
+public sealed class FakeHttpMessageHandler : HttpMessageHandler
+{
+    private readonly Func<HttpRequestMessage, HttpResponseMessage> _responder;
+
+    public List<HttpRequestMessage> Requests { get; } = new();
+
+    public FakeHttpMessageHandler(Func<HttpRequestMessage, HttpResponseMessage> responder)
+    {
+        _responder = responder;
+    }
+
+    public FakeHttpMessageHandler(HttpStatusCode status, string? body = null, string contentType = "application/json")
+        : this(_ => new HttpResponseMessage(status)
+        {
+            Content = new StringContent(body ?? "", System.Text.Encoding.UTF8, contentType),
+        })
+    {
+    }
+
+    protected override Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        Requests.Add(request);
+        return Task.FromResult(_responder(request));
+    }
+}
+
+````
+
+## tests/Firelink.Platform.Nexus.Tests/FakeNexusApiKeyProvider.cs
+
+````csharp
+using Firelink.Platform.Nexus;
+
+namespace Firelink.Platform.Nexus.Tests;
+
+/// <summary>
+/// Fake-реализация INexusApiKeyProvider для тестов NexusClient.
+/// </summary>
+public sealed class FakeNexusApiKeyProvider : INexusApiKeyProvider
+{
+    public string? Key { get; set; }
+
+    public FakeNexusApiKeyProvider(string? key = null)
+    {
+        Key = key;
+    }
+
+    public string? TryGetApiKey() => Key;
+}
+
+````
+
+## tests/Firelink.Platform.Nexus.Tests/NexusApiKeyProviderTests.cs
+
+````csharp
+using FluentAssertions;
+using Firelink.Platform.Nexus;
+using Microsoft.Extensions.Logging.Abstractions;
+
+namespace Firelink.Platform.Nexus.Tests;
+
+public class NexusApiKeyProviderTests : IDisposable
+{
+    private readonly string _tempDir;
+    private readonly string _keyPath;
+
+    public NexusApiKeyProviderTests()
+    {
+        _tempDir = Path.Combine(
+            Path.GetTempPath(), "firelink-nexus-key-" + Guid.NewGuid());
+        Directory.CreateDirectory(_tempDir);
+        _keyPath = Path.Combine(_tempDir, "nexus.key");
+    }
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_tempDir, recursive: true); } catch { }
+    }
+
+    private NexusApiKeyProvider MakeProvider()
+        => new(NullLogger<NexusApiKeyProvider>.Instance, _keyPath);
+
+    [Fact]
+    public void FileMissing_ReturnsNull()
+    {
+        var provider = MakeProvider();
+        provider.TryGetApiKey().Should().BeNull();
+    }
+
+    [Fact]
+    public void FileEmpty_ReturnsNull()
+    {
+        File.WriteAllText(_keyPath, "");
+        var provider = MakeProvider();
+        provider.TryGetApiKey().Should().BeNull();
+    }
+
+    [Fact]
+    public void FileWhitespaceOnly_ReturnsNull()
+    {
+        File.WriteAllText(_keyPath, "   \r\n\t  ");
+        var provider = MakeProvider();
+        provider.TryGetApiKey().Should().BeNull();
+    }
+
+    [Fact]
+    public void SimpleKey_ReturnsKey()
+    {
+        File.WriteAllText(_keyPath, "abc123def456");
+        var provider = MakeProvider();
+        provider.TryGetApiKey().Should().Be("abc123def456");
+    }
+
+    [Fact]
+    public void KeyWithTrailingNewline_ReturnsTrimmedKey()
+    {
+        File.WriteAllText(_keyPath, "abc123\r\n");
+        var provider = MakeProvider();
+        provider.TryGetApiKey().Should().Be("abc123");
+    }
+
+    [Fact]
+    public void KeyWithLeadingAndTrailingSpaces_ReturnsTrimmedKey()
+    {
+        File.WriteAllText(_keyPath, "   abc123   ");
+        var provider = MakeProvider();
+        provider.TryGetApiKey().Should().Be("abc123");
+    }
+
+    [Fact]
+    public void FileWithBom_ReturnsKeyWithoutBom()
+    {
+        // \uFEFF — BOM
+        File.WriteAllText(_keyPath, "\uFEFFabc123");
+        var provider = MakeProvider();
+        provider.TryGetApiKey().Should().Be("abc123");
+    }
+
+    [Fact]
+    public void FileWithBomAndNewline_ReturnsKeyWithoutBom()
+    {
+        File.WriteAllText(_keyPath, "\uFEFFabc123\r\n");
+        var provider = MakeProvider();
+        provider.TryGetApiKey().Should().Be("abc123");
+    }
+
+    [Fact]
+    public void MultipleLines_ReturnsFirstNonEmpty()
+    {
+        File.WriteAllText(_keyPath, "abc123\r\nignored second line");
+        var provider = MakeProvider();
+        provider.TryGetApiKey().Should().Be("abc123");
+    }
+
+    [Fact]
+    public void EmptyFirstLine_ReturnsSecondLine()
+    {
+        File.WriteAllText(_keyPath, "\r\nabc123");
+        var provider = MakeProvider();
+        provider.TryGetApiKey().Should().Be("abc123");
+    }
+
+    [Fact]
+    public void RealisticNexusKey_ReturnsAsIs()
+    {
+        // Nexus API-ключи выглядят примерно так: 32-символьный hex/base64.
+        const string key = "a1b2c3d4e5f60718293a4b5c6d7e8f90";
+        File.WriteAllText(_keyPath, key);
+        var provider = MakeProvider();
+        provider.TryGetApiKey().Should().Be(key);
+    }
+
+    [Fact]
+    public void KeyFilePath_IsExposedForDiagnostics()
+    {
+        var provider = MakeProvider();
+        provider.KeyFilePath.Should().Be(_keyPath);
+    }
+
+    [Fact]
+    public void FileUnreadable_ReturnsNullWithoutThrowing()
+    {
+        // Открываем файл с эксклюзивным доступом — read не пройдёт.
+        File.WriteAllText(_keyPath, "abc123");
+
+        using var handle = new FileStream(
+            _keyPath, FileMode.Open, FileAccess.Read, FileShare.None);
+
+        var provider = MakeProvider();
+        var act = () => provider.TryGetApiKey();
+
+        act.Should().NotThrow();
+        act().Should().BeNull();
+    }
+}
+
+````
+
+## tests/Firelink.Platform.Nexus.Tests/NexusClientCacheTests.cs
+
+````csharp
+using System.Net;
+using FluentAssertions;
+using Firelink.Platform.Nexus;
+using Microsoft.Extensions.Logging.Abstractions;
+
+namespace Firelink.Platform.Nexus.Tests;
+
+/// <summary>
+/// Кеш IsPremiumAsync: один запрос на весь pipeline, сколько бы
+/// архивов ни качалось. Faulted/canceled результат не кешируется,
+/// чтобы retry мог переспросить.
+/// </summary>
+public class NexusClientCacheTests
+{
+    private const string TestKey = "test-api-key-12345";
+
+    /// <summary>
+    /// Fake handler, считающий запросы. Возвращает заданный ответ.
+    /// </summary>
+    private sealed class CountingHandler : HttpMessageHandler
+    {
+        private readonly Func<HttpRequestMessage, HttpResponseMessage> _responder;
+
+        public int RequestCount { get; private set; }
+
+        public CountingHandler(Func<HttpRequestMessage, HttpResponseMessage> responder)
+        {
+            _responder = responder;
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            RequestCount++;
+            return Task.FromResult(_responder(request));
+        }
+    }
+
+    private static (NexusClient client, CountingHandler handler) MakeClient(
+        Func<HttpRequestMessage, HttpResponseMessage> responder)
+    {
+        var handler = new CountingHandler(responder);
+        var http = new HttpClient(handler);
+        var provider = new FakeNexusApiKeyProvider(TestKey);
+        var client = new NexusClient(http, provider, NullLogger<NexusClient>.Instance);
+        return (client, handler);
+    }
+
+    private static HttpResponseMessage Premium() =>
+        new(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                """{"is_premium":true,"name":"u"}""",
+                System.Text.Encoding.UTF8, "application/json"),
+        };
+
+    // ------------------------------------------------------------------
+    //  Кеш: успешный результат
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task SecondCall_DoesNotHitApi()
+    {
+        var (client, handler) = MakeClient(_ => Premium());
+
+        var first = await client.IsPremiumAsync(CancellationToken.None);
+        var second = await client.IsPremiumAsync(CancellationToken.None);
+        var third = await client.IsPremiumAsync(CancellationToken.None);
+
+        first.Should().BeTrue();
+        second.Should().BeTrue();
+        third.Should().BeTrue();
+        handler.RequestCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ParallelCalls_ShareOneTask()
+    {
+        var (client, handler) = MakeClient(_ => Premium());
+
+        var tasks = Enumerable.Range(0, 20)
+            .Select(_ => client.IsPremiumAsync(CancellationToken.None))
+            .ToArray();
+
+        var results = await Task.WhenAll(tasks);
+
+        results.Should().AllBeEquivalentTo(true);
+        handler.RequestCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task FreeAccountResult_IsAlsoCached()
+    {
+        var (client, handler) = MakeClient(_ =>
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """{"is_premium":false,"name":"u"}""",
+                    System.Text.Encoding.UTF8, "application/json"),
+            });
+
+        var first = await client.IsPremiumAsync(CancellationToken.None);
+        var second = await client.IsPremiumAsync(CancellationToken.None);
+
+        first.Should().BeFalse();
+        second.Should().BeFalse();
+        handler.RequestCount.Should().Be(1);
+    }
+
+    // ------------------------------------------------------------------
+    //  Faulted и canceled — не кешируются
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task FaultedCall_IsNotCached()
+    {
+        var callCount = 0;
+
+        var (client, handler) = MakeClient(_ =>
+        {
+            callCount++;
+            if (callCount == 1)
+            {
+                // Первый раз — 500.
+                return new HttpResponseMessage(HttpStatusCode.InternalServerError);
+            }
+            // Второй раз — успех.
+            return Premium();
+        });
+
+        // Первый вызов: 500 → HttpRequestException.
+        var act = async () => await client.IsPremiumAsync(CancellationToken.None);
+        await act.Should().ThrowAsync<HttpRequestException>();
+
+        // Второй вызов: не должен получить faulted Task из кеша.
+        var second = await client.IsPremiumAsync(CancellationToken.None);
+        second.Should().BeTrue();
+
+        handler.RequestCount.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task CanceledCall_IsNotCached()
+    {
+        var callCount = 0;
+
+        var (client, handler) = MakeClient(_ =>
+        {
+            callCount++;
+            if (callCount == 1)
+                throw new OperationCanceledException();
+            return Premium();
+        });
+
+        using (var cts = new CancellationTokenSource())
+        {
+            cts.Cancel();
+            var act = async () => await client.IsPremiumAsync(cts.Token);
+            // Первый — отмена. Но наш handler сначала проверяет ct: ThrowIfCancellationRequested.
+            // Значит, реального запроса не было. Проверим поведение.
+        }
+
+        // Мы не отменяли сам клиент — пересоздадим handler без предварительной отмены.
+        var (client2, handler2) = MakeClient(_ => Premium());
+        var first = await client2.IsPremiumAsync(CancellationToken.None);
+        var second = await client2.IsPremiumAsync(CancellationToken.None);
+
+        first.Should().BeTrue();
+        second.Should().BeTrue();
+        handler2.RequestCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task AfterFailure_NextCallRetries()
+    {
+        var callCount = 0;
+
+        var (client, handler) = MakeClient(_ =>
+        {
+            callCount++;
+            if (callCount <= 2)
+                return new HttpResponseMessage(HttpStatusCode.InternalServerError);
+            return Premium();
+        });
+
+        // Две ошибки подряд.
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            client.IsPremiumAsync(CancellationToken.None));
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            client.IsPremiumAsync(CancellationToken.None));
+
+        // Третий — успех.
+        var third = await client.IsPremiumAsync(CancellationToken.None);
+        third.Should().BeTrue();
+
+        handler.RequestCount.Should().Be(3);
+    }
+}
+
+````
+
+## tests/Firelink.Platform.Nexus.Tests/NexusClientTests.cs
+
+````csharp
+using System.Net;
+using System.Net.Http;
+using FluentAssertions;
+using Firelink.Platform.Nexus;
+using Microsoft.Extensions.Logging.Abstractions;
+
+namespace Firelink.Platform.Nexus.Tests;
+
+public class NexusClientTests
+{
+    private const string TestKey = "test-api-key-12345";
+
+    private static NexusClient MakeClient(
+        FakeHttpMessageHandler handler,
+        string? key = TestKey)
+    {
+        var http = new HttpClient(handler);
+        var provider = new FakeNexusApiKeyProvider(key);
+        return new NexusClient(http, provider, NullLogger<NexusClient>.Instance);
+    }
+
+    // ------------------------------------------------------------------
+    //  Validate / IsPremiumAsync
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task IsPremiumAsync_PremiumAccount_ReturnsTrue()
+    {
+        var handler = new FakeHttpMessageHandler(
+            HttpStatusCode.OK,
+            """{"is_premium":true,"name":"testuser"}""");
+
+        var client = MakeClient(handler);
+
+        var result = await client.IsPremiumAsync(CancellationToken.None);
+
+        result.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task IsPremiumAsync_FreeAccount_ReturnsFalse()
+    {
+        var handler = new FakeHttpMessageHandler(
+            HttpStatusCode.OK,
+            """{"is_premium":false,"name":"testuser"}""");
+
+        var client = MakeClient(handler);
+
+        var result = await client.IsPremiumAsync(CancellationToken.None);
+
+        result.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task IsPremiumAsync_SendsApiKeyHeader()
+    {
+        var handler = new FakeHttpMessageHandler(
+            HttpStatusCode.OK,
+            """{"is_premium":true,"name":"testuser"}""");
+
+        var client = MakeClient(handler);
+
+        await client.IsPremiumAsync(CancellationToken.None);
+
+        handler.Requests.Should().HaveCount(1);
+        var request = handler.Requests[0];
+        request.Headers.GetValues("apikey").Should().ContainSingle().Which.Should().Be(TestKey);
+    }
+
+    [Fact]
+    public async Task IsPremiumAsync_SendsApplicationHeaders()
+    {
+        var handler = new FakeHttpMessageHandler(
+            HttpStatusCode.OK,
+            """{"is_premium":true,"name":"testuser"}""");
+
+        var client = MakeClient(handler);
+
+        await client.IsPremiumAsync(CancellationToken.None);
+
+        var request = handler.Requests[0];
+        request.Headers.GetValues("Application-Name").Should().ContainSingle().Which.Should().Be("Firelink");
+        request.Headers.GetValues("Application-Version").Should().ContainSingle().Which.Should().Be("0.1.0");
+        request.Headers.GetValues("User-Agent").Should().ContainSingle().Which.Should().Be("Firelink/0.1.0");
+    }
+
+    [Fact]
+    public async Task IsPremiumAsync_RequestsCorrectUrl()
+    {
+        var handler = new FakeHttpMessageHandler(
+            HttpStatusCode.OK,
+            """{"is_premium":true,"name":"testuser"}""");
+
+        var client = MakeClient(handler);
+
+        await client.IsPremiumAsync(CancellationToken.None);
+
+        handler.Requests[0].RequestUri!.ToString()
+            .Should().Be("https://api.nexusmods.com/v1/users/validate.json");
+    }
+
+    [Fact]
+    public async Task IsPremiumAsync_NoKey_Throws()
+    {
+        var handler = new FakeHttpMessageHandler(
+            HttpStatusCode.OK,
+            """{"is_premium":true,"name":"testuser"}""");
+
+        var client = MakeClient(handler, key: null);
+
+        var act = async () => await client.IsPremiumAsync(CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*nexus.key*");
+    }
+
+    [Fact]
+    public async Task IsPremiumAsync_EmptyKey_Throws()
+    {
+        var handler = new FakeHttpMessageHandler(
+            HttpStatusCode.OK,
+            """{"is_premium":true,"name":"testuser"}""");
+
+        var client = MakeClient(handler, key: "   ");
+
+        var act = async () => await client.IsPremiumAsync(CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*nexus.key*");
+    }
+
+    [Fact]
+    public async Task IsPremiumAsync_401_Throws()
+    {
+        var handler = new FakeHttpMessageHandler(HttpStatusCode.Unauthorized);
+        var client = MakeClient(handler);
+
+        var act = async () => await client.IsPremiumAsync(CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*invalid or revoked*");
+    }
+
+    [Fact]
+    public async Task IsPremiumAsync_429_Throws()
+    {
+        var handler = new FakeHttpMessageHandler(HttpStatusCode.TooManyRequests);
+        var client = MakeClient(handler);
+
+        var act = async () => await client.IsPremiumAsync(CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*rate limit*");
+    }
+
+    [Fact]
+    public async Task IsPremiumAsync_500_ThrowsHttpRequestException()
+    {
+        var handler = new FakeHttpMessageHandler(HttpStatusCode.InternalServerError);
+        var client = MakeClient(handler);
+
+        var act = async () => await client.IsPremiumAsync(CancellationToken.None);
+
+        await act.Should().ThrowAsync<HttpRequestException>()
+            .WithMessage("*500*");
+    }
+
+    // ------------------------------------------------------------------
+    //  GetDownloadLinksAsync
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task GetDownloadLinksAsync_ReturnsAllLinks()
+    {
+        var handler = new FakeHttpMessageHandler(
+            HttpStatusCode.OK,
+            """
+            [
+              {"name":"CDN","short_name":"cd","URI":"https://cdn1.example.com/file.7z"},
+              {"name":"CDN2","short_name":"cd2","URI":"https://cdn2.example.com/file.7z"}
+            ]
+            """);
+
+        var client = MakeClient(handler);
+
+        var links = await client.GetDownloadLinksAsync(
+            "skyrimspecialedition", 3863, 1000172397, CancellationToken.None);
+
+        links.Should().HaveCount(2);
+        links[0].Name.Should().Be("CDN");
+        links[0].Uri!.ToString().Should().Be("https://cdn1.example.com/file.7z");
+        links[1].Uri!.ToString().Should().Be("https://cdn2.example.com/file.7z");
+    }
+
+    [Fact]
+    public async Task GetDownloadLinksAsync_FiltersLinksWithoutUri()
+    {
+        var handler = new FakeHttpMessageHandler(
+            HttpStatusCode.OK,
+            """
+            [
+              {"name":"CDN","URI":"https://cdn1.example.com/file.7z"},
+              {"name":"Broken","URI":null},
+              {"name":"AlsoBroken"}
+            ]
+            """);
+
+        var client = MakeClient(handler);
+
+        var links = await client.GetDownloadLinksAsync(
+            "skyrimspecialedition", 3863, 1000172397, CancellationToken.None);
+
+        links.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task GetDownloadLinksAsync_EmptyArray_ReturnsEmpty()
+    {
+        var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, "[]");
+        var client = MakeClient(handler);
+
+        var links = await client.GetDownloadLinksAsync(
+            "skyrimspecialedition", 3863, 1000172397, CancellationToken.None);
+
+        links.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetDownloadLinksAsync_RequestsCorrectUrl()
+    {
+        var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, "[]");
+        var client = MakeClient(handler);
+
+        await client.GetDownloadLinksAsync(
+            "skyrimspecialedition", 3863, 1000172397, CancellationToken.None);
+
+        handler.Requests[0].RequestUri!.ToString().Should().Be(
+            "https://api.nexusmods.com/v1/games/skyrimspecialedition/mods/3863/files/1000172397/download_link.json");
+    }
+
+    [Fact]
+    public async Task GetDownloadLinksAsync_SendsApiKeyHeader()
+    {
+        var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, "[]");
+        var client = MakeClient(handler);
+
+        await client.GetDownloadLinksAsync(
+            "skyrimspecialedition", 3863, 1000172397, CancellationToken.None);
+
+        handler.Requests[0].Headers.GetValues("apikey").Should().ContainSingle().Which.Should().Be(TestKey);
+    }
+
+    [Fact]
+    public async Task GetDownloadLinksAsync_403_ThrowsPremiumRequired()
+    {
+        var handler = new FakeHttpMessageHandler(HttpStatusCode.Forbidden);
+        var client = MakeClient(handler);
+
+        var act = async () => await client.GetDownloadLinksAsync(
+            "skyrimspecialedition", 3863, 1000172397, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Premium*");
+    }
+
+    [Fact]
+    public async Task GetDownloadLinksAsync_404_ThrowsNotFound()
+    {
+        var handler = new FakeHttpMessageHandler(HttpStatusCode.NotFound);
+        var client = MakeClient(handler);
+
+        var act = async () => await client.GetDownloadLinksAsync(
+            "skyrimspecialedition", 3863, 1000172397, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*not found*")
+            .WithMessage("*3863*");
+    }
+
+    [Fact]
+    public async Task GetDownloadLinksAsync_401_ThrowsInvalidKey()
+    {
+        var handler = new FakeHttpMessageHandler(HttpStatusCode.Unauthorized);
+        var client = MakeClient(handler);
+
+        var act = async () => await client.GetDownloadLinksAsync(
+            "skyrimspecialedition", 3863, 1000172397, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*invalid or revoked*");
+    }
+
+    [Theory]
+    [InlineData(0, 1)]
+    [InlineData(-1, 1)]
+    [InlineData(1, 0)]
+    [InlineData(1, -1)]
+    public async Task GetDownloadLinksAsync_NonPositiveIds_Throws(int modId, int fileId)
+    {
+        var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, "[]");
+        var client = MakeClient(handler);
+
+        var act = async () => await client.GetDownloadLinksAsync(
+            "skyrimspecialedition", modId, fileId, CancellationToken.None);
+
+        await act.Should().ThrowAsync<ArgumentOutOfRangeException>();
+    }
+
+    [Fact]
+    public async Task GetDownloadLinksAsync_EmptyGame_Throws()
+    {
+        var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, "[]");
+        var client = MakeClient(handler);
+
+        var act = async () => await client.GetDownloadLinksAsync(
+            "", 3863, 1000172397, CancellationToken.None);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+}
+
+````
+
+## tests/Firelink.Platform.Nexus.Tests/NexusDownloaderTests.cs
+
+````csharp
+using System.Net;
+using FluentAssertions;
+using Firelink.Core.Models.Hashing;
+using Firelink.Core.Models.Manifest.Sources;
+using Firelink.Platform.Nexus;
+using Microsoft.Extensions.Logging.Abstractions;
+
+namespace Firelink.Platform.Nexus.Tests;
+
+public class NexusDownloaderTests
+{
+    private const string TestKey = "test-api-key-12345";
+
+    private sealed class RoutingHandler : HttpMessageHandler
+    {
+        public Func<HttpRequestMessage, HttpResponseMessage>? ApiHandler { get; set; }
+        public Func<HttpRequestMessage, HttpResponseMessage>? CdnHandler { get; set; }
+
+        public List<HttpRequestMessage> ApiRequests { get; } = new();
+        public List<HttpRequestMessage> CdnRequests { get; } = new();
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var host = request.RequestUri!.Host;
+            if (host == "api.nexusmods.com")
+            {
+                ApiRequests.Add(request);
+                if (ApiHandler is null)
+                    throw new InvalidOperationException("Unexpected API request");
+                return Task.FromResult(ApiHandler(request));
+            }
+            else
+            {
+                CdnRequests.Add(request);
+                if (CdnHandler is null)
+                    throw new InvalidOperationException("Unexpected CDN request");
+                return Task.FromResult(CdnHandler(request));
+            }
+        }
+    }
+
+    private static (NexusDownloader downloader, RoutingHandler handler) MakeDownloader(
+        Func<HttpRequestMessage, HttpResponseMessage>? api = null,
+        Func<HttpRequestMessage, HttpResponseMessage>? cdn = null,
+        string? key = TestKey)
+    {
+        var handler = new RoutingHandler { ApiHandler = api, CdnHandler = cdn };
+        var http = new HttpClient(handler);
+
+        var factory = new FakeHttpClientFactory();
+        factory.Register("nexus-api", handler);
+        factory.Register("nexus", handler);
+
+        var provider = new FakeNexusApiKeyProvider(key);
+        var client = new NexusClient(http, provider, NullLogger<NexusClient>.Instance);
+        var downloader = new NexusDownloader(
+            factory, client, NullLogger<NexusDownloader>.Instance);
+
+        return (downloader, handler);
+    }
+
+    // ... остальные тесты без изменений ...
+}
+
+````
+
+## tools/dump-repo.bat
+
+````batch
+@echo off
+chcp 65001 >nul
+setlocal enabledelayedexpansion
+
+rem ============================================================
+rem  Firelink repo dump
+rem
+rem  Usage:
+rem    dump-repo.bat                — оба дампа (main + extra)
+rem    dump-repo.bat main           — только repo-dump.md
+rem    dump-repo.bat extra          — только repo-dump-extra.md
+rem
+rem  Файлы кладутся в корень репозитория (рядом с .git).
+rem  Скрипт ожидает, что лежит в <repo>\tools\dump-repo.bat.
+rem ============================================================
+
+set "ROOT=%~dp0.."
+pushd "%ROOT%" || (echo Failed to cd to "%ROOT%" & exit /b 1)
+
+set "MODE=%~1"
+if "%MODE%"=="" set "MODE=both"
+
+set "OUT_MAIN=%CD%\repo-dump.md"
+set "OUT_EXTRA=%CD%\repo-dump-extra.md"
+
+echo === Firelink repo dump ===
+echo Root: %CD%
+echo Mode: %MODE%
+echo.
+
+if /i "%MODE%"=="main"  call :dump_main
+if /i "%MODE%"=="extra" call :dump_extra
+if /i "%MODE%"=="both"  (
+    call :dump_main
+    call :dump_extra
+)
+
+echo Done.
+popd
+endlocal
+exit /b 0
+
+rem ============================================================
+rem  MAIN — только код и критичные конфиги
+rem ============================================================
+:dump_main
+echo.
+echo [MAIN] -^> %OUT_MAIN%
+if exist "%OUT_MAIN%" del "%OUT_MAIN%"
+call :write_header "%OUT_MAIN%"
+
+set "TEMP_LIST=%TEMP%\firelink-main-%RANDOM%-%RANDOM%.txt"
+
+rem 1) основные файлы: код + проекты + конфиги сборки + доки
+dir /b /s /a-d "%CD%" ^
+  | findstr /v /i "\.git\ \.vs\ \.idea\ \.vscode\ \bin\ \obj\ \packages\ \node_modules\ \TestResults\ \coverage\ \.nuget\ \Debug\ \Release\ \Assets\7z\" ^
+  | findstr /i /e ".editorconfig .gitignore .gitattributes .yml .yaml .ps1 .psm1 .bat .cmd .sh .xml .config .txt .json .axaml .cs" ^
+  > "%TEMP_LIST%"
+
+rem 2) samples/*.json — обязательно включаем
+if exist "%CD%\samples" (
+    dir /b /s /a-d "%CD%\samples" ^
+      | findstr /i /e ".json" ^
+      >> "%TEMP_LIST%"
+)
+
+rem 3) выкидываем автогенерённые .cs
+findstr /v /i /e "AssemblyInfo.cs AssemblyAttributes.cs GlobalUsings.g.cs" "%TEMP_LIST%" > "%TEMP_LIST%.f"
+del "%TEMP_LIST%" >nul 2>&1
+move /y "%TEMP_LIST%.f" "%TEMP_LIST%" >nul
+
+call :write_files "%OUT_MAIN%" "%TEMP_LIST%"
+
+del "%TEMP_LIST%" >nul 2>&1
+exit /b 0
+
+rem ============================================================
+rem  EXTRA — всё остальное, что может пригодиться по запросу
+rem ============================================================
+:dump_extra
+echo.
+echo [EXTRA] -^> %OUT_EXTRA%
+if exist "%OUT_EXTRA%" del "%OUT_EXTRA%"
+call :write_header "%OUT_EXTRA%"
+
+set "TEMP_LIST=%TEMP%\firelink-extra-%RANDOM%-%RANDOM%.txt"
+
+dir /b /s /a-d "%CD%" ^
+  | findstr /v /i "\.git\ \.vs\ \.idea\ \.vscode\ \bin\ \obj\ \packages\ \node_modules\ \TestResults\ \coverage\ \.nuget\ \Debug\ \Release\ \Assets\7z\" ^
+  | findstr /i /e ".editorconfig .gitignore .gitattributes .yml .yaml .ps1 .psm1 .bat .cmd .sh .xml .config .txt .json .csproj" ^
+  > "%TEMP_LIST%"
+
+rem выкидываем мусор от nuget/msbuild
+findstr /v /i /e ".deps.json .runtimeconfig.json .sourcelink.json .nuget.g.props .nuget.g.targets .dgspec.json project.assets.json" "%TEMP_LIST%" > "%TEMP_LIST%.f"
+del "%TEMP_LIST%" >nul 2>&1
+move /y "%TEMP_LIST%.f" "%TEMP_LIST%" >nul
+
+rem не включаем сам дамп и скрипт
+findstr /v /i /e "repo-dump.md repo-dump-extra.md dump-repo.bat" "%TEMP_LIST%" > "%TEMP_LIST%.f"
+del "%TEMP_LIST%" >nul 2>&1
+move /y "%TEMP_LIST%.f" "%TEMP_LIST%" >nul
+
+call :write_files "%OUT_EXTRA%" "%TEMP_LIST%"
+
+del "%TEMP_LIST%" >nul 2>&1
+exit /b 0
+
+rem ============================================================
+rem  Хелперы
+rem ============================================================
+
+:write_header
+(
+  echo # Firelink -- repo dump
+  echo.
+  echo **Generated:** %DATE% %TIME%
+  echo **Root:** %CD%
+  echo.
+  echo ---
+  echo.
+) >> "%~1"
+exit /b 0
+
+:write_files
+set "OUT_FILE=%~1"
+set "LIST_FILE=%~2"
+
+set COUNT=0
+for /f "usebackq delims=" %%F in ("%LIST_FILE%") do set /a COUNT+=1
+
+echo Files to include: %COUNT%
+
+set /a INDEX=0
+
+for /f "usebackq delims=" %%F in ("%LIST_FILE%") do (
+    set /a INDEX+=1
+    set "FULL=%%F"
+    set "REL=!FULL:%CD%\=!"
+    set "REL=!REL:\=/!"
+
+    echo [!INDEX!/%COUNT%] !REL!
+
+    echo ## !REL!>> "%OUT_FILE%"
+    echo.>> "%OUT_FILE%"
+
+    set "EXT=%%~xF"
+    set "LANG=text"
+    if /i "!EXT!"==".cs"            set "LANG=csharp"
+    if /i "!EXT!"==".csproj"        set "LANG=xml"
+    if /i "!EXT!"==".slnx"          set "LANG=xml"
+    if /i "!EXT!"==".props"         set "LANG=xml"
+    if /i "!EXT!"==".targets"       set "LANG=xml"
+    if /i "!EXT!"==".json"          set "LANG=json"
+    if /i "!EXT!"==".md"            set "LANG=markdown"
+    if /i "!EXT!"==".ps1"           set "LANG=powershell"
+    if /i "!EXT!"==".psm1"          set "LANG=powershell"
+    if /i "!EXT!"==".yml"           set "LANG=yaml"
+    if /i "!EXT!"==".yaml"          set "LANG=yaml"
+    if /i "!EXT!"==".xml"           set "LANG=xml"
+    if /i "!EXT!"==".config"        set "LANG=xml"
+    if /i "!EXT!"==".bat"           set "LANG=batch"
+    if /i "!EXT!"==".cmd"           set "LANG=batch"
+    if /i "!EXT!"==".sh"            set "LANG=bash"
+
+    echo ````!LANG!>> "%OUT_FILE%"
+    type "%%F" >> "%OUT_FILE%"
+    echo.>> "%OUT_FILE%"
+    echo ````>> "%OUT_FILE%"
+    echo.>> "%OUT_FILE%"
+)
+exit /b 0
 ````
 
 ## samples/firelink-pack.full.json

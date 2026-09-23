@@ -1,0 +1,52 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Firelink.Gui.Shared.ViewModels"
+             xmlns:log="using:Firelink.Gui.Shared.Logging"
+             xmlns:conv="using:Firelink.Gui.Controls.Converters"
+             x:Class="Firelink.Gui.Controls.Views.LogView"
+             x:DataType="vm:LogVM">
+  <Grid RowDefinitions="Auto,*">
+    <Grid Grid.Row="0"
+          ColumnDefinitions="*,Auto"
+          Background="#111820">
+      <TextBlock Grid.Column="0"
+                 Text="Log"
+                 Foreground="#9CA3AF"
+                 Margin="10,6"
+                 FontSize="12"
+                 FontWeight="SemiBold"
+                 VerticalAlignment="Center" />
+      <Button Grid.Column="1"
+              Content="Clear"
+              Command="{Binding ClearCommand}"
+              Margin="6"
+              Padding="10,3"
+              FontSize="11" />
+    </Grid>
+
+    <ScrollViewer Grid.Row="1"
+                  Name="Scroll"
+                  Background="#0B1116"
+                  HorizontalScrollBarVisibility="Disabled"
+                  VerticalScrollBarVisibility="Auto">
+      <ItemsControl ItemsSource="{Binding Entries}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate DataType="log:LogEntry">
+            <TextBlock Padding="10,1"
+                       FontFamily="Consolas,Menlo,monospace"
+                       FontSize="12"
+                       TextWrapping="Wrap"
+                       Foreground="{Binding Level, Converter={x:Static conv:LogLevelToBrushConverter.Instance}}">
+              <Run Text="[" />
+              <Run Text="{Binding Timestamp, StringFormat='{}{0:HH:mm:ss}'}" />
+              <Run Text="] [" />
+              <Run Text="{Binding Level}" />
+              <Run Text="] " />
+              <Run Text="{Binding Message}" />
+            </TextBlock>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+  </Grid>
+</UserControl>

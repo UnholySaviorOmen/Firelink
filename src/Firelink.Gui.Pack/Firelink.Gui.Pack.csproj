@@ -1,0 +1,16 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Firelink.Gui.Controls\Firelink.Gui.Controls.csproj" />
+    <ProjectReference Include="..\Firelink.Gui.Shared\Firelink.Gui.Shared.csproj" />
+    <ProjectReference Include="..\Firelink.Pack\Firelink.Pack.csproj" />
+  </ItemGroup>
+</Project>

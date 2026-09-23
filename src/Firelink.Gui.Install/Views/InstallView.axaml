@@ -1,0 +1,172 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Firelink.Gui.Install.ViewModels"
+             xmlns:controls="using:Firelink.Gui.Controls.Views"
+             x:Class="Firelink.Gui.Install.Views.InstallView"
+             x:DataType="vm:InstallVM">
+    <Grid RowDefinitions="Auto,*,Auto" Margin="20">
+
+        <!-- Header -->
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,16">
+            <TextBlock Grid.Column="0"
+                       Text="Install"
+                       FontSize="24"
+                       FontWeight="Bold"
+                       VerticalAlignment="Center" />
+            <Button Grid.Column="1"
+                    Content="Home"
+                    Command="{Binding HomeCommand}"
+                    Padding="12,6"
+                    IsVisible="{Binding IsConfiguring}" />
+        </Grid>
+
+        <!-- Configuration -->
+        <StackPanel Grid.Row="1"
+                    Spacing="16"
+                    IsVisible="{Binding IsConfiguring}"
+                    VerticalAlignment="Top">
+            <controls:FilePickerView DataContext="{Binding ModlistPicker}" />
+            <controls:FilePickerView DataContext="{Binding TargetPicker}" />
+
+            <TextBlock Text="{Binding ErrorMessage}"
+                       Foreground="#FBBF24"
+                       FontSize="12"
+                       IsVisible="{Binding ErrorMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+            <Button Content="Install"
+                    Command="{Binding InstallCommand}"
+                    HorizontalAlignment="Left"
+                    Padding="20,8"
+                    FontWeight="SemiBold" />
+        </StackPanel>
+
+        <!-- Installing -->
+        <StackPanel Grid.Row="1"
+                    Spacing="20"
+                    IsVisible="{Binding IsInstalling}"
+                    VerticalAlignment="Center"
+                    HorizontalAlignment="Stretch">
+            <TextBlock Text="{Binding StepName}"
+                       FontSize="16"
+                       HorizontalAlignment="Center" />
+            <TextBlock HorizontalAlignment="Center"
+                       Opacity="0.7"
+                       FontSize="12">
+                <Run Text="Step " />
+                <Run Text="{Binding CurrentStep}" />
+                <Run Text=" of " />
+                <Run Text="{Binding TotalSteps}" />
+            </TextBlock>
+            <ProgressBar Value="{Binding Percent}"
+                         Minimum="0"
+                         Maximum="100"
+                         Height="6" />
+            <Button Content="Cancel"
+                    Command="{Binding CancelCommand}"
+                    HorizontalAlignment="Center"
+                    Padding="20,8" />
+        </StackPanel>
+
+        <!-- Success -->
+        <StackPanel Grid.Row="1"
+                    Spacing="12"
+                    IsVisible="{Binding IsSuccess}"
+                    VerticalAlignment="Top">
+            <TextBlock Text="Installation complete"
+                       FontSize="18"
+                       FontWeight="SemiBold"
+                       Foreground="#4ADE80" />
+
+            <Border Background="#0B1116"
+                    BorderBrush="#2A3742"
+                    BorderThickness="1"
+                    CornerRadius="4"
+                    Padding="16">
+                <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Name"
+                               Opacity="0.6" Margin="0,0,16,4" />
+                    <TextBlock Grid.Row="0" Grid.Column="1"
+                               Text="{Binding Summary.Name}" Margin="0,0,0,4" />
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Version"
+                               Opacity="0.6" Margin="0,0,16,4" />
+                    <TextBlock Grid.Row="1" Grid.Column="1"
+                               Text="{Binding Summary.Version}" Margin="0,0,0,4" />
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Instance"
+                               Opacity="0.6" Margin="0,0,16,4" />
+                    <TextBlock Grid.Row="2" Grid.Column="1"
+                               Text="{Binding Summary.InstancePath}"
+                               FontFamily="Consolas,Menlo,monospace"
+                               FontSize="12"
+                               TextTrimming="CharacterEllipsis"
+                               Margin="0,0,0,4" />
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Mods"
+                               Opacity="0.6" Margin="0,0,16,4" />
+                    <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,0,0,4">
+                        <Run Text="{Binding Summary.ModsCreated}" />
+                        <Run Text=" created, " />
+                        <Run Text="{Binding Summary.ModsSkipped}" />
+                        <Run Text=" skipped" />
+                    </TextBlock>
+
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Archives"
+                               Opacity="0.6" Margin="0,0,16,4" />
+                    <TextBlock Grid.Row="4" Grid.Column="1" Margin="0,0,0,4">
+                        <Run Text="{Binding Summary.ArchivesDownloaded}" />
+                        <Run Text=" downloaded, " />
+                        <Run Text="{Binding Summary.ArchivesAlreadyPresent}" />
+                        <Run Text=" present" />
+                    </TextBlock>
+
+                    <TextBlock Grid.Row="5" Grid.Column="0" Text="meta.ini"
+                               Opacity="0.6" Margin="0,0,16,0" />
+                    <TextBlock Grid.Row="5" Grid.Column="1"
+                               Text="{Binding Summary.MetaIniWritten}" />
+                </Grid>
+            </Border>
+
+            <Button Content="Home"
+                    Command="{Binding HomeCommand}"
+                    HorizontalAlignment="Left"
+                    Padding="20,8" />
+        </StackPanel>
+
+        <!-- Failure -->
+        <StackPanel Grid.Row="1"
+                    Spacing="12"
+                    IsVisible="{Binding IsFailure}"
+                    VerticalAlignment="Top">
+            <TextBlock Text="Installation failed"
+                       FontSize="18"
+                       FontWeight="SemiBold"
+                       Foreground="#F87171" />
+
+            <Border Background="#1F1414"
+                    BorderBrush="#7F1D1D"
+                    BorderThickness="1"
+                    CornerRadius="4"
+                    Padding="16">
+                <TextBlock Text="{Binding ErrorMessage}"
+                           TextWrapping="Wrap"
+                           FontFamily="Consolas,Menlo,monospace"
+                           FontSize="12" />
+            </Border>
+
+            <Button Content="Home"
+                    Command="{Binding HomeCommand}"
+                    HorizontalAlignment="Left"
+                    Padding="20,8" />
+        </StackPanel>
+
+        <!-- Log panel -->
+        <Border Grid.Row="2"
+                Height="200"
+                Margin="0,16,0,0"
+                IsVisible="{Binding !IsConfiguring}">
+            <controls:LogView DataContext="{Binding Log}" />
+        </Border>
+
+    </Grid>
+</UserControl>

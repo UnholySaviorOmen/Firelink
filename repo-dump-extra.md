@@ -1,6 +1,6 @@
 # Firelink -- repo dump
 
-**Generated:** 22.09.2026  0:47:55,61
+**Generated:** 24.09.2026  0:31:16,38
 **Root:** C:\Code\Firelink
 
 ---
@@ -292,6 +292,54 @@ firelink-*.log
 }
 ````
 
+## src/Firelink.Cli/Firelink.Cli.csproj
+
+````xml
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Firelink.Cli</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Firelink.Core\Firelink.Core.csproj" />
+    <ProjectReference Include="..\Firelink.Platform.MO2\Firelink.Platform.MO2.csproj" />
+    <ProjectReference Include="..\Firelink.Platform.Nexus\Firelink.Platform.Nexus.csproj" />
+    <ProjectReference Include="..\Firelink.Pack\Firelink.Pack.csproj" />
+    <ProjectReference Include="..\Firelink.Install\Firelink.Install.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Spectre.Console.Cli" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+  </ItemGroup>
+</Project>
+````
+
+## src/Firelink.Core/Firelink.Core.csproj
+
+````xml
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="System.Text.Json" />
+    <PackageReference Include="System.IO.Hashing" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+    <PackageReference Include="Polly" />
+  </ItemGroup>
+</Project>
+````
+
 ## src/Firelink.Core/Assets/7z/License.txt
 
 ````text
@@ -442,5 +490,538 @@ The license for original unRAR code has the following restriction:
 
 --
 
+````
+
+## src/Firelink.Gui/Firelink.Gui.csproj
+
+````xml
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Firelink</AssemblyName>
+    <RootNamespace>Firelink.Gui</RootNamespace>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+    <PackageReference Include="Avalonia.Fonts.Inter" />
+    <PackageReference Include="Avalonia.Diagnostics" Condition="'$(Configuration)' == 'Debug'" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Firelink.Gui.Install\Firelink.Gui.Install.csproj" />
+    <ProjectReference Include="..\Firelink.Gui.Pack\Firelink.Gui.Pack.csproj" />
+    <ProjectReference Include="..\Firelink.Gui.Verify\Firelink.Gui.Verify.csproj" />
+    <ProjectReference Include="..\Firelink.Gui.Controls\Firelink.Gui.Controls.csproj" />
+    <ProjectReference Include="..\Firelink.Gui.Shared\Firelink.Gui.Shared.csproj" />
+    <ProjectReference Include="..\Firelink.Install\Firelink.Install.csproj" />
+    <ProjectReference Include="..\Firelink.Pack\Firelink.Pack.csproj" />
+  </ItemGroup>
+</Project>
+````
+
+## src/Firelink.Gui.Controls/Firelink.Gui.Controls.csproj
+
+````xml
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>  <ItemGroup>
+    <ProjectReference Include="..\Firelink.Gui.Shared\Firelink.Gui.Shared.csproj" />
+  </ItemGroup>
+</Project>
+
+````
+
+## src/Firelink.Gui.Install/Firelink.Gui.Install.csproj
+
+````xml
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Firelink.Gui.Controls\Firelink.Gui.Controls.csproj" />
+    <ProjectReference Include="..\Firelink.Gui.Shared\Firelink.Gui.Shared.csproj" />
+    <ProjectReference Include="..\Firelink.Install\Firelink.Install.csproj" />
+  </ItemGroup>
+</Project>
+````
+
+## src/Firelink.Gui.Pack/Firelink.Gui.Pack.csproj
+
+````xml
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Firelink.Gui.Controls\Firelink.Gui.Controls.csproj" />
+    <ProjectReference Include="..\Firelink.Gui.Shared\Firelink.Gui.Shared.csproj" />
+    <ProjectReference Include="..\Firelink.Pack\Firelink.Pack.csproj" />
+  </ItemGroup>
+</Project>
+````
+
+## src/Firelink.Gui.Shared/Firelink.Gui.Shared.csproj
+
+````xml
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Firelink.Gui.Shared.Tests" />
+  </ItemGroup>
+</Project>
+````
+
+## src/Firelink.Gui.Verify/Firelink.Gui.Verify.csproj
+
+````xml
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Firelink.Gui.Shared\Firelink.Gui.Shared.csproj" />
+    <ProjectReference Include="..\Firelink.Gui.Controls\Firelink.Gui.Controls.csproj" />
+    <ProjectReference Include="..\Firelink.Install\Firelink.Install.csproj" />
+  </ItemGroup>
+</Project>
+
+````
+
+## src/Firelink.Install/Firelink.Install.csproj
+
+````xml
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Firelink.Core\Firelink.Core.csproj" />
+    <ProjectReference Include="..\Firelink.Platform.MO2\Firelink.Platform.MO2.csproj" />
+    <ProjectReference Include="..\Firelink.Platform.Nexus\Firelink.Platform.Nexus.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Http" />
+  </ItemGroup>
+</Project>
+````
+
+## src/Firelink.Pack/Firelink.Pack.csproj
+
+````xml
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Firelink.Core\Firelink.Core.csproj" />
+    <ProjectReference Include="..\Firelink.Platform.MO2\Firelink.Platform.MO2.csproj" />
+    <ProjectReference Include="..\Firelink.Platform.Nexus\Firelink.Platform.Nexus.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Firelink.Pack.Tests" />
+  </ItemGroup>
+</Project>
+````
+
+## src/Firelink.Platform.GitHub/Firelink.Platform.GitHub.csproj
+
+````xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Firelink.Core\Firelink.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Octokit" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+  </ItemGroup>
+</Project>
+````
+
+## src/Firelink.Platform.MO2/Firelink.Platform.MO2.csproj
+
+````xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Firelink.Core\Firelink.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+</Project>
+````
+
+## src/Firelink.Platform.Nexus/Firelink.Platform.Nexus.csproj
+
+````xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Firelink.Core\Firelink.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Polly" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Firelink.Platform.Nexus.Tests" />
+  </ItemGroup>
+</Project>
+````
+
+## tests/Firelink.Core.Tests/Firelink.Core.Tests.csproj
+
+````xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FluentAssertions" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Firelink.Core\Firelink.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\samples\**\*.json"
+          Link="samples\%(RecursiveDir)%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
+````
+
+## tests/Firelink.Gui.Install.Tests/Firelink.Gui.Install.Tests.csproj
+
+````xml
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Firelink.Gui.Install\Firelink.Gui.Install.csproj" />
+  </ItemGroup>
+</Project>
+````
+
+## tests/Firelink.Gui.Pack.Tests/Firelink.Gui.Pack.Tests.csproj
+
+````xml
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="FluentAssertions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Firelink.Gui.Pack\Firelink.Gui.Pack.csproj" />
+    <ProjectReference Include="..\..\src\Firelink.Gui.Shared\Firelink.Gui.Shared.csproj" />
+    <ProjectReference Include="..\..\src\Firelink.Pack\Firelink.Pack.csproj" />
+  </ItemGroup>
+
+</Project>
+````
+
+## tests/Firelink.Gui.Shared.Tests/Firelink.Gui.Shared.Tests.csproj
+
+````xml
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Firelink.Gui.Shared\Firelink.Gui.Shared.csproj" />
+  </ItemGroup>
+</Project>
+````
+
+## tests/Firelink.Gui.Verify.Tests/Firelink.Gui.Verify.Tests.csproj
+
+````xml
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="FluentAssertions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Firelink.Gui.Verify\Firelink.Gui.Verify.csproj" />
+    <ProjectReference Include="..\..\src\Firelink.Gui.Shared\Firelink.Gui.Shared.csproj" />
+    <ProjectReference Include="..\..\src\Firelink.Install\Firelink.Install.csproj" />
+  </ItemGroup>
+
+</Project>
+````
+
+## tests/Firelink.Install.Tests/Firelink.Install.Tests.csproj
+
+````xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FluentAssertions" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Firelink.Install\Firelink.Install.csproj" />
+  </ItemGroup>
+</Project>
+````
+
+## tests/Firelink.Integration.Tests/Firelink.Integration.Tests.csproj
+
+````xml
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FluentAssertions" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Firelink.Core\Firelink.Core.csproj" />
+    <ProjectReference Include="..\..\src\Firelink.Platform.MO2\Firelink.Platform.MO2.csproj" />
+    <ProjectReference Include="..\..\src\Firelink.Pack\Firelink.Pack.csproj" />
+    <ProjectReference Include="..\..\src\Firelink.Install\Firelink.Install.csproj" />
+  </ItemGroup>
+</Project>
+````
+
+## tests/Firelink.Pack.Tests/Firelink.Pack.Tests.csproj
+
+````xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FluentAssertions" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Firelink.Pack\Firelink.Pack.csproj" />
+  </ItemGroup>
+</Project>
+````
+
+## tests/Firelink.Platform.MO2.Tests/Firelink.Platform.MO2.Tests.csproj
+
+````xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FluentAssertions" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Firelink.Platform.MO2\Firelink.Platform.MO2.csproj" />
+  </ItemGroup>
+</Project>
+````
+
+## tests/Firelink.Platform.Nexus.Tests/Firelink.Platform.Nexus.Tests.csproj
+
+````xml
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="FluentAssertions" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Firelink.Platform.Nexus\Firelink.Platform.Nexus.csproj" />
+  </ItemGroup>
+</Project>
 ````
 

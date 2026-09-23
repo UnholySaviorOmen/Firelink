@@ -1,12 +1,12 @@
 # Firelink — состояние проекта и план работ
 
-**Обновлено:** 2026-09-22
-**Всего тестов:** 621, 0 failed
-**Текущий блок:** Legacy cleanup (HANDOFF/PROJECT-STATE удалены)
-**Следующий блок:** Фаза 6 — Nexus Premium (12.8)
+**Обновлено:** 2026-09-24
+**Всего тестов:** 759, 0 failed
+**Текущий блок:** — (Фаза 3, шаги 3.1–3.6 закрыты)
+**Следующий блок:** Фаза 3 — шаг 3.7 (дистрибутив)
 
 **Спутние документы:**
-- `DOC.md` (v4.2) — формальная документация: форматы, pipeline, CLI, обработка ошибок.
+- `DOC.md` (v4.4) — формальная документация: форматы, pipeline, CLI, обработка ошибок.
 - `repo-dump.md` — свежий дамп репозитория.
 
 ---
@@ -36,24 +36,60 @@ Firelink — инструмент для создания и установки 
 
 **Первое сообщение — шаблон:**
 
-> Продолжаем проект Firelink. Стиль — пошаговые блоки кода с тестами.
->
-> Прикладываю: FIRELINK.md, DOC.md (v4.2), repo-dump.md (свежий).
->
-> Текущее состояние: 621 тест, 0 failed. Закрыты: MVP (packer,
-> installer, verify), Фаза 1 (единый CLI `Firelink.Cli`),
-> Фаза 2 (общие API для GUI).
->
-> Следующая задача: [из раздела «План работ», актуальный блок].
->
-> Стиль ответов:
-> - Разбор задачи.
-> - Полный код файлов с путями.
-> - Инструкция по сборке/тестам.
-> - Ожидаемый вывод dotnet test.
-> - FIRELINK.md — только по запросу.
->
-> Не пиши код, пока я не подтвержу готовность.
+Продолжаем проект Firelink. Стиль — пошаговые блоки кода с тестами.
+
+Прикладываю: FIRELINK.md, DOC.md (v4.5), repo-dump.md (свежий).
+
+Текущее состояние: 759 тестов, 0 failed. Закрыты: MVP (packer,
+installer, verify), Фаза 1 (единый CLI Firelink.Cli),
+Фаза 2 (общие API для GUI), Фаза 6 (Nexus Premium), а также
+Фаза 3 — шаги 3.1–3.6:
+
+3.1 — проекты GUI + DI + базовые VM (LoadingLock,
+FilePickerVM, ProgressViewModel, ObservableLoggerProvider).
+
+3.2 — главное окно с навигацией (MainWindowVM, NavigationVM,
+ScreenType, ViewLocator, плейсхолдеры).
+
+3.3 — живые логи в UI (LogVM, LogView, автоскролл).
+
+3.4.1 — инфраструктура: IScreenFactory, INavigationAware,
+IFilePickerService, AvaloniaFilePickerService, ScreenFactory.
+
+3.4.2 — экран Install: InstallVM, InstallView, IInstallRunner,
+проект Firelink.Gui.Controls (общие контролы LogView,
+FilePickerView).
+
+3.5 — экран Pack: PackVM, PackView, IPackRunner/PackRunner,
+проект Firelink.Gui.Pack, AddGuiPack(), удаление
+PackPlaceholderVM/PackPlaceholderView.
+
+3.5.1 — потокобезопасный лог-канал: IUiDispatcher +
+ObservableLogSink с маршалингом мутаций на UI-поток,
+AvaloniaUiDispatcher в Firelink.Gui. Устранена гонка
+ObservableCollection vs worker-потоки pipeline.
+
+3.6 — экран Verify: VerifyVM, VerifyView, IVerifyRunner/VerifyRunner,
+проект Firelink.Gui.Verify, AddGuiVerify(),
+VerifyRowVM (строка таблицы проверок), удаление
+VerifyPlaceholderVM/VerifyPlaceholderView.
+
+Следующая задача: Фаза 3 — шаг 3.7 (дистрибутив).
+Затем: 3.8 (ручной прогон GUI на TestInstance5).
+
+Стиль ответов:
+
+Разбор задачи.
+
+Полный код файлов с путями.
+
+Инструкция по сборке/тестам.
+
+Ожидаемый вывод dotnet test.
+
+FIRELINK.md — только по запросу.
+
+Не пиши код, пока я не подтвержу готовность.
 
 ---
 
@@ -83,6 +119,15 @@ Firelink — инструмент для создания и установки 
 - **7z.exe + 7z.dll**.
 - **SharpCompress удалён.**
 - **Octokit удалён.**
+
+### GUI (Фаза 3)
+- **Avalonia** 11.2.1 (`Avalonia`, `Avalonia.Desktop`,
+  `Avalonia.Themes.Fluent`, `Avalonia.Fonts.Inter`,
+  `Avalonia.Diagnostics` Debug-only).
+- **CommunityToolkit.Mvvm** 8.4.0 (source generators входят в основной пакет).
+- **Microsoft.Extensions.DependencyInjection**.
+- **Microsoft.Extensions.Logging**.
+- **AvaloniaUseCompiledBindingsByDefault=true** во всех GUI-проектах.
 
 ---
 
@@ -115,14 +160,49 @@ Firelink — инструмент для создания и установки 
     `PackPipeline.Input` введён (симметрично `InstallPipeline.Input`).
   - 2.3 — `PackSummary` / `InstallSummary` + Builder-ы.
   - 2.4 — реальный прогон на OmenRim 7 (TestInstance4) + verify.
+  - **Фаза 6 — Nexus Premium (12.8):**
+  - 12.8.1 — `NexusApiKeyProvider` (`INexusApiKeyProvider`,
+    `NullNexusApiKeyProvider`, чтение `%USERPROFILE%\.firelink\nexus.key`).
+  - 12.8.2 — `NexusClient` (`IsPremiumAsync` с кешем,
+    `GetDownloadLinksAsync`, модели ответов).
+  - 12.8.3 — `NexusDownloader : IArchiveDownloader` (`SourceType =>
+    "nexus"`, перебор CDN-нод).
+  - 12.8.4 — DI в `AddFirelinkInstall` (`TryAddEnumerable` для
+    `IArchiveDownloader`, именованные `HttpClient`-ы).
+  - 12.8.4a — рефакторинг:
+    - downloader-ы принимают `IHttpClientFactory` (не `HttpClient`);
+    - `TempFileStream` вместо `MemoryStream` (архивы > 2 ГБ);
+    - кеш `IsPremiumAsync` в `NexusClient`.
+  - 12.8.5 — `DOC.md` v4.3, обновление `FIRELINK.md`.
+  - Ручной прогон на `TestInstance5` — 4 nexus-архива скачаны, USSEP
+    (~250 МБ) без таймаутов.
+  - **Фаза 3 — GUI (Avalonia), частично закрыта:**
+  - 3.1 — проекты GUI + DI + базовые VM.
+    Итог: 688 passed.
+  - 3.2 — главное окно с навигацией.
+    Итог: 700 passed.
+  - 3.3 — живые логи в UI.
+    Итог: 710 passed.
+  - 3.4.1 — инфраструктура навигации и file picker.
+    Итог: 716 passed.
+  - 3.4.2 — экран Install (полный: диалоги, прогресс, сводка, лог).
+    Итог: 731 passed.
+  - 3.5 — экран Pack (симметрично Install) + удаление
+    Pack-плейсхолдеров.
+    Итог: 739 passed (после удаления тестов на плейсхолдеры).
+  - 3.5.1 — потокобезопасный лог-канал (IUiDispatcher).
+    Итог: 744 passed.
+  - 3.6 — экран Verify (таблица проверок + Show all checks) +
+    удаление Verify-плейсхолдеров.
+    Итог: 759 passed.
 
 ### В работе
 
-- Ничего. Фаза 2 закрыта.
+- Фаза 3 — GUI. Шаги 3.7 (дистрибутив), 3.8 (ручной прогон GUI) —
+  впереди.
 
 ### Не начато
 
-- Фаза 6 — Nexus Premium (12.8).
 - Фаза 3 — GUI (Avalonia).
 - Фаза 5 — Nexus Free (WebView2).
 
@@ -137,48 +217,30 @@ Firelink — инструмент для создания и установки 
 ## Структура репозитория (после шагов 1.1–1.4)
 
 ```
-C:\Code\Firelink
-  Firelink.slnx
-  Directory.Build.props
-  Directory.Build.targets
-  Directory.Packages.props
-  DOC.md                       ← v4.2
-  FIRELINK.md                  ← этот файл
-  repo-dump.md
-  samples/
-    firelink-pack.minimal.json
-    firelink-pack.full.json
-    firelink-pack.invalid-name.json
-    firelink-pack.invalid-path.json
-    firelink-pack.invalid-version.json
-  src/
-    Firelink.Core/             ← ядро: модели, JSON, хеширование,
-                                  валидаторы, абстракции,
-                                  SevenZipExtractor, TempWorkspace,
-                                  FileHashCache, ArchiveDownloadHelper,
-                                  CancellationHelper,
-                                  StepProgress
-    Firelink.Platform.MO2/     ← чтение/запись MO2-файлов
-    Firelink.Platform.Nexus/   ← пусто (Фаза 6)
-    Firelink.Pack/             ← class library: PackPipeline + Steps + Matching
-                                  + PackInputFactory + PackSummary
-                                  + PackSummaryBuilder
-    Firelink.Install/          ← class library: InstallPipeline + Steps +
-                                  Downloaders + Verify
-                                  + InstallInputFactory + InstallSummary
-                                  + InstallSummaryBuilder
-    Firelink.Cli/              ← exe (→ Firelink.Cli.exe):
-                                  Program.cs, Commands/, Settings/,
-                                  Infrastructure/TypeRegistrar.cs
-                                  Зависимости: Firelink.Pack,
-                                  Firelink.Install, Firelink.Core,
-                                  Firelink.Platform.*
-  tests/
-    Firelink.Core.Tests/
-    Firelink.Platform.MO2.Tests/
-    Firelink.Pack.Tests/
-    Firelink.Install.Tests/
-    Firelink.Integration.Tests/
+    src/
+      Firelink.Core/
+      Firelink.Platform.MO2/
+      Firelink.Platform.Nexus/
+      Firelink.Pack/
+      Firelink.Install/
+      Firelink.Cli/              ← exe → Firelink.Cli.exe
+      Firelink.Gui.Shared/       ← MVVM-инфра, БЕЗ Avalonia
+      Firelink.Gui.Controls/     ← общие Avalonia-контролы
+      Firelink.Gui.Install/      ← модуль installer
+      Firelink.Gui.Pack/         ← модуль packer
+      Firelink.Gui.Verify/       ← модуль verify
+      Firelink.Gui/              ← exe → Firelink.exe
+    tests/
+      Firelink.Core.Tests/
+      Firelink.Platform.MO2.Tests/
+      Firelink.Platform.Nexus.Tests/
+      Firelink.Pack.Tests/
+      Firelink.Install.Tests/
+      Firelink.Integration.Tests/
+      Firelink.Gui.Shared.Tests/
+      Firelink.Gui.Install.Tests/
+      Firelink.Gui.Pack.Tests/
+      Firelink.Gui.Verify.Tests/
 ```
 
 После шага 1.4 — **только один exe** в solution: `Firelink.Cli.exe`.
@@ -210,6 +272,34 @@ GenerateMetaIniStep → RegenerateProfileStep
 
 **CLI:** `firelink install <manifest> [--target <dir>]`.
 **CLI:** `firelink verify <target> [--verbose]`.
+
+## GUI-навигация (Фаза 3)
+
+MainWindow (Grid: sidebar + content)
+  ├── NavigationView (DataContext = NavigationVM)
+  │     └── ListBox с NavigationItem[Home|Install|Pack|Verify]
+  └── ContentControl (Content = MainWindowVM.ActivePane)
+        └── ViewLocator → View
+
+MainWindowVM:
+  IScreenFactory.Create(ScreenType) → object (VM)
+  NavigateTo(screen):
+    pane = screens.Create(screen)
+    if (pane is INavigationAware) pane.SetNavigateHome(...)
+    ActivePane = pane
+    Navigation.SelectScreen(screen)
+
+ScreenFactory (в Firelink.Gui):
+  Home    → HomeVM
+  Install → InstallVM          (Firelink.Gui.Install)
+  Pack    → PackVM             (Firelink.Gui.Pack)
+  Verify  → VerifyVM           (Firelink.Gui.Verify)
+
+ViewLocator:
+  param.ViewModels.XxxVM → ищет Control с FullName *".Views.XxxView"
+  через перебор всех загруженных сборок.
+
+Плейсхолдеров больше нет — все 4 экрана реальные.
 
 ---
 
@@ -548,6 +638,121 @@ GenerateMetaIniStep → RegenerateProfileStep
 160. **`ParallelOptions` остаётся в DI.** Фабрики принимают его
      параметром. CLI передаёт `_parallelOptions` из DI. GUI
      сможет передавать свой.
+
+### Фаза 6 — Nexus Premium (161–167)
+
+Решения, принятые при реализации 12.8 (2026-09-22).
+
+161. **`NexusDownloader` перебирает CDN-ноды внутри `DownloadAsync`.**
+     Не расширяем `IArchiveDownloader` до перебора источников.
+     Nexus API отдаёт массив `URI`; логика «попробовать следующую» —
+     деталь реализации источника nexus, а не общая механика
+     pipeline-а. `ArchiveDownloadHelper` по-прежнему делает retry
+     на уровне «попытка скачать весь архив».
+
+162. **`NexusClient` и `NexusDownloader` используют разные именованные
+     `HttpClient`-ы.** Через `IHttpClientFactory`:
+     `"nexus-api"` — 2 минуты, `"nexus"` — 10 минут, `"mirror"` —
+     10 минут.
+
+163. **`IArchiveDownloader` регистрируется через `TryAddEnumerable`
+     с явным `ImplementationType`.**
+     `TryAddSingleton<IArchiveDownloader>` регистрирует только одну
+     реализацию — вторая молча теряется. `TryAddEnumerable` с фабрикой
+     падает: у descriptor-а `ImplementationType == null`, и вторая
+     регистрация считается дубликатом. Правильно:
+     `ServiceDescriptor.Singleton<IArchiveDownloader, TConcrete>()`.
+
+164. **Nexus API-ключ — plaintext-файл
+     `%USERPROFILE%\.firelink\nexus.key`.** Одна строка, trim,
+     BOM-agnostic. `INexusApiKeyProvider` — абстракция для тестов.
+     DPAPI и SQLite — v0.2.0 (в техдолге).
+
+165. **Downloader-ы принимают `IHttpClientFactory`, а не `HttpClient`.**
+     `TryAddEnumerable(ServiceDescriptor.Singleton<IArchiveDownloader,
+     TConcrete>())` создаёт downloader через активацию конструктора.
+     Если конструктор принимает `HttpClient`, DI подставит
+     **безымянный** `HttpClient.Default` (таймаут 100 секунд) — этого
+     мало для гигабайтных архивов. `IHttpClientFactory.CreateClient(
+     "nexus")` даёт клиент с 10-минутным таймаутом.
+
+166. **Скачивание идёт в `TempFileStream`, а не в `MemoryStream`.**
+     `MemoryStream` не держит файлы > ~2 ГБ (`int.MaxValue`). У Nexus
+     есть моды на 3+ ГБ. `TempFileStream` создаёт файл в системном
+     temp с `FileOptions.DeleteOnClose` — O(1) памяти, любые размеры.
+     Цена — двойная запись: downloader → temp → `.part`.
+
+167. **`NexusClient.IsPremiumAsync` кешируется на время жизни клиента.**
+     Первый успешный запрос к `/users/validate.json` запоминается как
+     `Task<bool>`; параллельные вызовы ждут ту же Task — один
+     HTTP-запрос на весь pipeline. Faulted/canceled результат
+     **не** кешируется: retry не должен получить «отравленный» результат.
+
+### Фаза 3 — GUI (168–181)
+
+168. Стек GUI: Avalonia 11.2.1 + CommunityToolkit.Mvvm 8.4.0,
+     никаких ReactiveUI/DynamicData/MessageBus.
+169. `<AssemblyName>Firelink</AssemblyName>` у `Firelink.Gui.csproj`.
+     Имя exe — `Firelink.exe`, root namespace — `Firelink.Gui`.
+     Сознательное расхождение.
+170. Отказ от `IGuiModule` в пользу плоского `MainWindowVM.ActivePane`
+     + `ScreenType` enum.
+171. Навигация — прямой `MainWindowVM.NavigateTo(ScreenType)`,
+     без MessageBus. `NavigationVM` принимает `Action<ScreenType>`.
+172. Lazy-резолв панелей через `IScreenFactory`. VM — singleton
+     в DI, состояние сохраняется между переходами.
+173. `INavigationAware` вместо `event HomeRequested`.
+174. `IFilePickerService` в Shared, `AvaloniaFilePickerService`
+     в Gui.
+175. `Firelink.Gui.Shared` — без Avalonia.
+176. `Firelink.Gui.Controls` — отдельный проект для общих контролов.
+177. `IInstallRunner` в `Firelink.Gui.Install.Services` — обёртка
+     над `InstallPipeline`. Тестируемость через fake runner.
+178. `LogVM.Clear()` — публичный метод (`[RelayCommand] public void Clear()`).
+179. `ViewLocator` — перебор по всем загруженным сборкам,
+     поиск по суффиксу `.Views.<ShortName>`. Обрабатывает
+     `ReflectionTypeLoadException`.
+180. `ObservableLoggerProvider` регистрируется как `ILoggerProvider`
+     в `AddGuiShared` через `AddSingleton<ILoggerProvider>(sp => ...)`.
+181. `MainWindowVM` регистрируется в `Firelink.Gui`, не в `AddGuiShared`.
+182. **`IUiDispatcher` — абстракция UI-диспетчера в
+     `Firelink.Gui.Shared.Logging`.** Один метод `Post(Action)`.
+     Реализация — `AvaloniaUiDispatcher` в `Firelink.Gui`
+     (`Dispatcher.UIThread.Post`). `Firelink.Gui.Shared` остаётся
+     без Avalonia (решение №175).
+
+183. **`ObservableLogSink` маршалит мутации `Entries` через
+     `IUiDispatcher`.** Конструктор принимает `IUiDispatcher?`.
+     Если `null` (тесты, не-GUI) — синхронный путь. Если задан —
+     `Add`/`Clear` идут через `Post`. Устраняет гонку
+     `ObservableCollection<T>` (worker-потоки pipeline vs
+     UI-биндинг `ItemsControl`), которая роняла процесс вне
+     `try/catch` VM.
+
+184. **`FakeUiDispatcher` (синхронный) и `DeferredUiDispatcher`
+     (очередь + Flush) — две тестовые реализации `IUiDispatcher`.**
+     Первая нужна там, где `ObservableLogSink` резолвится через DI
+     (MainWindowVMTests). Вторая доказывает, что маршалинг реальный:
+     до `Flush` коллекция не меняется.
+
+185. **`VerifyPipeline.Execute` синхронный, `IVerifyRunner.RunAsync`
+     асинхронный.** `VerifyRunner` оборачивает вызов в `Task.Run`,
+     чтобы не блокировать UI-поток. `CancellationToken`
+     пробрасывается внутрь `Execute`. `IProgress<StepProgress>` у
+     Verify нет — шагов не публикуется.
+
+186. **`VerifyVM` — три состояния в Success-ветке через производные
+     свойства.** `Report.IsOk=true` → «All checks passed», строк нет.
+     `Report.IsOk=false` → «N check(s) failed» + таблица `Failures`.
+     `VerifyState` (Configuration/Verifying/Success/Failure) остаётся
+     как в `Firelink.Gui.Shared.State`.
+
+187. **`VerifyVM.Rows` + чекбокс `ShowAllChecks` заменяют CLI-флаг
+     `--verbose`.** По умолчанию показываются только `Failures`;
+     при включении — все `Checks`. `Rows` перестраивается после
+     каждого прогона и при переключении чекбокса. `VerifyRowVM` —
+     плоская обёртка над `VerifyCheckResult` с `StatusGlyph`
+     («✓»/«×») и `StatusColor` (hex).
 ---
 
 ## План работ
@@ -610,107 +815,106 @@ pipeline без дублирования логики.
 
 ---
 
-### Фаза 6 — Nexus Premium (12.8)
+### Фаза 6 — Nexus Premium (12.8) ✅ ЗАКРЫТА
 
 **Цель:** убрать warning `No downloader for source type 'nexus'` и
 дать возможность скачивать архивы с Nexus через Premium-API.
 
-**Статус:** не начата. Идёт **после Фазы 2** и **до Фазы 3** (GUI).
+**Статус:** закрыта 2026-09-22.
 
-**Разбиение:**
+**Все шаги:**
 
-- **12.8.1** — `NexusClient` + `NexusApiKeyProvider` + модели
-  ответов.
-  - HTTP к `https://api.nexusmods.com/v1/`.
-  - API-ключ из `%USERPROFILE%\.firelink\nexus.key`.
-- **12.8.2** — `NexusDownloader : IArchiveDownloader`
-  (`SourceType => "nexus"`).
-  - `DownloadAsync`: получить ссылку через `NexusClient`, скачать
-    `HttpClient`-ом.
-  - Hash — на стороне `SyncArchivesStep` (через
-    `ArchiveDownloadHelper`).
-- **12.8.3** — DI в `Firelink.Cli/Program.cs` (через
-  `AddFirelinkInstall`) + тесты с fake-`HttpMessageHandler`.
-- **12.8.4** — обновить `DOC.md` и `FIRELINK.md`.
+- ✅ 12.8.1 — `NexusApiKeyProvider`.
+- ✅ 12.8.2 — `NexusClient`.
+- ✅ 12.8.3 — `NexusDownloader : IArchiveDownloader`.
+- ✅ 12.8.4 — DI в `AddFirelinkInstall`.
+- ✅ 12.8.4a — рефакторинг (`IHttpClientFactory`, `TempFileStream`,
+  кеш `IsPremiumAsync`).
+- ✅ 12.8.5 — обновление `DOC.md` (v4.3) и `FIRELINK.md`.
 
-**Что НЕ делаем:**
+**Итог Фазы 6:**
 
-- Nexus Premium API (отдельная подписка) — это отдельная задача.
-- Кеширование ссылок.
-- `nxm://`, WebView2.
-
-**Проверка:**
-
-- Тесты: ~610 passed.
-- Ручной: скачать архив с Nexus через Premium-аккаунт.
-
-**Время:** ~1 неделя. **Риск:** низкий.
+- `NexusDownloader` скачивает архивы через Premium-API.
+- Оба `IArchiveDownloader` (`mirror`, `nexus`) в `DownloaderRegistry`.
+- Гигабайтные архивы работают: `TempFileStream` + 10-минутный
+  таймаут на CDN.
+- Ручной прогон на `TestInstance5`: 4 nexus-архива (включая USSEP
+  ~250 МБ) скачаны без ошибок; verify идентичен `TestInstance2`.
+- 674 теста зелёные.
 
 ---
 
-### Фаза 3 — GUI (Avalonia)
+### Фаза 3 — GUI (Avalonia) — ЧАСТИЧНО ЗАКРЫТА
 
 **Цель:** графический интерфейс поверх pipeline.
 
-**Статус:** не начата.
+**Статус:** шаги 3.1–3.4.2 закрыты (731 тест). Следующий — 3.5.
 
-**Архитектура (модульная):**
+**Стек:** Avalonia 11.2.1, CommunityToolkit.Mvvm 8.4.0,
+Microsoft.Extensions.DependencyInjection, Microsoft.Extensions.Logging.
 
-```
+**Структура проектов:**
+
 src/
-  Firelink.Gui.Shared/       ← MVVM-инфра, стили, DI-extension
-  Firelink.Gui.Install/      ← модуль installer (class library, Avalonia)
-  Firelink.Gui.Pack/         ← модуль packer (class library, Avalonia)
-  Firelink.Gui/              ← exe-оркестратор: Install + Pack
-                                 → <AssemblyName>Firelink</AssemblyName>
-                                 → Firelink.exe
-```
+  Firelink.Gui.Shared/       ← MVVM-инфра, без Avalonia
+  Firelink.Gui.Controls/     ← общие Avalonia-контролы
+  Firelink.Gui.Install/      ← модуль installer
+  Firelink.Gui.Pack/         ← модуль packer
+  Firelink.Gui/              ← exe → Firelink.exe
 
-**Контракт модуля:**
+**Все шаги:**
 
-```csharp
-public interface IGuiModule
-{
-    string Title { get; }
-    string Icon { get; }
-    int Order { get; }
-    object CreateViewModel();
-}
-```
+- ✅ **3.1** — проекты GUI + DI + базовые VM.
+  - 14 тестов. Итог: 688 passed.
+- ✅ **3.2** — главное окно с навигацией.
+  - 12 тестов. Итог: 700 passed.
+- ✅ **3.3** — живые логи в UI.
+  - 10 тестов. Итог: 710 passed.
+- ✅ **3.4.1** — инфраструктура навигации и file picker.
+  - `IScreenFactory`, `INavigationAware`, `IFilePickerService`,
+    `ScreenFactory`, `AvaloniaFilePickerService`.
+  - 6 тестов. Итог: 716 passed.
+- ✅ **3.4.2** — экран Install:
+  - Новый проект `Firelink.Gui.Controls`.
+  - `IInstallRunner` + `InstallRunner`.
+  - `InstallVM` (наследует `ProgressViewModel`, реализует
+    `INavigationAware`).
+  - `InstallView.axaml` — четыре состояния.
+  - 13 тестов. Итог: 731 passed.
+- ✅ **3.5** — экран Pack:
+  - `IPackRunner` + `PackRunner` в `Firelink.Gui.Pack.Services`.
+  - `PackVM` в `Firelink.Gui.Pack.ViewModels`.
+  - `PackView.axaml`.
+  - `PackPlaceholderVM`/`PackPlaceholderView` удалены.
+  - 13 тестов. Итог: 739 passed.
+- ✅ **3.5.1** — потокобезопасный лог-канал:
+  - `IUiDispatcher` в `Firelink.Gui.Shared.Logging`.
+  - `AvaloniaUiDispatcher` в `Firelink.Gui.Services`.
+  - `ObservableLogSink` маршалит мутации через `IUiDispatcher`.
+  - `FakeUiDispatcher` (синхронный), `DeferredUiDispatcher`
+    (очередь + Flush).
+  - 5 тестов. Итог: 744 passed.
+- ✅ **3.6** — экран Verify:
+  - Новый проект `Firelink.Gui.Verify`.
+  - `IVerifyRunner` + `VerifyRunner` (обёртка над `VerifyPipeline`
+    через `Task.Run`).
+  - `VerifyVM` в `Firelink.Gui.Verify.ViewModels` — три состояния
+    Success через `IsOk`.
+  - `VerifyRowVM` — строка таблицы.
+  - `VerifyView.axaml` — таблица проверок + чекбокс
+    «Show all checks».
+  - `VerifyPlaceholderVM`/`VerifyPlaceholderView` удалены.
+  - 18 тестов. Итог: 759 passed.
 
-Главное окно — sidebar с модулями, content area.
+- ⬜ **3.7** — дистрибутив:
+  - Иконка.
+  - Упаковка: `Firelink.Cli.exe` + `Firelink.exe` + `Assets/7z/`.
+  - `<AssemblyName>Firelink</AssemblyName>` у `Firelink.Gui.csproj`
+    (решение №169) — проверить, что оно уже задано.
 
-**Что в MVP GUI:**
-
-- Экран Install: выбор `modlist.json`, кнопка «Установить»,
-  прогресс-бар (шаг X из Y), лог-панель (живой), кнопка «Отмена»,
-  экран результата.
-- Экран Pack: выбор `firelink-pack.json`, кнопка «Создать манифест»,
-  тот же прогресс/лог, результат.
-- Экран Verify: выбор инстанса, кнопка «Проверить», результат
-  таблицей.
-- `ObservableLoggerProvider` — логи в `ObservableCollection<LogEntry>`.
-- `CancellationTokenSource` ← кнопка «Отмена».
-
-**Что НЕ в MVP:**
-
-- Настройки.
-- Интерактивные диалоги (конфликты, выбор источника).
-- Темы/иконки.
-- WebView2.
-
-**Проверка:**
-
-- Ручная: запустить GUI, установить сборку на `TestInstance3`, verify.
-- Сравнить с CLI-результатом — идентично.
-
-**Стек:** Avalonia 11.x, CommunityToolkit.Mvvm,
-Microsoft.Extensions.DependencyInjection.
-
-**Время:** ~3 недели. **Риск:** средний.
-
-**Важное:** `Firelink.exe` (GUI) — зарезервированное имя. В
-дистрибутиве оба: `Firelink.Cli.exe` + `Firelink.exe`.
+- ⬜ **3.8** — ручной прогон:
+  - Сравнить GUI-результат с CLI на TestInstance5.
+  - Проверить pack, install, verify через GUI.
 
 ---
 
@@ -750,8 +954,8 @@ WebView2.
 
 1. **Фаза 1** — единый CLI. ✅ закрыта.
 2. **Фаза 2** — общие API. ✅ закрыта.
-3. **Фаза 6** (12.8) — Nexus Premium. **← следующая**.
-4. **Фаза 3** — GUI. Основной UI.
+3. **Фаза 6** (12.8) — Nexus Premium. ✅ закрыта.
+4. **Фаза 3** — GUI. **← следующая**.
 5. **Фаза 5** — Nexus Free. Расширение для Free.
 
 **Почему 12.8 (Фаза 6) перед GUI (Фаза 3):**
@@ -782,6 +986,14 @@ WebView2.
 - GUI — отдельные проекты, ссылаются на pipeline. Обратных ссылок
   нет.
 - CLI — первоклассный клиент. GUI — дополнение, не замена.
+- `Firelink.Gui.Shared` — **без Avalonia**. Всё Avalonia-зависимое —
+  в `Firelink.Gui.Controls`, `Firelink.Gui.Install`,
+  `Firelink.Gui.Pack`, `Firelink.Gui`.
+- `Firelink.Gui.Install`/`Firelink.Gui.Pack` не ссылаются на
+  `Firelink.Gui` (обратной ссылки нет).
+- VM в GUI-модулях не зависят от pipeline напрямую — только через
+  `IRunner` интерфейсы.
+- GUI — отдельные проекты, ссылаются на pipeline. Обратных ссылок нет.
 
 ## Что НЕ делать
 
@@ -791,12 +1003,72 @@ WebView2.
 - Не делать GUI до Фазы 2 (общие API).
 - Не делать Free-стратегию (Фаза 5) до Premium (Фаза 6).
 - Не трогать `Firelink.Core`, `Firelink.Platform.*` — они не меняются.
+- Не использовать ReactiveUI/DynamicData/MessageBus.
+- Не использовать `Avalonia` в `Firelink.Gui.Shared`.
+- Не давать `Firelink.Gui.Install`/`Firelink.Gui.Pack`
+  обратных ссылок на `Firelink.Gui`.
 
 ---
 
 ## Грабли и подводные камни
 
 Накопленные замечания. Актуальны при правках.
+
+### Про GUI
+
+**Про `<AssemblyName>Firelink</AssemblyName>` (решение 169).**
+Имя сборки `Firelink.Gui` — `Firelink`. Root namespace — `Firelink.Gui`.
+Это ломает наивный `asm.GetName().Name + ".Views." + shortName` в
+`ViewLocator`. Правильный алгоритм — перебор `asm.GetTypes()` и
+поиск по суффиксу `.Views.<ShortName>`. Решение 179.
+
+**Про `Grid.ColumnSpacing`/`RowSpacing`.**
+В Avalonia 11.x у `Grid` **нет** этих свойств (WPF-наследие).
+Используем `Margin` на детях или `StackPanel.Spacing`.
+
+**Про `Color` — неоднозначность.**
+`Color` есть и в `System.Drawing`, и в `Avalonia.Media`.
+В файлах с обоими using — CS0104. Решение: alias
+`using AvaloniaColor = Avalonia.Media.Color;`.
+
+**Про `[RelayCommand]` и публичность.**
+`[RelayCommand] private void Clear()` — генерирует `ClearCommand`,
+но не даёт публичного метода `Clear()`. Если нужен программный
+вызов — `[RelayCommand] public void Clear()`. Решение 178.
+
+**Про `ObservableLoggerProvider` и `AddLogging`.**
+`builder.AddProvider(sp => ...)` **не существует**. Провайдер
+регистрируется через `services.AddSingleton<ILoggerProvider>(...)`,
+`AddLogging` сам подтянет. Решение 180.
+
+**Про `ObservableCollection<T>` в VM.** Любая мутация `ObservableCollection`
+из не-UI-потока — потенциальная гонка с UI-биндингом. Если коллекция
+наполняется из worker-потока (как `ObservableLogSink.Entries` от
+`Parallel.ForEach` в pipeline) — нужен маршалинг через `IUiDispatcher`.
+Решение №183. `VerifyVM.Rows` наполняется на UI-потоке — гонки нет.
+
+**Про `Task.Run` в `VerifyRunner`.** `VerifyPipeline.Execute` —
+синхронный (решение №116). Без `Task.Run` UI-поток блокируется на
+время верификации инстанса (десятки секунд на OmenRim 7). Решение №185.
+
+**Про производные свойства в CommunityToolkit.** `[ObservableProperty]
+private VerifyReport? _report;` **не** уведомляет об изменениях
+`IsOk`, `HasFailures`, `PassedCount`, `FailedCount`, `ResultTitle`,
+`ResultColor`, `TargetPath`, если они объявлены как `=> Report?.X`.
+Стандартное решение — ручной `OnPropertyChanged(nameof(X))` после
+присвоения `Report`. В `VerifyVM` это делает `NotifyResultChanged()`.
+
+**Про `Placeholders`-папку.** После 3.6 удалены все плейсхолдеры
+(`PackPlaceholderVM`, `VerifyPlaceholderVM`). Папка
+`Firelink.Gui.Shared/ViewModels/Placeholders/` и одноимённые View в
+`Firelink.Gui/Views/` больше не существуют. Если добавляешь новый
+экран — делай сразу настоящий VM, не плейсхолдер.
+
+**Про `FakeScreenFactory` в `Firelink.Gui.Shared.Tests`.** Этот
+проект **не** ссылается на `Firelink.Gui.Pack`/`Firelink.Gui.Verify`
+(они Avalonia-зависимые). Фабрика умеет только Home; для
+Pack/Install/Verify возвращает Home. Реальная маршрутизация
+тестируется в `Firelink.Gui.Install.Tests`/`Pack.Tests`/`Verify.Tests`.
 
 ### Про копипаст
 
@@ -922,7 +1194,6 @@ Async, отмена пробрасывается как есть
 
 - Persist кеша хешей в SQLite (v0.2.0).
 - Глобальный реестр `archives.db` — v0.2.0.
-- Nexus API — **Фаза 6 (12.8)**.
 - Прогресс-бар Spectre — v0.2.0.
 - File-logging — v0.3.0.
 - `SyncModsStep` поддерживает только `FromArchive`.
@@ -970,3 +1241,24 @@ Async, отмена пробрасывается как есть
   `PROJECT-STATE.md` (объединены в `FIRELINK.md` 2026-09-21).
   Убраны записи из `Firelink.slnx`. Обновлена версия `DOC.md` до
   v4.2 в шапке.
+- **2026-09-22** — Фаза 6 (Nexus Premium, 12.8) закрыта.
+- Добавлены решения 161–167.
+- Обновлён план работ, `DOC.md` v4.3, `FIRELINK.md`.
+- Ручной прогон на `TestInstance5`: 4 nexus-архива скачаны через
+Premium API, включая USSEP (~250 МБ). CDN-запросы идут через
+именованный `HttpClient.nexus` (10 мин), API — через
+`HttpClient.nexus-api` (2 мин).
+- Тесты: 621 → 674.
+- **2026-09-23** — Фаза 3, шаги 3.1–3.4.2 закрыты.
+- Добавлены решения 168–181.
+- Обновлён план работ, `DOC.md` v4.4.
+- Тесты: 674 → 731.
+- Новый проект `Firelink.Gui.Controls`.
+- `ViewLocator` переписан на перебор сборок.
+- **2026-09-24** — Фаза 3, шаги 3.5, 3.5.1, 3.6 закрыты.
+- Добавлены решения 182–187.
+- Обновлён план работ, `DOC.md` v4.5.
+- Тесты: 731 → 759.
+- Новые проекты `Firelink.Gui.Pack`, `Firelink.Gui.Verify`.
+- Добавлен `IUiDispatcher` — фикс гонки `ObservableCollection`.
+- Удалены все плейсхолдеры GUI.

@@ -54,7 +54,7 @@ set "TEMP_LIST=%TEMP%\firelink-main-%RANDOM%-%RANDOM%.txt"
 rem 1) основные файлы: код + проекты + конфиги сборки + доки
 dir /b /s /a-d "%CD%" ^
   | findstr /v /i "\.git\ \.vs\ \.idea\ \.vscode\ \bin\ \obj\ \packages\ \node_modules\ \TestResults\ \coverage\ \.nuget\ \Debug\ \Release\ \Assets\7z\" ^
-  | findstr /i /e ".cs .csproj .slnx .props .targets .md" ^
+  | findstr /i /e ".editorconfig .gitignore .gitattributes .yml .yaml .ps1 .psm1 .bat .cmd .sh .xml .config .txt .json .axaml .cs" ^
   > "%TEMP_LIST%"
 
 rem 2) samples/*.json — обязательно включаем
@@ -87,7 +87,7 @@ set "TEMP_LIST=%TEMP%\firelink-extra-%RANDOM%-%RANDOM%.txt"
 
 dir /b /s /a-d "%CD%" ^
   | findstr /v /i "\.git\ \.vs\ \.idea\ \.vscode\ \bin\ \obj\ \packages\ \node_modules\ \TestResults\ \coverage\ \.nuget\ \Debug\ \Release\ \Assets\7z\" ^
-  | findstr /i /e ".editorconfig .gitignore .gitattributes .yml .yaml .ps1 .psm1 .bat .cmd .sh .xml .config .txt .json" ^
+  | findstr /i /e ".editorconfig .gitignore .gitattributes .yml .yaml .ps1 .psm1 .bat .cmd .sh .xml .config .txt .json .csproj" ^
   > "%TEMP_LIST%"
 
 rem выкидываем мусор от nuget/msbuild
