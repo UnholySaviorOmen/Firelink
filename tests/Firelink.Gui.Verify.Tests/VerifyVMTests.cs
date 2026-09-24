@@ -352,15 +352,33 @@ public class VerifyVMTests
     // ------------------------------------------------------------------
 
     [Fact]
-    public void HomeCommand_InvokesNavigateHome()
+    public async Task DoneCommand_ResetsState()
     {
-        var (vm, _, _) = Make();
-        var navigated = false;
+        var dir = MakeTempDir();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ResultToReturn = FakeVerifyRunner.OkReport(passedCount: 3);
 
-        vm.SetNavigateHome(() => navigated = true);
-        vm.HomeCommand.Execute(null);
+            vm.TargetPicker.SetPath(dir);
+            vm.ShowAllChecks = true;
+            await vm.VerifyCommand.ExecuteAsync(null);
 
-        navigated.Should().BeTrue();
+            vm.State.Should().Be(VerifyState.Success);
+            vm.Report.Should().NotBeNull();
+            vm.Rows.Should().HaveCount(3);
+
+            vm.DoneCommand.Execute(null);
+
+            vm.State.Should().Be(VerifyState.Configuration);
+            vm.Report.Should().BeNull();
+            vm.Rows.Should().BeEmpty();
+            vm.IsOk.Should().BeFalse();
+        }
+        finally
+        {
+            Directory.Delete(dir);
+        }
     }
 
     // ------------------------------------------------------------------
@@ -368,7 +386,7 @@ public class VerifyVMTests
     // ------------------------------------------------------------------
 
     [Fact]
-    public async Task VerifyAsync_ClearsLogAndRowsOnStart()
+    public async Task VerifyAsync_KeepsLogClearsRows()
     {
         var dir = MakeTempDir();
         try
@@ -384,8 +402,11 @@ public class VerifyVMTests
             vm.TargetPicker.SetPath(dir);
             await vm.VerifyCommand.ExecuteAsync(null);
 
-            vm.Log.Entries.Should().BeEmpty();
-            vm.Rows.Should().BeEmpty(); // OkReport + ShowAllChecks=false
+            // Лог сохраняется (решение 3.9.4).
+            vm.Log.Entries.Should().HaveCount(1);
+
+            // Rows очищаются (VerifyVM.Rows.Clear() остался).
+            vm.Rows.Should().BeEmpty();
         }
         finally
         {
@@ -403,7 +424,7 @@ public class VerifyVMTests
         var row = new VerifyRowVM { Name = "x", Passed = true };
 
         row.StatusGlyph.Should().Be("✓");
-        row.StatusColor.Should().Be("#4ADE80");
+        row.StatusColor.Should().Be("#7fc98a");
     }
 
     [Fact]
@@ -412,6 +433,6 @@ public class VerifyVMTests
         var row = new VerifyRowVM { Name = "x", Passed = false };
 
         row.StatusGlyph.Should().Be("×");
-        row.StatusColor.Should().Be("#F87171");
+        row.StatusColor.Should().Be("#d97777");
     }
 }

@@ -1,0 +1,29 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Firelink.Gui.Shared.ViewModels"
+             xmlns:controls="using:Firelink.Gui.Controls.Views"
+             x:Class="Firelink.Gui.Views.LogsView"
+             x:DataType="vm:LogsVM">
+
+  <Grid RowDefinitions="Auto,*" Margin="20">
+
+    <!-- Header -->
+    <Grid Grid.Row="0"
+          ColumnDefinitions="*,Auto"
+          Margin="0,0,0,16">
+      <TextBlock Grid.Column="0"
+                 Text="Logs"
+                 FontSize="24"
+                 FontWeight="Bold"
+                 VerticalAlignment="Center" />
+    </Grid>
+
+    <!-- LogView на всю высоту -->
+    <Border Grid.Row="1"
+            BorderBrush="{StaticResource BorderSubtleBrush}"
+            BorderThickness="1"
+            CornerRadius="10">
+      <controls:LogView DataContext="{Binding Log}" />
+    </Border>
+  </Grid>
+</UserControl>

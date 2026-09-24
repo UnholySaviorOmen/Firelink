@@ -1,3 +1,4 @@
+using System.Reflection;
 using Firelink.Core;
 using Firelink.Cli.Commands;
 using Firelink.Cli.Infrastructure;
@@ -40,7 +41,7 @@ var app = new CommandApp(registrar);
 app.Configure(config =>
 {
     config.SetApplicationName("firelink");
-    config.SetApplicationVersion("0.1.0");
+    config.SetApplicationVersion(GetApplicationVersion());
 
     // Spectre по умолчанию сам обрабатывает CommandParseException и печатает
     // красиво отформатированное сообщение, но без нашего hint про кавычки.
@@ -103,4 +104,35 @@ catch (Exception ex)
     if (ex.InnerException is not null)
         AnsiConsole.MarkupLine($"[red]  →[/] {ex.InnerException.Message}");
     return 2;
+}
+
+// ---------------------------------------------------------------------
+//  Helpers
+// ---------------------------------------------------------------------
+
+/// <summary>
+/// Версия из entry assembly. Значение приходит из Directory.Build.props
+/// (VersionPrefix) через AssemblyInformationalVersionAttribute.
+///
+/// Fallback "0.0.0" — только если атрибута нет вообще (теоретически
+/// невозможно при GenerateAssemblyInfo=true, который .NET SDK ставит
+/// по умолчанию).
+/// </summary>
+static string GetApplicationVersion()
+{
+    var informational = typeof(Program).Assembly
+        .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+        ?.InformationalVersion;
+
+    if (!string.IsNullOrWhiteSpace(informational))
+    {
+        // На случай, если SourceRevisionId всё-таки просочится
+        // (IncludeSourceRevisionInInformationalVersion=false стоит
+        // в Directory.Build.props, но подстрахуемся): "0.1.0+abc123"
+        // → "0.1.0".
+        var plus = informational.IndexOf('+');
+        return plus >= 0 ? informational[..plus] : informational;
+    }
+
+    return "0.0.0";
 }

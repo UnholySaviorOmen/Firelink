@@ -6,4 +6,6 @@ public enum ScreenType
     Install,
     Pack,
     Verify,
+    Logs,
+    Settings,
 }

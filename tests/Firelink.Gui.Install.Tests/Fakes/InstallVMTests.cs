@@ -180,7 +180,7 @@ public class InstallVMTests
     }
 
     [Fact]
-    public async Task InstallAsync_ClearsLogOnStart()
+    public async Task InstallAsync_DoesNotClearLog()
     {
         var tmp = MakeTempJson();
         try
@@ -195,7 +195,9 @@ public class InstallVMTests
             vm.ModlistPicker.SetPath(tmp);
             await vm.InstallCommand.ExecuteAsync(null);
 
-            vm.Log.Entries.Should().BeEmpty();
+            // Лог не чистится автоматически (решение 3.9.4).
+            vm.Log.Entries.Should().HaveCount(1);
+            vm.Log.Entries[0].Message.Should().Be("old entry");
         }
         finally
         {
@@ -301,15 +303,30 @@ public class InstallVMTests
     // ------------------------------------------------------------------
 
     [Fact]
-    public void HomeCommand_InvokesNavigateHome()
+    public async Task DoneCommand_ResetsState()
     {
-        var (vm, _, _) = Make();
-        var navigated = false;
+        var tmp = MakeTempJson();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ResultToReturn = FakeInstallRunner.MakeSummary();
 
-        vm.SetNavigateHome(() => navigated = true);
-        vm.HomeCommand.Execute(null);
+            vm.ModlistPicker.SetPath(tmp);
+            await vm.InstallCommand.ExecuteAsync(null);
 
-        navigated.Should().BeTrue();
+            vm.State.Should().Be(InstallState.Success);
+            vm.Summary.Should().NotBeNull();
+
+            vm.DoneCommand.Execute(null);
+
+            vm.State.Should().Be(InstallState.Configuration);
+            vm.Summary.Should().BeNull();
+            vm.ErrorMessage.Should().BeNull();
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
     }
 
     // ------------------------------------------------------------------

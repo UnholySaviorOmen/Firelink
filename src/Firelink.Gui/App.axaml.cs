@@ -65,6 +65,9 @@ public partial class App : Application
         services.AddGuiPack();
         services.AddGuiVerify();
 
+        // Базовые экраны (Shared-уровень).
+        services.AddSingleton<SettingsVM>();
+
         services.AddSingleton<MainWindowVM>();
 
         return services.BuildServiceProvider();

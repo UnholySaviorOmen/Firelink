@@ -19,5 +19,5 @@ public sealed class VerifyRowVM
 
     public string StatusGlyph => Passed ? "✓" : "×";
 
-    public string StatusColor => Passed ? "#4ADE80" : "#F87171";
+    public string StatusColor => Passed ? "#7fc98a" : "#d97777";
 }

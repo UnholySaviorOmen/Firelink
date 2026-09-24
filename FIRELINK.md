@@ -2,8 +2,8 @@
 
 **Обновлено:** 2026-09-24
 **Всего тестов:** 759, 0 failed
-**Текущий блок:** — (Фаза 3, шаги 3.1–3.6 закрыты)
-**Следующий блок:** Фаза 3 — шаг 3.7 (дистрибутив)
+**Текущий блок:** — (Фаза 3, шаги 3.1–3.7 закрыты)
+**Следующий блок:** Фаза 3 — шаг 3.8 (ручной прогон GUI на TestInstance5)
 
 **Спутние документы:**
 - `DOC.md` (v4.4) — формальная документация: форматы, pipeline, CLI, обработка ошибок.
@@ -43,7 +43,7 @@ Firelink — инструмент для создания и установки 
 Текущее состояние: 759 тестов, 0 failed. Закрыты: MVP (packer,
 installer, verify), Фаза 1 (единый CLI Firelink.Cli),
 Фаза 2 (общие API для GUI), Фаза 6 (Nexus Premium), а также
-Фаза 3 — шаги 3.1–3.6:
+Фаза 3 — шаги 3.1–3.7:
 
 3.1 — проекты GUI + DI + базовые VM (LoadingLock,
 FilePickerVM, ProgressViewModel, ObservableLoggerProvider).
@@ -74,8 +74,15 @@ ObservableCollection vs worker-потоки pipeline.
 VerifyRowVM (строка таблицы проверок), удаление
 VerifyPlaceholderVM/VerifyPlaceholderView.
 
-Следующая задача: Фаза 3 — шаг 3.7 (дистрибутив).
-Затем: 3.8 (ручной прогон GUI на TestInstance5).
+3.7 — дистрибутив: Directory.Build.props (VersionPrefix 0.1.0,
+IncludeSourceRevisionInInformationalVersion=false), иконка GUI
+(ApplicationIcon Assets\app.ico), версия CLI из assembly
+(Firelink.Cli/Program.cs GetApplicationVersion()),
+tools/build-release.bat (publish GUI+CLI в одну папку,
+win-x64, framework-dependent, Compress-Archive → zip).
+Тестов не добавляли — 759 passed сохраняется.
+
+Следующая задача: Фаза 3 — шаг 3.8 (ручной прогон GUI на TestInstance5).
 
 Стиль ответов:
 
@@ -195,10 +202,14 @@ FIRELINK.md — только по запросу.
   - 3.6 — экран Verify (таблица проверок + Show all checks) +
     удаление Verify-плейсхолдеров.
     Итог: 759 passed.
+  - 3.7 — дистрибутив: Directory.Build.props (VersionPrefix),
+    иконка GUI, версия CLI из assembly, tools/build-release.bat.
+    Итог: 759 passed (тестов не добавляли — шаг чисто
+    инфраструктурный).
 
 ### В работе
 
-- Фаза 3 — GUI. Шаги 3.7 (дистрибутив), 3.8 (ручной прогон GUI) —
+- Фаза 3 — GUI. Шаг 3.8 (ручной прогон GUI на TestInstance5) —
   впереди.
 
 ### Не начато
@@ -753,6 +764,37 @@ ViewLocator:
      каждого прогона и при переключении чекбокса. `VerifyRowVM` —
      плоская обёртка над `VerifyCheckResult` с `StatusGlyph`
      («✓»/«×») и `StatusColor` (hex).
+
+### Фаза 3 — дистрибутив (188–191)
+
+188. **`Directory.Build.props` в корне репо — единый источник
+     правды для версии.** `<VersionPrefix>0.1.0</VersionPrefix>`,
+     `<IncludeSourceRevisionInInformationalVersion>false</...>`
+     (без git-хэша в `InformationalVersion`).
+     `AssemblyInformationalVersion` = `"0.1.0"`.
+
+189. **Версия CLI читается из assembly, не хардкодится.**
+     `Firelink.Cli/Program.cs` →
+     `GetApplicationVersion()` через
+     `AssemblyInformationalVersionAttribute` entry assembly,
+     fallback `"0.0.0"`. Обрезка `+...` на всякий случай
+     (страховка, если `IncludeSourceRevision` когда-то
+     вернут в `true`).
+
+190. **Иконка GUI — `src/Firelink.Gui/Assets/app.ico` +
+     `<ApplicationIcon>Assets\app.ico</ApplicationIcon>`.**
+     Иконка вшивается в PE-заголовок exe, в output не
+     копируется. Иконки CLI нет (сознательно — Q3).
+
+191. **`tools/build-release.bat` — релизный скрипт.**
+     Читает `<VersionPrefix>` из `Directory.Build.props`,
+     publish GUI+CLI в одну папку
+     `build_artifacts/Firelink-<version>-win-x64/`
+     (`-c Release -r win-x64 --self-contained false`),
+     `Compress-Archive` → zip с файлами в корне.
+     Раскладка дистрибутива — «как есть» (≈90 файлов,
+     `lib/`-схема сознательно не делается).
+
 ---
 
 ## План работ
@@ -906,11 +948,18 @@ src/
   - `VerifyPlaceholderVM`/`VerifyPlaceholderView` удалены.
   - 18 тестов. Итог: 759 passed.
 
-- ⬜ **3.7** — дистрибутив:
-  - Иконка.
-  - Упаковка: `Firelink.Cli.exe` + `Firelink.exe` + `Assets/7z/`.
-  - `<AssemblyName>Firelink</AssemblyName>` у `Firelink.Gui.csproj`
-    (решение №169) — проверить, что оно уже задано.
+- ✅ **3.7** — дистрибутив:
+  - `Directory.Build.props` (VersionPrefix 0.1.0,
+    IncludeSourceRevisionInInformationalVersion=false).
+  - Иконка GUI (`Assets\app.ico` + `<ApplicationIcon>`).
+  - Версия CLI из assembly (`GetApplicationVersion()`).
+  - `tools/build-release.bat` — publish GUI+CLI в одну папку,
+    zip с файлами в корне.
+  - `<AssemblyName>Firelink</AssemblyName>` — уже был
+    (решение №169), проверено.
+  - Раскладка дистрибутива оставлена «как есть» (~90 файлов,
+    `lib/` не делаем — см. решение №191).
+  - Тестов не добавляли — 759 passed.
 
 - ⬜ **3.8** — ручной прогон:
   - Сравнить GUI-результат с CLI на TestInstance5.
@@ -1262,3 +1311,11 @@ Premium API, включая USSEP (~250 МБ). CDN-запросы идут че�
 - Новые проекты `Firelink.Gui.Pack`, `Firelink.Gui.Verify`.
 - Добавлен `IUiDispatcher` — фикс гонки `ObservableCollection`.
 - Удалены все плейсхолдеры GUI.
+- **2026-09-24** — Фаза 3, шаг 3.7 закрыт.
+- Добавлены решения 188–191.
+- Новый файл `Directory.Build.props` (версия 0.1.0).
+- Новый файл `tools/build-release.bat`.
+- Иконка GUI (`src/Firelink.Gui/Assets/app.ico`).
+- Версия CLI читается из assembly.
+- Тестов не добавляли: 759 passed.
+- Раскладка дистрибутива — «как есть» (без `lib/`).

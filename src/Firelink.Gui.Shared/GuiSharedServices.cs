@@ -20,6 +20,10 @@ public static class GuiSharedServices
 
         services.AddSingleton<HomeVM>();
 
+        services.AddSingleton<LogsVM>();
+
+        services.AddSingleton<SettingsVM>();
+
         // MainWindowVM регистрируется в клиенте (Firelink.Gui), потому что
         // зависит от IScreenFactory, реализация которого живёт в exe-проекте.
 

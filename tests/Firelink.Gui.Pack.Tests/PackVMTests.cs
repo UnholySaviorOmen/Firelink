@@ -136,7 +136,7 @@ public class PackVMTests
     }
 
     [Fact]
-    public async Task PackAsync_ClearsLogOnStart()
+    public async Task PackAsync_DoesNotClearLog()
     {
         var tmp = MakeTempJson();
         try
@@ -151,7 +151,10 @@ public class PackVMTests
             vm.ConfigPicker.SetPath(tmp);
             await vm.PackCommand.ExecuteAsync(null);
 
-            vm.Log.Entries.Should().BeEmpty();
+            // Лог не чистится автоматически (решение 3.9.4).
+            // История копится, пользователь чистит вручную.
+            vm.Log.Entries.Should().HaveCount(1);
+            vm.Log.Entries[0].Message.Should().Be("old entry");
         }
         finally
         {
@@ -251,16 +254,35 @@ public class PackVMTests
     //  Home
     // ------------------------------------------------------------------
 
+    // ------------------------------------------------------------------
+    //  Done
+    // ------------------------------------------------------------------
+
     [Fact]
-    public void HomeCommand_InvokesNavigateHome()
+    public async Task DoneCommand_ResetsState()
     {
-        var (vm, _, _) = Make();
-        var navigated = false;
+        var tmp = MakeTempJson();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ResultToReturn = FakePackRunner.MakeSummary();
 
-        vm.SetNavigateHome(() => navigated = true);
-        vm.HomeCommand.Execute(null);
+            vm.ConfigPicker.SetPath(tmp);
+            await vm.PackCommand.ExecuteAsync(null);
 
-        navigated.Should().BeTrue();
+            vm.State.Should().Be(PackState.Success);
+            vm.Summary.Should().NotBeNull();
+
+            vm.DoneCommand.Execute(null);
+
+            vm.State.Should().Be(PackState.Configuration);
+            vm.Summary.Should().BeNull();
+            vm.ErrorMessage.Should().BeNull();
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
     }
 
     // ------------------------------------------------------------------

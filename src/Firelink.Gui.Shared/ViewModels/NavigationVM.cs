@@ -23,6 +23,8 @@ public sealed partial class NavigationVM : ViewModel
             new("Install", ScreenType.Install),
             new("Pack", ScreenType.Pack),
             new("Verify", ScreenType.Verify),
+            new("Logs", ScreenType.Logs),
+            new("Settings", ScreenType.Settings),
         };
     }
 

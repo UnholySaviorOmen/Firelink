@@ -1,0 +1,93 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Firelink.Gui.Shared.ViewModels"
+             x:Class="Firelink.Gui.Views.SettingsView"
+             x:DataType="vm:SettingsVM">
+
+    <Grid RowDefinitions="Auto,*" Margin="20">
+
+        <!-- Header -->
+        <Grid Grid.Row="0"
+              ColumnDefinitions="*,Auto"
+              Margin="0,0,0,16">
+            <TextBlock Grid.Column="0"
+                       Text="Settings"
+                       FontSize="24"
+                       FontWeight="Bold"
+                       VerticalAlignment="Center" />
+        </Grid>
+
+        <!-- Content -->
+        <ScrollViewer Grid.Row="1"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="20">
+
+                <!-- About -->
+                <StackPanel Spacing="8">
+                    <TextBlock Text="About"
+                               FontSize="16"
+                               FontWeight="SemiBold" />
+
+                    <Border Background="{StaticResource SurfaceRaisedBrush}"
+                            BorderBrush="{StaticResource BorderSubtleBrush}"
+                            BorderThickness="1"
+                            CornerRadius="10"
+                            Padding="16">
+                        <Grid ColumnDefinitions="Auto,*"
+                              RowDefinitions="Auto,Auto,Auto">
+
+                            <TextBlock Grid.Row="0" Grid.Column="0"
+                                       Text="Name"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       Margin="0,0,16,8" />
+                            <TextBlock Grid.Row="0" Grid.Column="1"
+                                       Text="{Binding ProductName}"
+                                       Margin="0,0,0,8" />
+
+                            <TextBlock Grid.Row="1" Grid.Column="0"
+                                       Text="Version"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       Margin="0,0,16,8" />
+                            <TextBlock Grid.Row="1" Grid.Column="1"
+                                       Text="{Binding Version}"
+                                       Margin="0,0,0,8" />
+
+                            <TextBlock Grid.Row="2" Grid.Column="0"
+                                       Text="License"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       Margin="0,0,16,0" />
+                            <TextBlock Grid.Row="2" Grid.Column="1"
+                                       Text="{Binding License}" />
+                        </Grid>
+                    </Border>
+                </StackPanel>
+
+                <!-- Placeholder -->
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Application settings"
+                               FontSize="16"
+                               FontWeight="SemiBold" />
+
+                    <Border Background="{StaticResource SurfaceRaisedBrush}"
+                            BorderBrush="{StaticResource BorderSubtleBrush}"
+                            BorderThickness="1"
+                            CornerRadius="10"
+                            Padding="16">
+                        <TextBlock Text="Settings will appear here in a future version."
+                                   Foreground="{StaticResource TextMutedBrush}"
+                                   TextWrapping="Wrap" />
+                    </Border>
+                </StackPanel>
+
+                <!-- Footer -->
+                <TextBlock Text="{Binding Footer}"
+                           Foreground="{StaticResource TextMutedBrush}"
+                           FontSize="12"
+                           HorizontalAlignment="Center"
+                           Margin="0,16,0,0" />
+
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

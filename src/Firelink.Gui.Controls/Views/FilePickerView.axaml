@@ -3,31 +3,45 @@
              xmlns:vm="using:Firelink.Gui.Shared.ViewModels.Controls"
              x:Class="Firelink.Gui.Controls.Views.FilePickerView"
              x:DataType="vm:FilePickerVM">
-  <StackPanel Spacing="4">
-    <TextBlock Text="{Binding Placeholder}"
-               FontSize="12"
-               Opacity="0.7" />
-    <Grid ColumnDefinitions="*,Auto">
-      <Border Grid.Column="0"
-              Background="#0B1116"
-              BorderBrush="#2A3742"
-              BorderThickness="1"
-              CornerRadius="3"
-              Padding="8,6"
-              Margin="0,0,8,0">
-        <TextBlock Text="{Binding Path}"
-                   FontFamily="Consolas,Menlo,monospace"
+    <StackPanel Spacing="6">
+
+        <!-- Label -->
+        <TextBlock Text="{Binding Placeholder}"
                    FontSize="12"
-                   TextTrimming="CharacterEllipsis" />
-      </Border>
-      <Button Grid.Column="1"
-              Content="Browse…"
-              Command="{Binding PickCommand}"
-              Padding="12,6" />
-    </Grid>
-    <TextBlock Text="{Binding Error}"
-               Foreground="#F87171"
-               FontSize="11"
-               IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}" />
-  </StackPanel>
+                   Foreground="{StaticResource TextSecondaryBrush}" />
+
+        <!-- Field + Browse button -->
+        <Grid ColumnDefinitions="*,Auto">
+
+            <!-- Path container (не TextBox — read-only отображение) -->
+            <Border Grid.Column="0"
+                    Background="{StaticResource SurfaceRaisedBrush}"
+                    BorderBrush="{StaticResource BorderStrongBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="10,8"
+                    Margin="0,0,8,0"
+                    MinHeight="36">
+                <TextBlock Text="{Binding Path}"
+                           FontFamily="Consolas,Menlo,monospace"
+                           FontSize="12"
+                           Foreground="{StaticResource TextPrimaryBrush}"
+                           TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center" />
+            </Border>
+
+            <!-- Browse button -->
+            <Button Grid.Column="1"
+                    Content="Browse…"
+                    Command="{Binding PickCommand}"
+                    Padding="14,8"
+                    VerticalAlignment="Stretch" />
+        </Grid>
+
+        <!-- Error -->
+        <TextBlock Text="{Binding Error}"
+                   Foreground="{StaticResource ErrorBrush}"
+                   FontSize="11"
+                   IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}" />
+    </StackPanel>
 </UserControl>

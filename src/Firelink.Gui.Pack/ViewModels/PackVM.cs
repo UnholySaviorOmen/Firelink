@@ -17,7 +17,6 @@ public sealed partial class PackVM : ProgressViewModel, INavigationAware
 {
     private readonly IPackRunner _runner;
     private readonly ILogger<PackVM> _logger;
-    private Action? _navigateHome;
     private CancellationTokenSource? _cts;
 
     [ObservableProperty]
@@ -68,13 +67,15 @@ public sealed partial class PackVM : ProgressViewModel, INavigationAware
         };
     }
 
-    public void SetNavigateHome(Action navigateHome) => _navigateHome = navigateHome;
+    public void SetNavigateHome(Action navigateHome)
+    {
+        // Оставлено для совместимости с INavigationAware.
+        // В UI кнопка Home заменена на Done (3.9.6).
+    }
 
     [RelayCommand(CanExecute = nameof(CanPack))]
     private async Task PackAsync()
     {
-        Log.Clear();
-
         State = PackState.Packing;
         UpdateVisibility();
 
@@ -122,7 +123,12 @@ public sealed partial class PackVM : ProgressViewModel, INavigationAware
     private bool CanCancel() => State == PackState.Packing;
 
     [RelayCommand]
-    private void Home() => _navigateHome?.Invoke();
+    private void Done()
+    {
+        Summary = null;
+        ErrorMessage = null;
+        State = PackState.Configuration;
+    }
 
     partial void OnStateChanged(PackState value)
     {

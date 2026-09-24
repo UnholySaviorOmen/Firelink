@@ -17,7 +17,6 @@ public sealed partial class VerifyVM : ViewModel, INavigationAware
 {
     private readonly IVerifyRunner _runner;
     private readonly ILogger<VerifyVM> _logger;
-    private Action? _navigateHome;
     private CancellationTokenSource? _cts;
 
     [ObservableProperty]
@@ -73,7 +72,7 @@ public sealed partial class VerifyVM : ViewModel, INavigationAware
         _ => $"{Report.FailedCount} check(s) failed",
     };
 
-    public string ResultColor => IsOk ? "#4ADE80" : "#F87171";
+    public string ResultColor => IsOk ? "#7fc98a" : "#d97777";
 
     public string TargetPath => Report?.TargetPath ?? "";
 
@@ -100,12 +99,15 @@ public sealed partial class VerifyVM : ViewModel, INavigationAware
         };
     }
 
-    public void SetNavigateHome(Action navigateHome) => _navigateHome = navigateHome;
+    public void SetNavigateHome(Action navigateHome)
+    {
+        // Оставлено для совместимости с INavigationAware.
+        // В UI кнопка Home заменена на Done (3.9.6).
+    }
 
     [RelayCommand(CanExecute = nameof(CanVerify))]
     private async Task VerifyAsync()
     {
-        Log.Clear();
         Rows.Clear();
 
         State = VerifyState.Verifying;
@@ -154,7 +156,14 @@ public sealed partial class VerifyVM : ViewModel, INavigationAware
     private bool CanCancel() => State == VerifyState.Verifying;
 
     [RelayCommand]
-    private void Home() => _navigateHome?.Invoke();
+    private void Done()
+    {
+        Report = null;
+        ErrorMessage = null;
+        Rows.Clear();
+        NotifyResultChanged();
+        State = VerifyState.Configuration;
+    }
 
     partial void OnStateChanged(VerifyState value)
     {

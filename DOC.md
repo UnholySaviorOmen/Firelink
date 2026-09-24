@@ -1,6 +1,6 @@
 # Firelink — Документация проекта
 
-**Версия документа:** 4.5
+**Версия документа:** 4.6
 **Обновлено:** 2026-09-24
 
 ## Оглавление
@@ -365,6 +365,43 @@ App.BuildServices() (в Firelink.Gui) дополнительно регистр�
 - IFilePickerService → AvaloniaFilePickerService.
 - IScreenFactory → ScreenFactory.
 - MainWindowVM.
+
+### Версия приложения
+
+Единый источник правды — `Directory.Build.props` в корне репо
+(`<VersionPrefix>0.1.0</VersionPrefix>`). MSBuild генерирует
+`AssemblyVersion` (0.1.0.0), `FileVersion` (0.1.0.0),
+`InformationalVersion` (0.1.0). `<IncludeSourceRevisionInInformationalVersion>false</...>`
+отключает добавление git-хэша к `InformationalVersion`.
+
+`Firelink.Cli/Program.cs` читает `InformationalVersion` через
+`AssemblyInformationalVersionAttribute` entry assembly и передаёт
+в `SetApplicationVersion(...)`. Хардкода версии в коде нет.
+
+### Иконка
+
+GUI: `<ApplicationIcon>Assets\app.ico</ApplicationIcon>` в
+`Firelink.Gui.csproj`, файл `src/Firelink.Gui/Assets/app.ico`.
+Иконка вшивается в PE-заголовок `Firelink.exe`. CLI-иконки нет
+(сознательно).
+
+### Сборка релиза
+
+Скрипт `tools/build-release.bat`:
+
+1. Читает `<VersionPrefix>` из `Directory.Build.props`.
+2. `dotnet publish` GUI и CLI в одну папку
+   `build_artifacts/Firelink-<version>-win-x64/`
+   (`-c Release -r win-x64 --self-contained false`).
+3. `Compress-Archive` → `build_artifacts/Firelink-<version>-win-x64.zip`
+   (файлы в корне архива, без вложенной папки).
+
+Раскладка дистрибутива — «как есть» (~90 файлов: оба exe,
+managed-сборки, нативные DLL Avalonia/Skia, `Assets/7z/`).
+Схема с `lib/` для «чистого корня» сознательно не делается.
+</｜｜DSML｜｜ parameter>
+</｜｜DSML｜｜ invoke>
+</｜｜DSML｜｜ calls>
 
 ---
 
@@ -1553,7 +1590,7 @@ v1.0.0
 - **Фаза 1 — единый CLI `Firelink.Cli.exe`.**
 - **Фаза 2 — общие API для GUI.**
 - **Фаза 6 — Nexus Premium (12.8).**
-- **Фаза 3 — шаги 3.1–3.6:**
+- **Фаза 3 — шаги 3.1–3.8:**
   - 3.1 — `Firelink.Gui.Shared`, `Firelink.Gui.Install`,
     `Firelink.Gui.Pack`, `Firelink.Gui.Verify`, `Firelink.Gui`.
   - 3.2 — `MainWindow`, `MainWindowVM`, `NavigationVM`,
@@ -1570,11 +1607,21 @@ v1.0.0
     потокобезопасный `ObservableLogSink`.
   - 3.6 — `VerifyVM`, `VerifyView`, `VerifyRowVM`,
     `IVerifyRunner`, `VerifyRunner`, проект `Firelink.Gui.Verify`.
+  - 3.7 — `Directory.Build.props` (VersionPrefix 0.1.0,
+    IncludeSourceRevisionInInformationalVersion=false),
+    иконка GUI (`Assets\app.ico` + `<ApplicationIcon>`),
+    версия CLI из assembly (`GetApplicationVersion()`),
+    `tools/build-release.bat` (publish GUI+CLI в одну папку,
+    zip).
+  - 3.8 — ручной прогон GUI на `OmenRim 7` / `OmenTest7`:
+    pack (71 mods, 7853 files, 4389 directives), install
+    (71 created, 58 downloaded, 71 meta.ini), verify
+    (**4522 passed, 0 failed**).
 - **759 тестов, все проходят.**
 
 ### В работе
 
-- Фаза 3, шаг 3.7 (дистрибутив) — следующий.
+- — (Фаза 3 закрыта полностью: 3.1–3.8)
 
 ### Ключевые решения
 
@@ -1623,3 +1670,15 @@ v1.0.0
   чекбокс «Show all checks» заменяет CLI-флаг `--verbose`**
   (решение №187).
 - **Плейсхолдеров GUI больше нет** — все 4 экрана реальные.
+- **Версия — в `Directory.Build.props`**
+  (`<VersionPrefix>0.1.0</VersionPrefix>`), единый источник
+  правды. CLI читает `InformationalVersion` из entry assembly.
+- **Иконка GUI** — `Assets\app.ico` + `<ApplicationIcon>`,
+  вшивается в PE-заголовок `Firelink.exe`. Иконки CLI нет.
+- **`tools/build-release.bat`** — publish GUI+CLI в одну папку
+  (`-c Release -r win-x64 --self-contained false`),
+  `Compress-Archive` → zip. Раскладка дистрибутива — «как есть»
+  (~90 файлов), `lib/`-схема сознательно не делается.
+- **3.8 — ручной прогон GUI подтверждает эквивалентность CLI:**
+  pack + install + verify на `OmenRim 7` → `OmenTest7`,
+  **4522 passed, 0 failed**.

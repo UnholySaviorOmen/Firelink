@@ -17,7 +17,6 @@ public sealed partial class InstallVM : ProgressViewModel, INavigationAware
 {
     private readonly IInstallRunner _runner;
     private readonly ILogger<InstallVM> _logger;
-    private Action? _navigateHome;
     private CancellationTokenSource? _cts;
 
     [ObservableProperty]
@@ -76,13 +75,15 @@ public sealed partial class InstallVM : ProgressViewModel, INavigationAware
         };
     }
 
-    public void SetNavigateHome(Action navigateHome) => _navigateHome = navigateHome;
+    public void SetNavigateHome(Action navigateHome)
+    {
+        // Оставлено для совместимости с INavigationAware.
+        // В UI кнопка Home заменена на Done (3.9.6).
+    }
 
     [RelayCommand(CanExecute = nameof(CanInstall))]
     private async Task InstallAsync()
     {
-        Log.Clear();
-
         State = InstallState.Installing;
         UpdateVisibility();
 
@@ -134,7 +135,12 @@ public sealed partial class InstallVM : ProgressViewModel, INavigationAware
     private bool CanCancel() => State == InstallState.Installing;
 
     [RelayCommand]
-    private void Home() => _navigateHome?.Invoke();
+    private void Done()
+    {
+        Summary = null;
+        ErrorMessage = null;
+        State = InstallState.Configuration;
+    }
 
     partial void OnStateChanged(InstallState value)
     {

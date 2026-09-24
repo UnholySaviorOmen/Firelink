@@ -19,6 +19,8 @@ internal sealed class ScreenFactory : IScreenFactory
         ScreenType.Install => _sp.GetRequiredService<InstallVM>(),
         ScreenType.Pack => _sp.GetRequiredService<PackVM>(),
         ScreenType.Verify => _sp.GetRequiredService<VerifyVM>(),
+        ScreenType.Logs => _sp.GetRequiredService<LogsVM>(),
+        ScreenType.Settings => _sp.GetRequiredService<SettingsVM>(),
         _ => _sp.GetRequiredService<HomeVM>(),
     };
 }

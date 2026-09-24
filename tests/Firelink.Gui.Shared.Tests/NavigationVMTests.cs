@@ -7,16 +7,18 @@ namespace Firelink.Gui.Shared.Tests;
 public class NavigationVMTests
 {
     [Fact]
-    public void Constructor_PopulatesFourItems()
+    public void Constructor_PopulatesNavigationItems()
     {
         var vm = new NavigationVM(_ => { });
 
-        vm.Items.Should().HaveCount(4);
+        vm.Items.Should().HaveCount(6);
         vm.Items.Select(i => i.Screen).Should().Equal(
             ScreenType.Home,
             ScreenType.Install,
             ScreenType.Pack,
-            ScreenType.Verify);
+            ScreenType.Verify,
+            ScreenType.Logs,
+            ScreenType.Settings);
     }
 
     [Fact]

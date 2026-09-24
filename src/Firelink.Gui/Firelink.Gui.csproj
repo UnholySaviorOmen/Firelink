@@ -7,6 +7,7 @@
     <AssemblyName>Firelink</AssemblyName>
     <RootNamespace>Firelink.Gui</RootNamespace>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia" />
@@ -27,4 +28,7 @@
     <ProjectReference Include="..\Firelink.Install\Firelink.Install.csproj" />
     <ProjectReference Include="..\Firelink.Pack\Firelink.Pack.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\app.ico" />
+  </ItemGroup>    
 </Project>

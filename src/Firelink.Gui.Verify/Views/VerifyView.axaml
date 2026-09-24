@@ -4,7 +4,7 @@
              xmlns:controls="using:Firelink.Gui.Controls.Views"
              x:Class="Firelink.Gui.Verify.Views.VerifyView"
              x:DataType="vm:VerifyVM">
-    <Grid RowDefinitions="Auto,*,Auto" Margin="20">
+    <Grid RowDefinitions="Auto,*" Margin="20">
 
         <!-- Header -->
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,16">
@@ -13,11 +13,6 @@
                        FontSize="24"
                        FontWeight="Bold"
                        VerticalAlignment="Center" />
-            <Button Grid.Column="1"
-                    Content="Home"
-                    Command="{Binding HomeCommand}"
-                    Padding="12,6"
-                    IsVisible="{Binding IsConfiguring}" />
         </Grid>
 
         <!-- Configuration -->
@@ -28,15 +23,15 @@
             <controls:FilePickerView DataContext="{Binding TargetPicker}" />
 
             <TextBlock Text="{Binding ErrorMessage}"
-                       Foreground="#FBBF24"
+                       Foreground="{StaticResource WarningBrush}"
                        FontSize="12"
                        IsVisible="{Binding ErrorMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
 
-            <Button Content="Verify"
+            <Button Classes="accent"
+                    Content="Verify"
                     Command="{Binding VerifyCommand}"
                     HorizontalAlignment="Left"
-                    Padding="20,8"
-                    FontWeight="SemiBold" />
+                    Padding="20,8" />
         </StackPanel>
 
         <!-- Verifying -->
@@ -72,9 +67,9 @@
                 <TextBlock Text="{Binding TargetPath}"
                            FontFamily="Consolas,Menlo,monospace"
                            FontSize="12"
-                           Opacity="0.6"
+                           Foreground="{StaticResource TextMutedBrush}"
                            TextTrimming="CharacterEllipsis" />
-                <TextBlock Opacity="0.7" FontSize="12">
+                <TextBlock Foreground="{StaticResource TextSecondaryBrush}" FontSize="12">
                     <Run Text="Passed: " />
                     <Run Text="{Binding PassedCount}" />
                     <Run Text="   Failed: " />
@@ -90,17 +85,17 @@
 
             <!-- Rows -->
             <Border Grid.Row="2"
-                    Background="#0B1116"
-                    BorderBrush="#2A3742"
+                    Background="{StaticResource SurfaceRaisedBrush}"
+                    BorderBrush="{StaticResource BorderSubtleBrush}"
                     BorderThickness="1"
-                    CornerRadius="4">
+                    CornerRadius="10">
                 <ScrollViewer HorizontalScrollBarVisibility="Disabled"
                               VerticalScrollBarVisibility="Auto">
                     <ItemsControl ItemsSource="{Binding Rows}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="vm:VerifyRowVM">
                                 <Grid ColumnDefinitions="20,*,Auto"
-                                      Margin="10,3">
+                                      Margin="12,4">
                                     <TextBlock Grid.Column="0"
                                                Text="{Binding StatusGlyph}"
                                                Foreground="{Binding StatusColor}"
@@ -116,7 +111,7 @@
                                                Text="{Binding Message}"
                                                FontFamily="Consolas,Menlo,monospace"
                                                FontSize="11"
-                                               Opacity="0.65"
+                                               Foreground="{StaticResource TextSecondaryBrush}"
                                                TextWrapping="Wrap"
                                                MaxWidth="400" />
                                 </Grid>
@@ -125,6 +120,15 @@
                     </ItemsControl>
                 </ScrollViewer>
             </Border>
+
+            <!-- Done -->
+            <Button Grid.Row="2"
+                    Content="Done"
+                    Command="{Binding DoneCommand}"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Bottom"
+                    Margin="0,12,0,0"
+                    Padding="20,8" />
         </Grid>
 
         <!-- Failure -->
@@ -135,12 +139,12 @@
             <TextBlock Text="Verify failed"
                        FontSize="18"
                        FontWeight="SemiBold"
-                       Foreground="#F87171" />
+                       Foreground="{StaticResource ErrorBrush}" />
 
-            <Border Background="#1F1414"
-                    BorderBrush="#7F1D1D"
+            <Border Background="{StaticResource SurfaceRaisedBrush}"
+                    BorderBrush="{StaticResource ErrorBrush}"
                     BorderThickness="1"
-                    CornerRadius="4"
+                    CornerRadius="10"
                     Padding="16">
                 <TextBlock Text="{Binding ErrorMessage}"
                            TextWrapping="Wrap"
@@ -148,19 +152,11 @@
                            FontSize="12" />
             </Border>
 
-            <Button Content="Home"
-                    Command="{Binding HomeCommand}"
+            <Button Content="Done"
+                    Command="{Binding DoneCommand}"
                     HorizontalAlignment="Left"
                     Padding="20,8" />
         </StackPanel>
-
-        <!-- Log panel -->
-        <Border Grid.Row="2"
-                Height="200"
-                Margin="0,16,0,0"
-                IsVisible="{Binding !IsConfiguring}">
-            <controls:LogView DataContext="{Binding Log}" />
-        </Border>
 
     </Grid>
 </UserControl>
