@@ -1,7 +1,7 @@
 # Firelink — Документация проекта
 
-**Версия документа:** 4.6
-**Обновлено:** 2026-09-24
+**Версия документа:** 4.7
+**Обновлено:** 2026-09-25
 
 ## Оглавление
 
@@ -366,6 +366,68 @@ App.BuildServices() (в Firelink.Gui) дополнительно регистр�
 - IScreenFactory → ScreenFactory.
 - MainWindowVM.
 
+### Фаза 3.9 — редизайн
+
+**Цель:** тёмная тема с тёплым песочным акцентом (#d3b181),
+чистый монохромный UI, иконки Lucide.
+
+**Палитра** (в `App.axaml` → `Application.Resources`):
+
+| Токен | Hex | Назначение |
+|---|---|---|
+| `SurfaceBase` | `#1e1e1e` | Фон окна, sidebar |
+| `SurfaceRaised` | `#242424` | Карточки, поля ввода |
+| `SurfaceOverlay` | `#2a2a2a` | Активный пункт nav, кнопки секондари |
+| `SurfaceHover` | `#2f2f2f` | Hover на интерактиве |
+| `BorderSubtle` | `#333333` | Тонкие рамки, разделители |
+| `BorderStrong` | `#3f3f3f` | Рамки полей, кнопок секондари |
+| `TextPrimary` | `#e8e8e8` | Основной текст |
+| `TextSecondary` | `#a0a0a0` | Подписи, meta |
+| `TextMuted` | `#6a6a6a` | Совсем приглушённый |
+| `Accent` | `#d3b181` | Тёплый песочный акцент |
+| `AccentHover` | `#e0c090` | Наведение |
+| `AccentPressed` | `#b89868` | Нажатие |
+| `AccentMuted` | `#4a3e2a` | Приглушённый (selection) |
+| `Success` | `#7fc98a` | «All checks passed», success |
+| `Error` | `#d97777` | Ошибки |
+| `Warning` | `#d3b181` | Синоним Accent |
+
+**Тема:** только тёмная (`RequestedThemeVariant="Dark"`).
+Светлой темы нет.
+
+**Шрифт:** Inter (из `Avalonia.Fonts.Inter`). Serif не используется.
+
+**Классы `TextBlock`:** `.h1`, `.h2`, `.subtitle`, `.caption`,
+`.muted` — заданы в `App.axaml` через `<Style Selector>`.
+
+**Кнопки:** базовый `Button` — секондари (фон `SurfaceOverlay`,
+рамка `BorderStrong`, `CornerRadius=8`); `Button.accent` —
+акцентная (фон `Accent`, текст `SurfaceBase`).
+
+**Иконки:** Lucide-стиль, SVG-пути в `ScreenIconConverter`
+(`Firelink.Gui/Converters/`). Конвертер `public sealed`
+(иначе XAML-компилятор Avalonia не может создать экземпляр).
+
+**Экраны:**
+
+- **Home** — приветствие, см. 3.9.7 (обсуждается).
+- **Install / Pack / Verify** — стилизованы под палитру,
+  хардкод-цвета убраны. Кнопка `Home` → `Done`
+  (сбрасывает state в Configuration).
+- **Logs** (`ScreenType.Logs`, `LogsVM`, `LogsView`) — отдельный
+  экран, `LogView` на всю высоту. Из Home/Install/Pack/Verify
+  `LogView` убран.
+- **Settings** (`ScreenType.Settings`, `SettingsVM`, `SettingsView`) —
+  About (Name/Version/License) + копирайт
+  `Firelink v0.1.0 · AGPL-3.0-or-later · Copyright (C) 2026 omen`.
+
+**Автоочистка лога убрана.** `Log.Clear()` в начале
+`InstallAsync`/`PackAsync`/`VerifyAsync` удалён. История
+логов копится; `LogView.ClearCommand` чистит вручную.
+
+**`VerifyVM` и `VerifyRowVM`** возвращают цвета из палитры
+(`#7fc98a` / `#d97777`).
+
 ### Версия приложения
 
 Единый источник правды — `Directory.Build.props` в корне репо
@@ -425,8 +487,25 @@ IFilePickerService).
 ☑ 3.5 — экран Pack (+ Firelink.Gui.Pack).
 ☑ 3.5.1 — потокобезопасный лог-канал (IUiDispatcher).
 ☑ 3.6 — экран Verify (+ Firelink.Gui.Verify).
-□ 3.7 — дистрибутив.
-□ 3.8 — ручной прогон.
+☑ 3.7 — дистрибутив (Directory.Build.props, иконка GUI,
+  версия CLI из assembly, build-release.bat).
+☑ 3.8 — ручной прогон GUI на OmenRim 7 / OmenTest7
+  (pack/install/verify, 4522 passed).
+
+### Фаза 3.9 — редизайн GUI
+
+☑ 3.9.1 — палитра и типографика.
+☑ 3.9.2 — стили базовых контролов.
+☑ 3.9.3 — NavigationView v2 (без шапки/глоу/гамбургера;
+  иконки Lucide).
+☑ 3.9.3.3 — Settings: ScreenType.Settings, SettingsVM,
+  SettingsView.
+☑ 3.9.4 — Logs в отдельной вкладке, перекраска LogView,
+  удаление автоочистки.
+☑ 3.9.5 — FilePickerView v2.
+☑ 3.9.6 — Pack/Install/Verify: хардкод-цвета убраны,
+  Home → Done.
+□ 3.9.7 — HomeView v2 (обсуждается).
 
 ### Фабрики Input
 
@@ -1579,8 +1658,8 @@ v1.0.0
 
 ## Статус реализации
 
-**Обновлено:** 2026-09-23
-**Версия документа:** 4.4
+**Обновлено:** 2026-09-25
+**Версия документа:** 4.7
 
 ### Готово
 
@@ -1607,7 +1686,7 @@ v1.0.0
     потокобезопасный `ObservableLogSink`.
   - 3.6 — `VerifyVM`, `VerifyView`, `VerifyRowVM`,
     `IVerifyRunner`, `VerifyRunner`, проект `Firelink.Gui.Verify`.
-  - 3.7 — `Directory.Build.props` (VersionPrefix 0.1.0,
+   - 3.7 — `Directory.Build.props` (VersionPrefix 0.1.0,
     IncludeSourceRevisionInInformationalVersion=false),
     иконка GUI (`Assets\app.ico` + `<ApplicationIcon>`),
     версия CLI из assembly (`GetApplicationVersion()`),
@@ -1617,11 +1696,24 @@ v1.0.0
     pack (71 mods, 7853 files, 4389 directives), install
     (71 created, 58 downloaded, 71 meta.ini), verify
     (**4522 passed, 0 failed**).
-- **759 тестов, все проходят.**
+- **Фаза 3.9 — редизайн GUI (шаги 3.9.1–3.9.6):**
+  - 3.9.1 — палитра и типографика (App.axaml).
+  - 3.9.2 — стили базовых контролов (Button, CheckBox,
+    ListBox, ScrollBar, ProgressBar, TextBlock-классы).
+  - 3.9.3 — NavigationView v2 (без шапки/глоу/гамбургера;
+    иконки Lucide).
+  - 3.9.3.3 — Settings (ScreenType.Settings, SettingsVM,
+    SettingsView) + 5 тестов.
+  - 3.9.4 — Logs в отдельной вкладке, перекраска LogView
+    и LogLevelToBrushConverter, удаление автоочистки.
+  - 3.9.5 — FilePickerView v2 (палитра + TextBox-стили).
+  - 3.9.6 — Pack/Install/Verify: хардкод-цвета убраны,
+    Home → Done.
+- **766 тестов, все проходят.**
 
 ### В работе
 
-- — (Фаза 3 закрыта полностью: 3.1–3.8)
+- Фаза 3.9, шаг 3.9.7 (HomeView v2) — обсуждается.
 
 ### Ключевые решения
 
@@ -1670,6 +1762,32 @@ v1.0.0
   чекбокс «Show all checks» заменяет CLI-флаг `--verbose`**
   (решение №187).
 - **Плейсхолдеров GUI больше нет** — все 4 экрана реальные.
+- **Палитра Firelink в `Application.Resources` (App.axaml).**
+  Тёмный фон `#1e1e1e` + тёплый песочный акцент `#d3b181`.
+  Все цвета — через `{StaticResource XxxBrush}`; хардкод-hex
+  в `*View.axaml` запрещён (кроме `App.axaml`).
+- **Только тёмная тема** (`RequestedThemeVariant="Dark"`).
+- **Шрифт Inter.** Serif не используется.
+- **`ScreenIconConverter` — `public sealed`.** XAML-компилятор
+  Avalonia создаёт экземпляр конвертера в сгенерированной сборке;
+  `internal` не работает.
+- **`BoxShadow` в Avalonia — 5 токенов:**
+  `OffsetX OffsetY Blur Spread Color`. `{StaticResource}` внутри
+  строки `BoxShadow` не раскрывается — только hex.
+- **У `Grid` нет `RowSpacing`/`ColumnSpacing`.** Используем
+  `StackPanel.Spacing` или `Margin`.
+- **`Button.Home` → `Button.Done` в Pack/Install/Verify.**
+  `Done()` сбрасывает state; пикеры не сбрасываются.
+  `INavigationAware.SetNavigateHome` — заглушка для совместимости.
+- **Автоочистка лога убрана.** `Log.Clear()` из
+  `InstallAsync`/`PackAsync`/`VerifyAsync` удалён.
+- **Logs — отдельный экран** (`ScreenType.Logs`, `LogsVM`,
+  `LogsView`); `LogView` из Home/Install/Pack/Verify убран.
+- **Settings — отдельный экран** (`ScreenType.Settings`,
+  `SettingsVM`, `SettingsView`); копирайт
+  `Firelink v0.1.0 · AGPL-3.0-or-later · Copyright (C) 2026 omen`.
+- **Sidebar без шапки.** Логотип и гамбургер убраны —
+  потенциальный функционал переехал в Settings.
 - **Версия — в `Directory.Build.props`**
   (`<VersionPrefix>0.1.0</VersionPrefix>`), единый источник
   правды. CLI читает `InformationalVersion` из entry assembly.

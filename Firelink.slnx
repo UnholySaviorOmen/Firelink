@@ -28,5 +28,6 @@
   <Folder Name="/Элементы решения/">
     <File Path="DOC.md" />
     <File Path="FIRELINK.md" />
+    <File Path="STATUS.md" />
   </Folder>
 </Solution>

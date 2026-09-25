@@ -1,9 +1,9 @@
 # Firelink — состояние проекта и план работ
 
-**Обновлено:** 2026-09-24
-**Всего тестов:** 759, 0 failed
-**Текущий блок:** — (Фаза 3, шаги 3.1–3.7 закрыты)
-**Следующий блок:** Фаза 3 — шаг 3.8 (ручной прогон GUI на TestInstance5)
+**Обновлено:** 2026-09-25
+**Всего тестов:** 766, 0 failed
+**Текущий блок:** — (Фаза 3 закрыта: шаги 3.1–3.8; идёт Фаза 3.9 — редизайн GUI, шаги 3.9.1–3.9.6 закрыты, 3.9.7 в обсуждении)
+**Следующий блок:** Фаза 3.9 — шаг 3.9.7 (HomeView v2 / решение: что делать с Home)
 
 **Спутние документы:**
 - `DOC.md` (v4.4) — формальная документация: форматы, pipeline, CLI, обработка ошибок.
@@ -40,10 +40,11 @@ Firelink — инструмент для создания и установки 
 
 Прикладываю: FIRELINK.md, DOC.md (v4.5), repo-dump.md (свежий).
 
-Текущее состояние: 759 тестов, 0 failed. Закрыты: MVP (packer,
+Текущее состояние: 766 тестов, 0 failed. Закрыты: MVP (packer,
 installer, verify), Фаза 1 (единый CLI Firelink.Cli),
-Фаза 2 (общие API для GUI), Фаза 6 (Nexus Premium), а также
-Фаза 3 — шаги 3.1–3.7:
+Фаза 2 (общие API для GUI), Фаза 6 (Nexus Premium),
+Фаза 3 (GUI, шаги 3.1–3.8), а также начата Фаза 3.9
+(редизайн GUI, шаги 3.9.1–3.9.6):
 
 3.1 — проекты GUI + DI + базовые VM (LoadingLock,
 FilePickerVM, ProgressViewModel, ObservableLoggerProvider).
@@ -82,7 +83,40 @@ tools/build-release.bat (publish GUI+CLI в одну папку,
 win-x64, framework-dependent, Compress-Archive → zip).
 Тестов не добавляли — 759 passed сохраняется.
 
-Следующая задача: Фаза 3 — шаг 3.8 (ручной прогон GUI на TestInstance5).
+3.8 — ручной прогон GUI на OmenRim 7 / OmenTest7:
+pack (71 mods, 7853 files, 4389 directives), install (71 created,
+58 downloaded, 71 meta.ini), verify (4522 passed, 0 failed).
+GUI функционально эквивалентен CLI.
+
+Фаза 3.9 — редизайн GUI (тёмная тема, тёплый песочный акцент
+#d3b181, палитра #1e1e1e, иконки Lucide). Закрыты:
+
+3.9.1 — палитра и типографика в App.axaml (Color- и SolidColorBrush-
+токены, RequestedThemeVariant=Dark).
+3.9.2 — стили базовых контролов (Window, TextBlock + классы h1/h2/
+subtitle/caption/muted, Button + .accent, CheckBox, ListBox/ListBoxItem,
+ScrollBar, ProgressBar).
+3.9.3 — NavigationView v2: убрали шапку с иконкой и гамбургером;
+список навигации + glow-акцент убран (артефакты), фон карточки
+у активного, иконки Lucide для Home/Install/Pack/Verify;
+копирайт вынесен в Settings.
+3.9.3.3 — Settings: новый ScreenType.Settings, SettingsVM,
+SettingsView (About + версия + копирайт + license + placeholder).
+3.9.5 — FilePickerView v2 (замена хардкод-цветов #0B1116/#2A3742
+на токены палитры; TextBox-стили добавлены профилактически).
+3.9.4 — Logs в отдельной вкладке: ScreenType.Logs, LogsVM,
+LogsView, перекраска LogView + LogLevelToBrushConverter;
+убрали LogView из Home/Install/Pack/Verify; убрали Log.Clear()
+из InstallVM/PackVM/VerifyVM (история копится, чистится вручную).
+3.9.6 — Pack/Install/Verify: убрали хардкод-цвета (#4ADE80, #F87171,
+#FBBF24, #0B1116, #2A3742, #1F1414, #7F1D1D); кнопка Home → Done
+(сбрасывает state в Configuration, пикеры не сбрасываются);
+ResultColor/StatusColor в VerifyVM/VerifyRowVM → #7fc98a/#d97777.
+
+Следующая задача: Фаза 3.9 — шаг 3.9.7 (HomeView v2). Обсуждается
+вариант: Home без дублирующих карточек-навигации (В1 — приветствие
+с текстом «как начать»; В2 — убрать Home вообще; В3 — виджеты
+«last operation», «Nexus status»). Ожидается решение.
 
 Стиль ответов:
 
@@ -206,11 +240,22 @@ FIRELINK.md — только по запросу.
     иконка GUI, версия CLI из assembly, tools/build-release.bat.
     Итог: 759 passed (тестов не добавляли — шаг чисто
     инфраструктурный).
+  - 3.8 — ручной прогон GUI на OmenRim 7 / OmenTest7:
+    pack/install/verify через GUI, 4522 passed, 0 failed.
+    Итог: 759 passed.
+  - 3.9.1 — палитра и типографика. Итог: 759 passed.
+  - 3.9.2 — стили базовых контролов. Итог: 759 passed.
+  - 3.9.3 / 3.9.3.2 / 3.9.3.3 — NavigationView v2 (без шапки,
+    без глоу), Settings. Итог: 764 passed (+5 SettingsVMTests).
+  - 3.9.4 — Logs в отдельной вкладке + перекраска LogView.
+    Итог: 764 passed (без изменений счётчика; 4 теста переписаны).
+  - 3.9.5 — FilePickerView v2. Итог: 764 passed.
+  - 3.9.6 — Pack/Install/Verify: убрали хардкод-цвета, Home → Done.
+    Итог: 764 passed.
 
 ### В работе
 
-- Фаза 3 — GUI. Шаг 3.8 (ручной прогон GUI на TestInstance5) —
-  впереди.
+- Фаза 3.9 — редизайн GUI. Шаг 3.9.7 (HomeView v2) — обсуждается.
 
 ### Не начато
 
@@ -795,6 +840,96 @@ ViewLocator:
      Раскладка дистрибутива — «как есть» (≈90 файлов,
      `lib/`-схема сознательно не делается).
 
+### Фаза 3 — редизайн GUI (192–207)
+
+192. **Палитра Firelink в `Application.Resources` (App.axaml).**
+     Нейтральный тёмный фон + тёплый песочный акцент. `Color` и
+     `SolidColorBrush`-токены. Использование: `{StaticResource
+     XxxBrush}` для фонов/текста/рамок, `{StaticResource XxxColor}`
+     внутри градиентов и структур.
+     Токены: SurfaceBase `#1e1e1e`, SurfaceRaised `#242424`,
+     SurfaceOverlay `#2a2a2a`, SurfaceHover `#2f2f2f`,
+     BorderSubtle `#333333`, BorderStrong `#3f3f3f`,
+     TextPrimary `#e8e8e8`, TextSecondary `#a0a0a0`,
+     TextMuted `#6a6a6a`, Accent `#d3b181`, AccentHover `#e0c090`,
+     AccentPressed `#b89868`, AccentMuted `#4a3e2a`,
+     Success `#7fc98a`, Error `#d97777`, Warning `#d3b181`.
+
+193. **Только тёмная тема.** `RequestedThemeVariant="Dark"` жёстко.
+     Светлой темы нет (сознательно). Переключателя нет.
+
+194. **Шрифт Inter.** Без serif. `WithInterFont()` уже подключён;
+     `FontFamily` в стилях не задаём (Inter — дефолт).
+
+195. **Классы `TextBlock`: `.h1`, `.h2`, `.subtitle`, `.caption`,
+     `.muted`.** Глобальные стили `TextBlock` дают базовый
+     `TextPrimary` + `FontSizeBody`; классы переопределяют
+     размер/вес/цвет.
+
+196. **`Button` — секондари (без класса) + `.accent`.**
+     Секондари: фон SurfaceOverlay, рамка BorderStrong,
+     CornerRadius 8, паддинг 16,8. Accent: фон Accent, текст
+     SurfaceBase (тёмный). Hover/pressed — через
+     `/template/ ContentPresenter#PART_ContentPresenter`.
+     `Cursor="Hand"` в стилях **не ставим** — падает
+     при загрузке `App.axaml`.
+
+197. **`BoxShadow` в Avalonia — 5 токенов:**
+     `OffsetX OffsetY Blur Spread Color`. Лишние токены → `FormatException`.
+     `{StaticResource}` внутри строки `BoxShadow` **не раскрывается** —
+     цвет задаётся hex'ом.
+
+198. **У `Grid` нет `RowSpacing`/`ColumnSpacing`.** (Это WPF/MAUI-
+     наследие.) Используем `StackPanel.Spacing` или `Margin`-ы.
+
+199. **`ScreenIconConverter` — `public sealed`.** XAML-компилятор
+     Avalonia создаёт экземпляр конвертера в сгенерированной
+     сборке; `internal` не работает без `InternalsVisibleTo`
+     на динамическую XAML-сборку.
+
+200. **`FilePickerView` — не TextBox.** Поле пути — `Border` +
+     `TextBlock`. Стилизовано в палитре; хардкод `#0B1116`/`#2A3742`
+     убран.
+
+201. **Кнопка `Home` в Pack/Install/Verify заменена на `Done`.**
+     `Done()` сбрасывает `State = Configuration`, обнуляет
+     `Summary`/`Report`/`ErrorMessage`; в Verify дополнительно
+     `Rows.Clear()`. Пикеры **не** сбрасываются.
+     `INavigationAware.SetNavigateHome` остаётся реализацией-
+     заглушкой (совместимость с `MainWindowVM`).
+
+202. **Автоочистка лога убрана.** `Log.Clear()` в начале
+     `InstallAsync`/`PackAsync`/`VerifyAsync` удалён. История
+     логов копится; пользователь чистит вручную через кнопку
+     `Clear` в `LogView`.
+
+203. **Logs — отдельный экран** (`ScreenType.Logs`,
+     `LogsVM`, `LogsView`). Из Home/Install/Pack/Verify
+     `LogView` убран. `LogVM` и `ObservableLogSink` —
+     singleton, все экраны смотрят на один лог.
+
+204. **Settings — отдельный экран** (`ScreenType.Settings`,
+     `SettingsVM`, `SettingsView`). Содержит About (Name/Version/
+     License) и копирайт-строку: `Firelink v0.1.0 · AGPL-3.0-or-later
+     · Copyright (C) 2026 omen`. Версия — из `AssemblyInformationalVersion`
+     entry assembly, как в CLI.
+
+205. **Хардкод-цвета в `*View.axaml` отсутствуют.** Все цвета —
+     через `{StaticResource XxxBrush}` из палитры. Grep по
+     `#[0-9A-Fa-f]{6}` в `src/Firelink.Gui*/**/*.axaml` — пусто
+     (кроме `App.axaml`).
+     `VerifyVM.ResultColor` и `VerifyRowVM.StatusColor` — тоже
+     из палитры (`#7fc98a`/`#d97777`).
+
+206. **Sidebar без шапки.** Логотип и версия приложения в sidebar
+     отсутствуют — переехали в Settings. Sidebar содержит только
+     `ListBox` навигации. Гамбургер-кнопки нет.
+
+207. **Навигация между экранами — через sidebar.** Никаких
+     карточек-«плиток» на Home, дублирующих sidebar.
+     (См. обсуждение 3.9.7 — возможно, Home без карточек вообще,
+     или другой дизайн.)
+
 ---
 
 ## План работ
@@ -961,9 +1096,39 @@ src/
     `lib/` не делаем — см. решение №191).
   - Тестов не добавляли — 759 passed.
 
-- ⬜ **3.8** — ручной прогон:
-  - Сравнить GUI-результат с CLI на TestInstance5.
-  - Проверить pack, install, verify через GUI.
+- ✅ **3.8** — ручной прогон:
+  - GUI-прогон pack/install/verify на OmenRim 7 / OmenTest7.
+  - Pack: 71 mods, 7853 files, 4389 directives, 58 archives.
+  - Install: 71 created, 58 downloaded, 71 meta.ini.
+  - Verify: 4522 passed, 0 failed.
+  - Итог: 759 passed.
+
+### Фаза 3.9 — редизайн GUI (закрыта частично)
+
+**Цель:** тёмная тема с тёплым песочным акцентом (#d3b181),
+чистый монохромный UI, иконки Lucide, отказ от хардкод-цветов.
+
+**Статус:** шаги 3.9.1–3.9.6 закрыты. Шаг 3.9.7 (HomeView v2)
+в обсуждении.
+
+- ✅ **3.9.1** — палитра и типографика (`App.axaml`,
+  `Application.Resources`).
+- ✅ **3.9.2** — стили базовых контролов (`Button`, `CheckBox`,
+  `ListBox`, `ScrollBar`, `ProgressBar`, `TextBlock`-классы).
+- ✅ **3.9.3** — NavigationView v2 (без шапки/глоу/гамбургера;
+  список навигации; иконки Lucide).
+- ✅ **3.9.3.3** — Settings: `ScreenType.Settings`, `SettingsVM`,
+  `SettingsView` (+5 тестов). Итог: 764 passed.
+- ✅ **3.9.4** — Logs в отдельной вкладке, перекраска LogView
+  и LogLevelToBrushConverter, убрана автоочистка лога.
+- ✅ **3.9.5** — FilePickerView v2 (палитра, TextBox-стили
+  профилактически).
+- ✅ **3.9.6** — Pack/Install/Verify: убраны хардкод-цвета,
+  Home → Done.
+- ⬜ **3.9.7** — HomeView v2. Обсуждается:
+  - В1 — Home без карточек, приветствие с текстом «как начать».
+  - В2 — убрать Home вообще.
+  - В3 — Home с виджетами («last operation», «Nexus status»).
 
 ---
 
@@ -1242,6 +1407,9 @@ Async, отмена пробрасывается как есть
 ## Технический долг
 
 - Persist кеша хешей в SQLite (v0.2.0).
+- Убрать `INavigationAware.SetNavigateHome` — после перехода на
+  кнопку `Done` в Pack/Install/Verify метод не используется,
+  остаётся только для совместимости.
 - Глобальный реестр `archives.db` — v0.2.0.
 - Прогресс-бар Spectre — v0.2.0.
 - File-logging — v0.3.0.
@@ -1319,3 +1487,15 @@ Premium API, включая USSEP (~250 МБ). CDN-запросы идут че�
 - Версия CLI читается из assembly.
 - Тестов не добавляли: 759 passed.
 - Раскладка дистрибутива — «как есть» (без `lib/`).
+- **2026-09-25** — Фаза 3, шаг 3.8 закрыт (ручной прогон
+  GUI на OmenRim 7 / OmenTest7, 4522 passed).
+- **2026-09-25** — Фаза 3.9, шаги 3.9.1–3.9.6 закрыты
+  (редизайн GUI: тёмная тема, палитра #1e1e1e + #d3b181,
+  иконки Lucide, Logs и Settings в отдельных вкладках,
+  Home → Done, удалены хардкод-цвета).
+- Добавлены решения 192–207.
+- Тесты: 759 → 766 (+5 SettingsVMTests, +2 HomeVMTests
+  в обсуждении 3.9.7).
+- Шаг 3.9.7 (HomeView v2) — в обсуждении.
+
+---
