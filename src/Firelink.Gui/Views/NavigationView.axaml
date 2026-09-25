@@ -10,7 +10,7 @@
     </UserControl.Resources>
 
     <Grid RowDefinitions="*,Auto"
-          Background="{StaticResource SurfaceBaseBrush}">
+          Background="{StaticResource SurfaceSidebarBrush}">
 
         <!-- ============================================================
          Навигация
@@ -20,7 +20,7 @@
                  SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
                  Background="Transparent"
                  BorderThickness="0"
-                 Margin="12,20,12,0"
+                 Margin="12,8,12,0"
                  Padding="0">
             <ListBox.ItemContainerTheme>
                 <ControlTheme TargetType="ListBoxItem"

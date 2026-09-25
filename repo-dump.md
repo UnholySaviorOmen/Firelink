@@ -1,7 +1,7 @@
 # Firelink -- repo dump
 
-**Generated:** 24.09.2026  0:31:15,81
-**Root:** C:\Code\Firelink
+**Generated:** 25.09.2026 10:14:00,81
+**Root:** D:\Code\repos\Firelink
 
 ---
 
@@ -92,6 +92,64 @@ firelink-*.log
 # (раскомментируйте, если инстанс лежит рядом с репо)
 # Firelink/
 # OmenRim 7/
+````
+
+## samples/firelink-pack.back.json
+
+````json
+{
+  "meta": {
+    "name": "OmenRim 7",
+    "version": "0.1.0",
+    "author": "YourName",
+    "game": "skyrimspecialedition",
+    "gameVersion": "1.6.1170"
+  },
+  "instance": {
+    "path": "."
+  },
+  "mo2": {
+    "version": "2.5.2",
+    "profile": "Default",
+    "archive": "Mod.Organizer-2.5.2.7z",
+    "source": {
+      "type": "mirror",
+      "url": "https://github.com/ModOrganizer2/modorganizer/releases/download/v2.5.2/Mod.Organizer-2.5.2.7z",
+      "hash": "xxh64:E574E05EB6C470AD"
+    },
+	  "extensions": [
+		"plugins/curationclub"
+	]
+  },
+  "stockGame": {
+	"extras": [
+    "skse64_loader.exe",
+    "skse64_1_7_104.dll"
+	]
+  },
+  "archiveSources": [
+    {
+      "archive": "Effect 11-415-1.0.0-2026.08.24-[mod.pub].zip",
+      "sources": [
+        {
+          "type": "mirror",
+          "url": "https://mod.pub/skyrim-se/415/files/Effect-11-415-1.0.0-2026.08.24-[mod.pub].zip",
+          "hash": "xxh64:B48AA9BEA422799E"
+        }
+      ]
+    },
+    {
+      "archive": "NAT.ENB - ENB PRESET v3.1.1C-27141-3-1-1C-1685129135.zip",
+      "sources": [
+        {
+          "type": "mirror",
+          "url": "https://mod.pub/skyrim-se/415/files/NAT.ENB-ENB-PRESET-v3-1-1C-27141-3-1-1C-1685129135.zip",
+          "hash": "xxh64:763D3DB4CD3ED579"
+        }
+      ]
+    }
+  ]
+}
 ````
 
 ## samples/firelink-pack.full.json
@@ -260,6 +318,43 @@ firelink-*.log
 }
 ````
 
+## samples/firelink-pack.json
+
+````json
+{
+  "meta": {
+    "name": "OmenRim 7",
+    "version": "0.1.0",
+    "author": "YourName",
+    "game": "skyrimspecialedition",
+    "gameVersion": "1.6.1170"
+  },
+  "instance": {
+    "path": "."
+  },
+  "mo2": {
+    "version": "2.5.2",
+    "profile": "Default",
+    "archive": "Mod.Organizer-2.5.2.7z",
+    "source": {
+      "type": "mirror",
+      "url": "https://github.com/ModOrganizer2/modorganizer/releases/download/v2.5.2/Mod.Organizer-2.5.2.7z",
+      "hash": "xxh64:E574E05EB6C470AD"
+    },
+	  "extensions": [
+		"plugins/curationclub"
+	]
+  },
+  "stockGame": {
+	"extras": [
+    "skse64_loader.exe",
+    "skse64_1_7_104.dll"
+	]
+  },
+  "archiveSources": []
+}
+````
+
 ## samples/firelink-pack.minimal.json
 
 ````json
@@ -295,6 +390,7 @@ firelink-*.log
 ## src/Firelink.Cli/Program.cs
 
 ````csharp
+using System.Reflection;
 using Firelink.Core;
 using Firelink.Cli.Commands;
 using Firelink.Cli.Infrastructure;
@@ -337,7 +433,7 @@ var app = new CommandApp(registrar);
 app.Configure(config =>
 {
     config.SetApplicationName("firelink");
-    config.SetApplicationVersion("0.1.0");
+    config.SetApplicationVersion(GetApplicationVersion());
 
     // Spectre по умолчанию сам обрабатывает CommandParseException и печатает
     // красиво отформатированное сообщение, но без нашего hint про кавычки.
@@ -400,6 +496,37 @@ catch (Exception ex)
     if (ex.InnerException is not null)
         AnsiConsole.MarkupLine($"[red]  →[/] {ex.InnerException.Message}");
     return 2;
+}
+
+// ---------------------------------------------------------------------
+//  Helpers
+// ---------------------------------------------------------------------
+
+/// <summary>
+/// Версия из entry assembly. Значение приходит из Directory.Build.props
+/// (VersionPrefix) через AssemblyInformationalVersionAttribute.
+///
+/// Fallback "0.0.0" — только если атрибута нет вообще (теоретически
+/// невозможно при GenerateAssemblyInfo=true, который .NET SDK ставит
+/// по умолчанию).
+/// </summary>
+static string GetApplicationVersion()
+{
+    var informational = typeof(Program).Assembly
+        .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+        ?.InformationalVersion;
+
+    if (!string.IsNullOrWhiteSpace(informational))
+    {
+        // На случай, если SourceRevisionId всё-таки просочится
+        // (IncludeSourceRevisionInInformationalVersion=false стоит
+        // в Directory.Build.props, но подстрахуемся): "0.1.0+abc123"
+        // → "0.1.0".
+        var plus = informational.IndexOf('+');
+        return plus >= 0 ? informational[..plus] : informational;
+    }
+
+    return "0.0.0";
 }
 
 ````
@@ -3434,10 +3561,269 @@ public sealed class ValidationResult
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="Firelink.Gui.App"
-             RequestedThemeVariant="Default">
-  <Application.Styles>
-    <FluentTheme />
-  </Application.Styles>
+             RequestedThemeVariant="Dark">
+
+    <Application.Resources>
+        <ResourceDictionary>
+
+            <!-- ============================================================
+           Палитра Firelink. Тёплый песочный акцент на нейтральном
+           тёмном фоне. Все цвета — единый источник правды.
+           ============================================================ -->
+
+            <!-- Base surfaces -->
+            <Color x:Key="SurfaceBaseColor">#1e1e1e</Color>
+            <Color x:Key="SurfaceSidebarColor">#181818</Color>
+            <Color x:Key="SurfaceRaisedColor">#242424</Color>
+            <Color x:Key="SurfaceOverlayColor">#2a2a2a</Color>
+            <Color x:Key="SurfaceHoverColor">#2f2f2f</Color>
+
+            <SolidColorBrush x:Key="SurfaceBaseBrush"    Color="{StaticResource SurfaceBaseColor}" />
+            <SolidColorBrush x:Key="SurfaceSidebarBrush" Color="{StaticResource SurfaceSidebarColor}" />
+            <SolidColorBrush x:Key="SurfaceRaisedBrush"  Color="{StaticResource SurfaceRaisedColor}" />
+            <SolidColorBrush x:Key="SurfaceOverlayBrush" Color="{StaticResource SurfaceOverlayColor}" />
+            <SolidColorBrush x:Key="SurfaceHoverBrush"   Color="{StaticResource SurfaceHoverColor}" />
+
+            <!-- Borders -->
+            <Color x:Key="BorderSubtleColor">#333333</Color>
+            <Color x:Key="BorderStrongColor">#3f3f3f</Color>
+
+            <SolidColorBrush x:Key="BorderSubtleBrush" Color="{StaticResource BorderSubtleColor}" />
+            <SolidColorBrush x:Key="BorderStrongBrush" Color="{StaticResource BorderStrongColor}" />
+
+            <!-- Text -->
+            <Color x:Key="TextPrimaryColor">#e8e8e8</Color>
+            <Color x:Key="TextSecondaryColor">#a0a0a0</Color>
+            <Color x:Key="TextMutedColor">#6a6a6a</Color>
+
+            <SolidColorBrush x:Key="TextPrimaryBrush"   Color="{StaticResource TextPrimaryColor}" />
+            <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource TextSecondaryColor}" />
+            <SolidColorBrush x:Key="TextMutedBrush"     Color="{StaticResource TextMutedColor}" />
+
+            <!-- Accent -->
+            <Color x:Key="AccentColor">#d3b181</Color>
+            <Color x:Key="AccentHoverColor">#e0c090</Color>
+            <Color x:Key="AccentPressedColor">#b89868</Color>
+            <Color x:Key="AccentMutedColor">#4a3e2a</Color>
+
+            <SolidColorBrush x:Key="AccentBrush"        Color="{StaticResource AccentColor}" />
+            <SolidColorBrush x:Key="AccentHoverBrush"   Color="{StaticResource AccentHoverColor}" />
+            <SolidColorBrush x:Key="AccentPressedBrush" Color="{StaticResource AccentPressedColor}" />
+            <SolidColorBrush x:Key="AccentMutedBrush"   Color="{StaticResource AccentMutedColor}" />
+
+            <!-- Semantic -->
+            <Color x:Key="SuccessColor">#7fc98a</Color>
+            <Color x:Key="ErrorColor">#d97777</Color>
+            <Color x:Key="WarningColor">#d3b181</Color>
+
+            <SolidColorBrush x:Key="SuccessBrush" Color="{StaticResource SuccessColor}" />
+            <SolidColorBrush x:Key="ErrorBrush"   Color="{StaticResource ErrorColor}" />
+            <SolidColorBrush x:Key="WarningBrush" Color="{StaticResource WarningColor}" />
+
+            <!-- Типографика -->
+            <x:Double x:Key="FontSizeCaption">11</x:Double>
+            <x:Double x:Key="FontSizeSmall">12</x:Double>
+            <x:Double x:Key="FontSizeBody">13</x:Double>
+            <x:Double x:Key="FontSizeSubtitle">14</x:Double>
+            <x:Double x:Key="FontSizeTitle">24</x:Double>
+            <x:Double x:Key="FontSizeDisplay">30</x:Double>
+
+        </ResourceDictionary>
+    </Application.Resources>
+
+    <Application.Styles>
+        <FluentTheme />
+
+        <!-- ============================================================
+         Window
+         ============================================================ -->
+        <Style Selector="Window">
+            <Setter Property="Background" Value="{StaticResource SurfaceBaseBrush}" />
+        </Style>
+
+        <!-- ============================================================
+         TextBlock — базовый + классы
+         ============================================================ -->
+        <Style Selector="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="FontSize"   Value="{StaticResource FontSizeBody}" />
+        </Style>
+
+        <Style Selector="TextBlock.h1">
+            <Setter Property="FontSize"   Value="{StaticResource FontSizeDisplay}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+        </Style>
+
+        <Style Selector="TextBlock.h2">
+            <Setter Property="FontSize"   Value="{StaticResource FontSizeTitle}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+        </Style>
+
+        <Style Selector="TextBlock.subtitle">
+            <Setter Property="FontSize"   Value="{StaticResource FontSizeSubtitle}" />
+            <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+        </Style>
+
+        <Style Selector="TextBlock.caption">
+            <Setter Property="FontSize"   Value="{StaticResource FontSizeSmall}" />
+            <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+        </Style>
+
+        <Style Selector="TextBlock.muted">
+            <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}" />
+        </Style>
+
+        <!-- ============================================================
+         Button — секондари (без класса)
+         ============================================================ -->
+        <Style Selector="Button">
+            <Setter Property="Background"      Value="{StaticResource SurfaceOverlayBrush}" />
+            <Setter Property="Foreground"      Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="BorderBrush"     Value="{StaticResource BorderStrongBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius"    Value="8" />
+            <Setter Property="Padding"         Value="16,8" />
+            <Setter Property="FontSize"        Value="{StaticResource FontSizeBody}" />
+            <Setter Property="FontWeight"      Value="Medium" />
+        </Style>
+
+        <Style Selector="Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background"  Value="{StaticResource SurfaceHoverBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderStrongBrush}" />
+            <Setter Property="Foreground"  Value="{StaticResource TextPrimaryBrush}" />
+        </Style>
+
+        <Style Selector="Button:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource SurfaceOverlayBrush}" />
+        </Style>
+
+        <!-- Button — accent -->
+        <Style Selector="Button.accent">
+            <Setter Property="Background"  Value="{StaticResource AccentBrush}" />
+            <Setter Property="Foreground"  Value="{StaticResource SurfaceBaseBrush}" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="FontWeight"  Value="SemiBold" />
+        </Style>
+
+        <Style Selector="Button.accent:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource AccentHoverBrush}" />
+        </Style>
+
+        <Style Selector="Button.accent:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource AccentPressedBrush}" />
+        </Style>
+        
+        <!-- ============================================================
+         TextBox — используется в Settings в будущем.
+         Сейчас в проекте TextBox нет, но стили на будущее.
+         ============================================================ -->
+        <Style Selector="TextBox">
+            <Setter Property="Background"      Value="{StaticResource SurfaceRaisedBrush}" />
+            <Setter Property="Foreground"      Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="BorderBrush"     Value="{StaticResource BorderStrongBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius"    Value="8" />
+            <Setter Property="Padding"         Value="10,8" />
+            <Setter Property="MinHeight"       Value="36" />
+            <Setter Property="FontSize"        Value="{StaticResource FontSizeBody}" />
+            <Setter Property="CaretBrush"      Value="{StaticResource AccentBrush}" />
+            <Setter Property="SelectionBrush"  Value="{StaticResource AccentMutedBrush}" />
+        </Style>
+
+        <Style Selector="TextBox /template/ Border#PART_BorderElement">
+            <Setter Property="Background"      Value="{StaticResource SurfaceRaisedBrush}" />
+            <Setter Property="BorderBrush"     Value="{StaticResource BorderStrongBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius"    Value="8" />
+        </Style>
+
+        <Style Selector="TextBox:pointerover /template/ Border#PART_BorderElement">
+            <Setter Property="Background"  Value="{StaticResource SurfaceOverlayBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderStrongBrush}" />
+        </Style>
+
+        <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
+            <Setter Property="Background"  Value="{StaticResource SurfaceOverlayBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+        </Style>
+
+        <Style Selector="TextBox /template/ TextBlock#PART_Watermark">
+            <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}" />
+        </Style>
+        
+        <!-- ============================================================
+         CheckBox
+         ============================================================ -->
+        <Style Selector="CheckBox">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="FontSize"   Value="{StaticResource FontSizeBody}" />
+        </Style>
+
+        <Style Selector="CheckBox:checked /template/ Border#NormalRectangle">
+            <Setter Property="Background"  Value="{StaticResource AccentBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+        </Style>
+
+        <!-- ============================================================
+         ListBox — навигация (карточки в стиле референса)
+         ============================================================ -->
+        <Style Selector="ListBox">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+
+        <Style Selector="ListBoxItem">
+            <Setter Property="Foreground"   Value="{StaticResource TextSecondaryBrush}" />
+            <Setter Property="Padding"      Value="0" />
+            <Setter Property="CornerRadius" Value="10" />
+        </Style>
+
+        <!-- Item: selected — карточка с фоном -->
+        <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+            <Setter Property="Background"   Value="{StaticResource SurfaceOverlayBrush}" />
+            <Setter Property="CornerRadius" Value="10" />
+        </Style>
+
+        <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
+            <Setter Property="Background"   Value="{StaticResource SurfaceRaisedBrush}" />
+            <Setter Property="CornerRadius" Value="10" />
+        </Style>
+
+        <Style Selector="ListBoxItem:selected PathIcon">
+            <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+        </Style>
+
+        <Style Selector="ListBoxItem:selected TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+        </Style>
+
+        <!-- ============================================================
+         ScrollViewer
+         ============================================================ -->
+        <Style Selector="ScrollBar">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+
+        <Style Selector="ScrollBar /template/ Thumb">
+            <Setter Property="Background"   Value="{StaticResource BorderStrongBrush}" />
+            <Setter Property="CornerRadius" Value="4" />
+        </Style>
+
+        <Style Selector="ScrollBar /template/ Thumb:pointerover">
+            <Setter Property="Background" Value="{StaticResource TextMutedBrush}" />
+        </Style>
+
+        <!-- ============================================================
+         ProgressBar
+         ============================================================ -->
+        <Style Selector="ProgressBar">
+            <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+            <Setter Property="Background" Value="{StaticResource SurfaceOverlayBrush}" />
+        </Style>
+
+    </Application.Styles>
 </Application>
 
 ````
@@ -3512,6 +3898,9 @@ public partial class App : Application
         services.AddGuiPack();
         services.AddGuiVerify();
 
+        // Базовые экраны (Shared-уровень).
+        services.AddSingleton<SettingsVM>();
+
         services.AddSingleton<MainWindowVM>();
 
         return services.BuildServiceProvider();
@@ -3562,6 +3951,8 @@ public partial class MainWindow : Window
 ## src/Firelink.Gui/Program.cs
 
 ````csharp
+using System;
+using System.IO;
 using Avalonia;
 
 namespace Firelink.Gui;
@@ -3569,8 +3960,30 @@ namespace Firelink.Gui;
 internal static class Program
 {
     [STAThread]
-    public static void Main(string[] args) => BuildAvaloniaApp()
-        .StartWithClassicDesktopLifetime(args);
+    public static void Main(string[] args)
+    {
+        try
+        {
+            BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        }
+        catch (Exception ex)
+        {
+            var logPath = Path.Combine(
+                Path.GetTempPath(), "firelink-gui-crash.txt");
+
+            try
+            {
+                File.WriteAllText(logPath, ex.ToString());
+            }
+            catch
+            {
+                // Если и это не получилось — печатаем в stderr.
+                Console.Error.WriteLine(ex);
+            }
+
+            throw;
+        }
+    }
 
     public static AppBuilder BuildAvaloniaApp()
         => AppBuilder.Configure<App>()
@@ -3789,6 +4202,8 @@ internal sealed class ScreenFactory : IScreenFactory
         ScreenType.Install => _sp.GetRequiredService<InstallVM>(),
         ScreenType.Pack => _sp.GetRequiredService<PackVM>(),
         ScreenType.Verify => _sp.GetRequiredService<VerifyVM>(),
+        ScreenType.Logs => _sp.GetRequiredService<LogsVM>(),
+        ScreenType.Settings => _sp.GetRequiredService<SettingsVM>(),
         _ => _sp.GetRequiredService<HomeVM>(),
     };
 }
@@ -3801,12 +4216,10 @@ internal sealed class ScreenFactory : IScreenFactory
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Firelink.Gui.Shared.ViewModels"
-             xmlns:controls="using:Firelink.Gui.Controls.Views"
              x:Class="Firelink.Gui.Views.HomeView"
              x:DataType="vm:HomeVM">
-    <Grid RowDefinitions="Auto,*">
-        <StackPanel Grid.Row="0"
-                    VerticalAlignment="Center"
+    <Grid>
+        <StackPanel VerticalAlignment="Center"
                     HorizontalAlignment="Center"
                     Spacing="12"
                     Margin="0,60,0,30">
@@ -3819,10 +4232,6 @@ internal sealed class ScreenFactory : IScreenFactory
                        Opacity="0.7"
                        HorizontalAlignment="Center" />
         </StackPanel>
-
-        <controls:LogView Grid.Row="1"
-                          DataContext="{Binding Log}"
-                          Margin="20,0,20,20" />
     </Grid>
 </UserControl>
 
@@ -3845,28 +4254,126 @@ public partial class HomeView : UserControl
 
 ````
 
+## src/Firelink.Gui/Views/LogsView.axaml
+
+````text
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Firelink.Gui.Shared.ViewModels"
+             xmlns:controls="using:Firelink.Gui.Controls.Views"
+             x:Class="Firelink.Gui.Views.LogsView"
+             x:DataType="vm:LogsVM">
+
+  <Grid RowDefinitions="Auto,*" Margin="20">
+
+    <!-- Header -->
+    <Grid Grid.Row="0"
+          ColumnDefinitions="*,Auto"
+          Margin="0,0,0,16">
+      <TextBlock Grid.Column="0"
+                 Text="Logs"
+                 FontSize="24"
+                 FontWeight="Bold"
+                 VerticalAlignment="Center" />
+    </Grid>
+
+    <!-- LogView на всю высоту -->
+    <Border Grid.Row="1"
+            BorderBrush="{StaticResource BorderSubtleBrush}"
+            BorderThickness="1"
+            CornerRadius="10">
+      <controls:LogView DataContext="{Binding Log}" />
+    </Border>
+  </Grid>
+</UserControl>
+
+````
+
+## src/Firelink.Gui/Views/LogsView.axaml.cs
+
+````csharp
+using Avalonia.Controls;
+
+namespace Firelink.Gui.Views;
+
+public partial class LogsView : UserControl
+{
+    public LogsView()
+    {
+        InitializeComponent();
+    }
+}
+
+````
+
 ## src/Firelink.Gui/Views/NavigationView.axaml
 
 ````text
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Firelink.Gui.Shared.ViewModels"
+             xmlns:conv="using:Firelink.Gui.Converters"
              x:Class="Firelink.Gui.Views.NavigationView"
              x:DataType="vm:NavigationVM">
-  <Border Background="#1F2933">
-    <ListBox ItemsSource="{Binding Items}"
-             SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
-             Background="Transparent"
-             BorderThickness="0">
-      <ListBox.ItemTemplate>
-        <DataTemplate DataType="vm:NavigationItem">
-          <TextBlock Text="{Binding Title}"
-                     Padding="16,12"
-                     FontSize="14" />
-        </DataTemplate>
-      </ListBox.ItemTemplate>
-    </ListBox>
-  </Border>
+
+    <UserControl.Resources>
+        <conv:ScreenIconConverter x:Key="ScreenIconConverter" />
+    </UserControl.Resources>
+
+    <Grid RowDefinitions="*,Auto"
+          Background="{StaticResource SurfaceSidebarBrush}">
+
+        <!-- ============================================================
+         Навигация
+         ============================================================ -->
+        <ListBox Grid.Row="0"
+                 ItemsSource="{Binding Items}"
+                 SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
+                 Background="Transparent"
+                 BorderThickness="0"
+                 Margin="12,8,12,0"
+                 Padding="0">
+            <ListBox.ItemContainerTheme>
+                <ControlTheme TargetType="ListBoxItem"
+                              BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                    <Setter Property="Padding" Value="0" />
+                    <Setter Property="Margin" Value="0,2" />
+                </ControlTheme>
+            </ListBox.ItemContainerTheme>
+
+            <ListBox.ItemTemplate>
+                <DataTemplate DataType="vm:NavigationItem">
+                    <Grid ColumnDefinitions="Auto,*"
+                          Height="40"
+                          Margin="6,0">
+
+                        <!-- Иконка -->
+                        <PathIcon Grid.Column="0"
+                                  Data="{Binding Screen, Converter={StaticResource ScreenIconConverter}}"
+                                  Width="18"
+                                  Height="18"
+                                  Foreground="{StaticResource TextSecondaryBrush}"
+                                  VerticalAlignment="Center"
+                                  Margin="10,0,12,0" />
+
+                        <!-- Текст -->
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding Title}"
+                                   FontSize="14"
+                                   FontWeight="Medium"
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   VerticalAlignment="Center" />
+                    </Grid>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <!-- Нижний отступ -->
+        <Border Grid.Row="1"
+                Height="12"
+                Background="Transparent" />
+
+    </Grid>
 </UserControl>
 
 ````
@@ -3888,6 +4395,122 @@ public partial class NavigationView : UserControl
 
 ````
 
+## src/Firelink.Gui/Views/SettingsView.axaml
+
+````text
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Firelink.Gui.Shared.ViewModels"
+             x:Class="Firelink.Gui.Views.SettingsView"
+             x:DataType="vm:SettingsVM">
+
+    <Grid RowDefinitions="Auto,*" Margin="20">
+
+        <!-- Header -->
+        <Grid Grid.Row="0"
+              ColumnDefinitions="*,Auto"
+              Margin="0,0,0,16">
+            <TextBlock Grid.Column="0"
+                       Text="Settings"
+                       FontSize="24"
+                       FontWeight="Bold"
+                       VerticalAlignment="Center" />
+        </Grid>
+
+        <!-- Content -->
+        <ScrollViewer Grid.Row="1"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="20">
+
+                <!-- About -->
+                <StackPanel Spacing="8">
+                    <TextBlock Text="About"
+                               FontSize="16"
+                               FontWeight="SemiBold" />
+
+                    <Border Background="{StaticResource SurfaceRaisedBrush}"
+                            BorderBrush="{StaticResource BorderSubtleBrush}"
+                            BorderThickness="1"
+                            CornerRadius="10"
+                            Padding="16">
+                        <Grid ColumnDefinitions="Auto,*"
+                              RowDefinitions="Auto,Auto,Auto">
+
+                            <TextBlock Grid.Row="0" Grid.Column="0"
+                                       Text="Name"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       Margin="0,0,16,8" />
+                            <TextBlock Grid.Row="0" Grid.Column="1"
+                                       Text="{Binding ProductName}"
+                                       Margin="0,0,0,8" />
+
+                            <TextBlock Grid.Row="1" Grid.Column="0"
+                                       Text="Version"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       Margin="0,0,16,8" />
+                            <TextBlock Grid.Row="1" Grid.Column="1"
+                                       Text="{Binding Version}"
+                                       Margin="0,0,0,8" />
+
+                            <TextBlock Grid.Row="2" Grid.Column="0"
+                                       Text="License"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       Margin="0,0,16,0" />
+                            <TextBlock Grid.Row="2" Grid.Column="1"
+                                       Text="{Binding License}" />
+                        </Grid>
+                    </Border>
+                </StackPanel>
+
+                <!-- Placeholder -->
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Application settings"
+                               FontSize="16"
+                               FontWeight="SemiBold" />
+
+                    <Border Background="{StaticResource SurfaceRaisedBrush}"
+                            BorderBrush="{StaticResource BorderSubtleBrush}"
+                            BorderThickness="1"
+                            CornerRadius="10"
+                            Padding="16">
+                        <TextBlock Text="Settings will appear here in a future version."
+                                   Foreground="{StaticResource TextMutedBrush}"
+                                   TextWrapping="Wrap" />
+                    </Border>
+                </StackPanel>
+
+                <!-- Footer -->
+                <TextBlock Text="{Binding Footer}"
+                           Foreground="{StaticResource TextMutedBrush}"
+                           FontSize="12"
+                           HorizontalAlignment="Center"
+                           Margin="0,16,0,0" />
+
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>
+
+````
+
+## src/Firelink.Gui/Views/SettingsView.axaml.cs
+
+````csharp
+using Avalonia.Controls;
+
+namespace Firelink.Gui.Views;
+
+public partial class SettingsView : UserControl
+{
+    public SettingsView()
+    {
+        InitializeComponent();
+    }
+}
+
+````
+
 ## src/Firelink.Gui.Controls/Converters/LogLevelToBrushConverter.cs
 
 ````csharp
@@ -3900,16 +4523,29 @@ using AvaloniaColor = Avalonia.Media.Color;
 
 namespace Firelink.Gui.Controls.Converters;
 
+/// <summary>
+/// Цвета уровней логов под палитру Firelink.
+/// Обновлено в 3.9.4 — приглушённые нейтральные + семантические.
+/// </summary>
 public sealed class LogLevelToBrushConverter : IValueConverter
 {
     public static readonly LogLevelToBrushConverter Instance = new();
 
-    private static readonly IBrush TraceBrush = new SolidColorBrush(AvaloniaColor.Parse("#4B5563"));
-    private static readonly IBrush DebugBrush = new SolidColorBrush(AvaloniaColor.Parse("#6B7280"));
-    private static readonly IBrush InfoBrush = new SolidColorBrush(AvaloniaColor.Parse("#D1D5DB"));
-    private static readonly IBrush WarningBrush = new SolidColorBrush(AvaloniaColor.Parse("#FBBF24"));
-    private static readonly IBrush ErrorBrush = new SolidColorBrush(AvaloniaColor.Parse("#F87171"));
-    private static readonly IBrush CriticalBrush = new SolidColorBrush(AvaloniaColor.Parse("#DC2626"));
+    // Trace/Debug — приглушённые нейтральные (не отвлекают)
+    private static readonly IBrush TraceBrush = new SolidColorBrush(AvaloniaColor.Parse("#5a5a5a"));
+    private static readonly IBrush DebugBrush = new SolidColorBrush(AvaloniaColor.Parse("#7a7a7a"));
+
+    // Information — основной текст
+    private static readonly IBrush InfoBrush = new SolidColorBrush(AvaloniaColor.Parse("#e8e8e8"));
+
+    // Warning — акцент (наш тёплый песочный)
+    private static readonly IBrush WarningBrush = new SolidColorBrush(AvaloniaColor.Parse("#d3b181"));
+
+    // Error — приглушённый красный
+    private static readonly IBrush ErrorBrush = new SolidColorBrush(AvaloniaColor.Parse("#d97777"));
+
+    // Critical — насыщенный, но не кричащий
+    private static readonly IBrush CriticalBrush = new SolidColorBrush(AvaloniaColor.Parse("#c85a5a"));
 
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
@@ -3933,6 +4569,101 @@ public sealed class LogLevelToBrushConverter : IValueConverter
 
 ````
 
+## src/Firelink.Gui.Controls/Converters/ScreenIconConverter.cs
+
+````csharp
+using System.Globalization;
+using Avalonia.Data.Converters;
+using Avalonia.Media;
+using Firelink.Gui.Shared.Navigation;
+
+namespace Firelink.Gui.Converters;
+
+/// <summary>
+/// Маппит ScreenType на SVG-путь иконки (Lucide, MIT).
+/// Используется в NavigationView: PathIcon.Data={Binding Screen, Converter=...}.
+///
+/// Иконки — 24x24 viewBox, stroke-based, но PathIcon в Avalonia
+/// работает с fill. Поэтому пути адаптированы: fill-версии,
+/// сохранён силуэт (без stroke).
+///
+/// Если Lucide-иконка в оригинале не подходит в fill-варианте
+/// (например, home — это контур с крышей), используются
+/// Lucide-варианты, специально предназначенные для fill
+/// (в Lucide есть некоторые иконки с "solid" версией).
+///
+/// Fallback для неизвестного ScreenType — пустая Geometry.
+/// </summary>
+public sealed class ScreenIconConverter : IValueConverter
+{
+    // Lucide "home" (адаптирован под fill)
+    private const string Home =
+        "M12 3 L2 12 H5 V20 H10 V14 H14 V20 H19 V12 H22 Z";
+
+    // Lucide "package" / "download" — используем "package"
+    private const string Install =
+        "M12 2 L21 7 V17 L12 22 L3 17 V7 Z M12 4.2 L5.2 8 L12 11.8 L18.8 8 Z " +
+        "M5 10 V16 L11 19.2 V13.2 Z M13 13.2 V19.2 L19 16 V10 Z";
+
+    // Lucide "archive"
+    private const string Pack =
+        "M3 4 H21 V8 H3 Z M4 8 H20 V20 H4 Z M9 12 H15 V14 H9 Z";
+
+    // Lucide "shield-check" (щит с галочкой)
+    private const string Verify =
+        "M12 2 L20 5 V11 C20 16 16 20 12 22 C8 20 4 16 4 11 V5 Z " +
+        "M10.5 12.5 L9 11 L7.6 12.4 L10.5 15.3 L16.4 9.4 L15 8 Z";
+
+    // Lucide "file-text" (документ со строками) — для Logs
+    private const string Logs =
+        "M6 2 H14 L20 8 V22 H6 Z " +
+        "M14 2 V8 H20 " +
+        "M9 12 H17 V13.5 H9 Z " +
+        "M9 15.5 H17 V17 H9 Z " +
+        "M9 19 H15 V20.5 H9 Z";
+
+    // Lucide "settings" (шестерёнка)
+    private const string Settings =
+        "M12 8 C9.8 8 8 9.8 8 12 C8 14.2 9.8 16 12 16 C14.2 16 16 14.2 16 12 C16 9.8 14.2 8 12 8 Z " +
+        "M10.3 2 L10.7 4.3 C10.3 4.4 9.9 4.6 9.5 4.8 L7.7 3.3 L5.3 5.7 L6.8 7.5 " +
+        "C6.6 7.9 6.4 8.3 6.3 8.7 L4 9.1 L4 11.9 L6.3 12.3 " +
+        "C6.4 12.7 6.6 13.1 6.8 13.5 L5.3 15.3 L7.7 17.7 L9.5 16.2 " +
+        "C9.9 16.4 10.3 16.6 10.7 16.7 L11.1 19 L13.9 19 L14.3 16.7 " +
+        "C14.7 16.6 15.1 16.4 15.5 16.2 L17.3 17.7 L19.7 15.3 L18.2 13.5 " +
+        "C18.4 13.1 18.6 12.7 18.7 12.3 L21 11.9 L21 9.1 L18.7 8.7 " +
+        "C18.6 8.3 18.4 7.9 18.2 7.5 L19.7 5.7 L17.3 3.3 L15.5 4.8 " +
+        "C15.1 4.6 14.7 4.4 14.3 4.3 L13.9 2 Z";
+
+    public object? Convert(
+        object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is not ScreenType screen)
+            return null;
+
+        var path = screen switch
+        {
+            ScreenType.Home => Home,
+            ScreenType.Install => Install,
+            ScreenType.Pack => Pack,
+            ScreenType.Verify => Verify,
+            ScreenType.Logs => Logs,
+            ScreenType.Settings => Settings,
+            _ => null,
+        };
+
+        if (path is null)
+            return null;
+
+        return Geometry.Parse(path);
+    }
+
+    public object ConvertBack(
+        object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+````
+
 ## src/Firelink.Gui.Controls/Views/FilePickerView.axaml
 
 ````text
@@ -3941,33 +4672,47 @@ public sealed class LogLevelToBrushConverter : IValueConverter
              xmlns:vm="using:Firelink.Gui.Shared.ViewModels.Controls"
              x:Class="Firelink.Gui.Controls.Views.FilePickerView"
              x:DataType="vm:FilePickerVM">
-  <StackPanel Spacing="4">
-    <TextBlock Text="{Binding Placeholder}"
-               FontSize="12"
-               Opacity="0.7" />
-    <Grid ColumnDefinitions="*,Auto">
-      <Border Grid.Column="0"
-              Background="#0B1116"
-              BorderBrush="#2A3742"
-              BorderThickness="1"
-              CornerRadius="3"
-              Padding="8,6"
-              Margin="0,0,8,0">
-        <TextBlock Text="{Binding Path}"
-                   FontFamily="Consolas,Menlo,monospace"
+    <StackPanel Spacing="6">
+
+        <!-- Label -->
+        <TextBlock Text="{Binding Placeholder}"
                    FontSize="12"
-                   TextTrimming="CharacterEllipsis" />
-      </Border>
-      <Button Grid.Column="1"
-              Content="Browse…"
-              Command="{Binding PickCommand}"
-              Padding="12,6" />
-    </Grid>
-    <TextBlock Text="{Binding Error}"
-               Foreground="#F87171"
-               FontSize="11"
-               IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}" />
-  </StackPanel>
+                   Foreground="{StaticResource TextSecondaryBrush}" />
+
+        <!-- Field + Browse button -->
+        <Grid ColumnDefinitions="*,Auto">
+
+            <!-- Path container (не TextBox — read-only отображение) -->
+            <Border Grid.Column="0"
+                    Background="{StaticResource SurfaceRaisedBrush}"
+                    BorderBrush="{StaticResource BorderStrongBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="10,8"
+                    Margin="0,0,8,0"
+                    MinHeight="36">
+                <TextBlock Text="{Binding Path}"
+                           FontFamily="Consolas,Menlo,monospace"
+                           FontSize="12"
+                           Foreground="{StaticResource TextPrimaryBrush}"
+                           TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center" />
+            </Border>
+
+            <!-- Browse button -->
+            <Button Grid.Column="1"
+                    Content="Browse…"
+                    Command="{Binding PickCommand}"
+                    Padding="14,8"
+                    VerticalAlignment="Stretch" />
+        </Grid>
+
+        <!-- Error -->
+        <TextBlock Text="{Binding Error}"
+                   Foreground="{StaticResource ErrorBrush}"
+                   FontSize="11"
+                   IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}" />
+    </StackPanel>
 </UserControl>
 
 ````
@@ -3999,50 +4744,53 @@ public partial class FilePickerView : UserControl
              xmlns:conv="using:Firelink.Gui.Controls.Converters"
              x:Class="Firelink.Gui.Controls.Views.LogView"
              x:DataType="vm:LogVM">
-  <Grid RowDefinitions="Auto,*">
-    <Grid Grid.Row="0"
-          ColumnDefinitions="*,Auto"
-          Background="#111820">
-      <TextBlock Grid.Column="0"
-                 Text="Log"
-                 Foreground="#9CA3AF"
-                 Margin="10,6"
-                 FontSize="12"
-                 FontWeight="SemiBold"
-                 VerticalAlignment="Center" />
-      <Button Grid.Column="1"
-              Content="Clear"
-              Command="{Binding ClearCommand}"
-              Margin="6"
-              Padding="10,3"
-              FontSize="11" />
-    </Grid>
+    <Grid RowDefinitions="Auto,*">
 
-    <ScrollViewer Grid.Row="1"
-                  Name="Scroll"
-                  Background="#0B1116"
-                  HorizontalScrollBarVisibility="Disabled"
-                  VerticalScrollBarVisibility="Auto">
-      <ItemsControl ItemsSource="{Binding Entries}">
-        <ItemsControl.ItemTemplate>
-          <DataTemplate DataType="log:LogEntry">
-            <TextBlock Padding="10,1"
-                       FontFamily="Consolas,Menlo,monospace"
+        <!-- Header -->
+        <Grid Grid.Row="0"
+              ColumnDefinitions="*,Auto"
+              Background="{StaticResource SurfaceRaisedBrush}">
+            <TextBlock Grid.Column="0"
+                       Text="Log"
+                       Foreground="{StaticResource TextSecondaryBrush}"
+                       Margin="12,8"
                        FontSize="12"
-                       TextWrapping="Wrap"
-                       Foreground="{Binding Level, Converter={x:Static conv:LogLevelToBrushConverter.Instance}}">
-              <Run Text="[" />
-              <Run Text="{Binding Timestamp, StringFormat='{}{0:HH:mm:ss}'}" />
-              <Run Text="] [" />
-              <Run Text="{Binding Level}" />
-              <Run Text="] " />
-              <Run Text="{Binding Message}" />
-            </TextBlock>
-          </DataTemplate>
-        </ItemsControl.ItemTemplate>
-      </ItemsControl>
-    </ScrollViewer>
-  </Grid>
+                       FontWeight="SemiBold"
+                       VerticalAlignment="Center" />
+            <Button Grid.Column="1"
+                    Content="Clear"
+                    Command="{Binding ClearCommand}"
+                    Margin="8,6"
+                    Padding="12,4"
+                    FontSize="11" />
+        </Grid>
+
+        <!-- Entries -->
+        <ScrollViewer Grid.Row="1"
+                      Name="Scroll"
+                      Background="{StaticResource SurfaceBaseBrush}"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding Entries}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="log:LogEntry">
+                        <TextBlock Padding="12,2"
+                                   FontFamily="Consolas,Menlo,monospace"
+                                   FontSize="12"
+                                   TextWrapping="Wrap"
+                                   Foreground="{Binding Level, Converter={x:Static conv:LogLevelToBrushConverter.Instance}}">
+                            <Run Text="[" />
+                            <Run Text="{Binding Timestamp, StringFormat='{}{0:HH:mm:ss}'}" />
+                            <Run Text="] [" />
+                            <Run Text="{Binding Level}" />
+                            <Run Text="] " />
+                            <Run Text="{Binding Message}" />
+                        </TextBlock>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </Grid>
 </UserControl>
 
 ````
@@ -4207,7 +4955,6 @@ public sealed partial class InstallVM : ProgressViewModel, INavigationAware
 {
     private readonly IInstallRunner _runner;
     private readonly ILogger<InstallVM> _logger;
-    private Action? _navigateHome;
     private CancellationTokenSource? _cts;
 
     [ObservableProperty]
@@ -4266,13 +5013,15 @@ public sealed partial class InstallVM : ProgressViewModel, INavigationAware
         };
     }
 
-    public void SetNavigateHome(Action navigateHome) => _navigateHome = navigateHome;
+    public void SetNavigateHome(Action navigateHome)
+    {
+        // Оставлено для совместимости с INavigationAware.
+        // В UI кнопка Home заменена на Done (3.9.6).
+    }
 
     [RelayCommand(CanExecute = nameof(CanInstall))]
     private async Task InstallAsync()
     {
-        Log.Clear();
-
         State = InstallState.Installing;
         UpdateVisibility();
 
@@ -4324,7 +5073,12 @@ public sealed partial class InstallVM : ProgressViewModel, INavigationAware
     private bool CanCancel() => State == InstallState.Installing;
 
     [RelayCommand]
-    private void Home() => _navigateHome?.Invoke();
+    private void Done()
+    {
+        Summary = null;
+        ErrorMessage = null;
+        State = InstallState.Configuration;
+    }
 
     partial void OnStateChanged(InstallState value)
     {
@@ -4353,7 +5107,7 @@ public sealed partial class InstallVM : ProgressViewModel, INavigationAware
              xmlns:controls="using:Firelink.Gui.Controls.Views"
              x:Class="Firelink.Gui.Install.Views.InstallView"
              x:DataType="vm:InstallVM">
-    <Grid RowDefinitions="Auto,*,Auto" Margin="20">
+    <Grid RowDefinitions="Auto,*" Margin="20">
 
         <!-- Header -->
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,16">
@@ -4362,11 +5116,6 @@ public sealed partial class InstallVM : ProgressViewModel, INavigationAware
                        FontSize="24"
                        FontWeight="Bold"
                        VerticalAlignment="Center" />
-            <Button Grid.Column="1"
-                    Content="Home"
-                    Command="{Binding HomeCommand}"
-                    Padding="12,6"
-                    IsVisible="{Binding IsConfiguring}" />
         </Grid>
 
         <!-- Configuration -->
@@ -4378,15 +5127,15 @@ public sealed partial class InstallVM : ProgressViewModel, INavigationAware
             <controls:FilePickerView DataContext="{Binding TargetPicker}" />
 
             <TextBlock Text="{Binding ErrorMessage}"
-                       Foreground="#FBBF24"
+                       Foreground="{StaticResource WarningBrush}"
                        FontSize="12"
                        IsVisible="{Binding ErrorMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
 
-            <Button Content="Install"
+            <Button Classes="accent"
+                    Content="Install"
                     Command="{Binding InstallCommand}"
                     HorizontalAlignment="Left"
-                    Padding="20,8"
-                    FontWeight="SemiBold" />
+                    Padding="20,8" />
         </StackPanel>
 
         <!-- Installing -->
@@ -4399,7 +5148,7 @@ public sealed partial class InstallVM : ProgressViewModel, INavigationAware
                        FontSize="16"
                        HorizontalAlignment="Center" />
             <TextBlock HorizontalAlignment="Center"
-                       Opacity="0.7"
+                       Foreground="{StaticResource TextSecondaryBrush}"
                        FontSize="12">
                 <Run Text="Step " />
                 <Run Text="{Binding CurrentStep}" />
@@ -4424,26 +5173,26 @@ public sealed partial class InstallVM : ProgressViewModel, INavigationAware
             <TextBlock Text="Installation complete"
                        FontSize="18"
                        FontWeight="SemiBold"
-                       Foreground="#4ADE80" />
+                       Foreground="{StaticResource SuccessBrush}" />
 
-            <Border Background="#0B1116"
-                    BorderBrush="#2A3742"
+            <Border Background="{StaticResource SurfaceRaisedBrush}"
+                    BorderBrush="{StaticResource BorderSubtleBrush}"
                     BorderThickness="1"
-                    CornerRadius="4"
+                    CornerRadius="10"
                     Padding="16">
                 <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Name"
-                               Opacity="0.6" Margin="0,0,16,4" />
+                               Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,16,4" />
                     <TextBlock Grid.Row="0" Grid.Column="1"
                                Text="{Binding Summary.Name}" Margin="0,0,0,4" />
 
                     <TextBlock Grid.Row="1" Grid.Column="0" Text="Version"
-                               Opacity="0.6" Margin="0,0,16,4" />
+                               Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,16,4" />
                     <TextBlock Grid.Row="1" Grid.Column="1"
                                Text="{Binding Summary.Version}" Margin="0,0,0,4" />
 
                     <TextBlock Grid.Row="2" Grid.Column="0" Text="Instance"
-                               Opacity="0.6" Margin="0,0,16,4" />
+                               Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,16,4" />
                     <TextBlock Grid.Row="2" Grid.Column="1"
                                Text="{Binding Summary.InstancePath}"
                                FontFamily="Consolas,Menlo,monospace"
@@ -4452,7 +5201,7 @@ public sealed partial class InstallVM : ProgressViewModel, INavigationAware
                                Margin="0,0,0,4" />
 
                     <TextBlock Grid.Row="3" Grid.Column="0" Text="Mods"
-                               Opacity="0.6" Margin="0,0,16,4" />
+                               Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,16,4" />
                     <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,0,0,4">
                         <Run Text="{Binding Summary.ModsCreated}" />
                         <Run Text=" created, " />
@@ -4461,7 +5210,7 @@ public sealed partial class InstallVM : ProgressViewModel, INavigationAware
                     </TextBlock>
 
                     <TextBlock Grid.Row="4" Grid.Column="0" Text="Archives"
-                               Opacity="0.6" Margin="0,0,16,4" />
+                               Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,16,4" />
                     <TextBlock Grid.Row="4" Grid.Column="1" Margin="0,0,0,4">
                         <Run Text="{Binding Summary.ArchivesDownloaded}" />
                         <Run Text=" downloaded, " />
@@ -4470,14 +5219,14 @@ public sealed partial class InstallVM : ProgressViewModel, INavigationAware
                     </TextBlock>
 
                     <TextBlock Grid.Row="5" Grid.Column="0" Text="meta.ini"
-                               Opacity="0.6" Margin="0,0,16,0" />
+                               Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,16,0" />
                     <TextBlock Grid.Row="5" Grid.Column="1"
                                Text="{Binding Summary.MetaIniWritten}" />
                 </Grid>
             </Border>
 
-            <Button Content="Home"
-                    Command="{Binding HomeCommand}"
+            <Button Content="Done"
+                    Command="{Binding DoneCommand}"
                     HorizontalAlignment="Left"
                     Padding="20,8" />
         </StackPanel>
@@ -4490,12 +5239,12 @@ public sealed partial class InstallVM : ProgressViewModel, INavigationAware
             <TextBlock Text="Installation failed"
                        FontSize="18"
                        FontWeight="SemiBold"
-                       Foreground="#F87171" />
+                       Foreground="{StaticResource ErrorBrush}" />
 
-            <Border Background="#1F1414"
-                    BorderBrush="#7F1D1D"
+            <Border Background="{StaticResource SurfaceRaisedBrush}"
+                    BorderBrush="{StaticResource ErrorBrush}"
                     BorderThickness="1"
-                    CornerRadius="4"
+                    CornerRadius="10"
                     Padding="16">
                 <TextBlock Text="{Binding ErrorMessage}"
                            TextWrapping="Wrap"
@@ -4503,19 +5252,11 @@ public sealed partial class InstallVM : ProgressViewModel, INavigationAware
                            FontSize="12" />
             </Border>
 
-            <Button Content="Home"
-                    Command="{Binding HomeCommand}"
+            <Button Content="Done"
+                    Command="{Binding DoneCommand}"
                     HorizontalAlignment="Left"
                     Padding="20,8" />
         </StackPanel>
-
-        <!-- Log panel -->
-        <Border Grid.Row="2"
-                Height="200"
-                Margin="0,16,0,0"
-                IsVisible="{Binding !IsConfiguring}">
-            <controls:LogView DataContext="{Binding Log}" />
-        </Border>
 
     </Grid>
 </UserControl>
@@ -4649,7 +5390,6 @@ public sealed partial class PackVM : ProgressViewModel, INavigationAware
 {
     private readonly IPackRunner _runner;
     private readonly ILogger<PackVM> _logger;
-    private Action? _navigateHome;
     private CancellationTokenSource? _cts;
 
     [ObservableProperty]
@@ -4700,13 +5440,15 @@ public sealed partial class PackVM : ProgressViewModel, INavigationAware
         };
     }
 
-    public void SetNavigateHome(Action navigateHome) => _navigateHome = navigateHome;
+    public void SetNavigateHome(Action navigateHome)
+    {
+        // Оставлено для совместимости с INavigationAware.
+        // В UI кнопка Home заменена на Done (3.9.6).
+    }
 
     [RelayCommand(CanExecute = nameof(CanPack))]
     private async Task PackAsync()
     {
-        Log.Clear();
-
         State = PackState.Packing;
         UpdateVisibility();
 
@@ -4754,7 +5496,12 @@ public sealed partial class PackVM : ProgressViewModel, INavigationAware
     private bool CanCancel() => State == PackState.Packing;
 
     [RelayCommand]
-    private void Home() => _navigateHome?.Invoke();
+    private void Done()
+    {
+        Summary = null;
+        ErrorMessage = null;
+        State = PackState.Configuration;
+    }
 
     partial void OnStateChanged(PackState value)
     {
@@ -4783,7 +5530,7 @@ public sealed partial class PackVM : ProgressViewModel, INavigationAware
              xmlns:controls="using:Firelink.Gui.Controls.Views"
              x:Class="Firelink.Gui.Pack.Views.PackView"
              x:DataType="vm:PackVM">
-    <Grid RowDefinitions="Auto,*,Auto" Margin="20">
+    <Grid RowDefinitions="Auto,*" Margin="20">
 
         <!-- Header -->
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,16">
@@ -4792,11 +5539,6 @@ public sealed partial class PackVM : ProgressViewModel, INavigationAware
                        FontSize="24"
                        FontWeight="Bold"
                        VerticalAlignment="Center" />
-            <Button Grid.Column="1"
-                    Content="Home"
-                    Command="{Binding HomeCommand}"
-                    Padding="12,6"
-                    IsVisible="{Binding IsConfiguring}" />
         </Grid>
 
         <!-- Configuration -->
@@ -4807,15 +5549,15 @@ public sealed partial class PackVM : ProgressViewModel, INavigationAware
             <controls:FilePickerView DataContext="{Binding ConfigPicker}" />
 
             <TextBlock Text="{Binding ErrorMessage}"
-                       Foreground="#FBBF24"
+                       Foreground="{StaticResource WarningBrush}"
                        FontSize="12"
                        IsVisible="{Binding ErrorMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
 
-            <Button Content="Pack"
+            <Button Classes="accent"
+                    Content="Pack"
                     Command="{Binding PackCommand}"
                     HorizontalAlignment="Left"
-                    Padding="20,8"
-                    FontWeight="SemiBold" />
+                    Padding="20,8" />
         </StackPanel>
 
         <!-- Packing -->
@@ -4828,7 +5570,7 @@ public sealed partial class PackVM : ProgressViewModel, INavigationAware
                        FontSize="16"
                        HorizontalAlignment="Center" />
             <TextBlock HorizontalAlignment="Center"
-                       Opacity="0.7"
+                       Foreground="{StaticResource TextSecondaryBrush}"
                        FontSize="12">
                 <Run Text="Step " />
                 <Run Text="{Binding CurrentStep}" />
@@ -4853,27 +5595,27 @@ public sealed partial class PackVM : ProgressViewModel, INavigationAware
             <TextBlock Text="Pack complete"
                        FontSize="18"
                        FontWeight="SemiBold"
-                       Foreground="#4ADE80" />
+                       Foreground="{StaticResource SuccessBrush}" />
 
-            <Border Background="#0B1116"
-                    BorderBrush="#2A3742"
+            <Border Background="{StaticResource SurfaceRaisedBrush}"
+                    BorderBrush="{StaticResource BorderSubtleBrush}"
                     BorderThickness="1"
-                    CornerRadius="4"
+                    CornerRadius="10"
                     Padding="16">
                 <Grid ColumnDefinitions="Auto,*"
                       RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Name"
-                               Opacity="0.6" Margin="0,0,16,4" />
+                               Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,16,4" />
                     <TextBlock Grid.Row="0" Grid.Column="1"
                                Text="{Binding Summary.Name}" Margin="0,0,0,4" />
 
                     <TextBlock Grid.Row="1" Grid.Column="0" Text="Version"
-                               Opacity="0.6" Margin="0,0,16,4" />
+                               Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,16,4" />
                     <TextBlock Grid.Row="1" Grid.Column="1"
                                Text="{Binding Summary.Version}" Margin="0,0,0,4" />
 
                     <TextBlock Grid.Row="2" Grid.Column="0" Text="Instance"
-                               Opacity="0.6" Margin="0,0,16,4" />
+                               Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,16,4" />
                     <TextBlock Grid.Row="2" Grid.Column="1"
                                Text="{Binding Summary.InstancePath}"
                                FontFamily="Consolas,Menlo,monospace"
@@ -4882,7 +5624,7 @@ public sealed partial class PackVM : ProgressViewModel, INavigationAware
                                Margin="0,0,0,4" />
 
                     <TextBlock Grid.Row="3" Grid.Column="0" Text="Mods scanned"
-                               Opacity="0.6" Margin="0,0,16,4" />
+                               Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,16,4" />
                     <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,0,0,4">
                         <Run Text="{Binding Summary.ModsScanned}" />
                         <Run Text=" mods, " />
@@ -4891,7 +5633,7 @@ public sealed partial class PackVM : ProgressViewModel, INavigationAware
                     </TextBlock>
 
                     <TextBlock Grid.Row="4" Grid.Column="0" Text="Directives"
-                               Opacity="0.6" Margin="0,0,16,4" />
+                               Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,16,4" />
                     <TextBlock Grid.Row="4" Grid.Column="1" Margin="0,0,0,4">
                         <Run Text="{Binding Summary.DirectivesTotal}" />
                         <Run Text=" total, " />
@@ -4900,7 +5642,7 @@ public sealed partial class PackVM : ProgressViewModel, INavigationAware
                     </TextBlock>
 
                     <TextBlock Grid.Row="5" Grid.Column="0" Text="Archives"
-                               Opacity="0.6" Margin="0,0,16,4" />
+                               Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,16,4" />
                     <TextBlock Grid.Row="5" Grid.Column="1" Margin="0,0,0,4">
                         <Run Text="{Binding Summary.ArchivesResolved}" />
                         <Run Text=" resolved, " />
@@ -4909,13 +5651,13 @@ public sealed partial class PackVM : ProgressViewModel, INavigationAware
                     </TextBlock>
 
                     <TextBlock Grid.Row="6" Grid.Column="0" Text="Unmatched"
-                               Opacity="0.6" Margin="0,0,16,4" />
+                               Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,16,4" />
                     <TextBlock Grid.Row="6" Grid.Column="1"
                                Text="{Binding Summary.UnmatchedFiles}"
                                Margin="0,0,0,4" />
 
                     <TextBlock Grid.Row="7" Grid.Column="0" Text="Manifest"
-                               Opacity="0.6" Margin="0,0,16,4" />
+                               Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,16,4" />
                     <TextBlock Grid.Row="7" Grid.Column="1" Margin="0,0,0,4">
                         <Run Text="{Binding Summary.ManifestMods}" />
                         <Run Text=" mods, " />
@@ -4928,13 +5670,13 @@ public sealed partial class PackVM : ProgressViewModel, INavigationAware
                     </TextBlock>
 
                     <TextBlock Grid.Row="8" Grid.Column="0" Text="meta.ini"
-                               Opacity="0.6" Margin="0,0,16,4" />
+                               Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,16,4" />
                     <TextBlock Grid.Row="8" Grid.Column="1"
                                Text="{Binding Summary.MetaIniCount}"
                                Margin="0,0,0,4" />
 
                     <TextBlock Grid.Row="9" Grid.Column="0" Text="Written to"
-                               Opacity="0.6" Margin="0,0,16,4"
+                               Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,16,4"
                                IsVisible="{Binding Summary.UnmatchedWrittenTo, Converter={x:Static ObjectConverters.IsNotNull}}" />
                     <TextBlock Grid.Row="9" Grid.Column="1"
                                Text="{Binding Summary.UnmatchedWrittenTo}"
@@ -4945,7 +5687,7 @@ public sealed partial class PackVM : ProgressViewModel, INavigationAware
                                IsVisible="{Binding Summary.UnmatchedWrittenTo, Converter={x:Static ObjectConverters.IsNotNull}}" />
 
                     <TextBlock Grid.Row="10" Grid.Column="0" Text="Manifest path"
-                               Opacity="0.6" Margin="0,0,16,0" />
+                               Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,16,0" />
                     <TextBlock Grid.Row="10" Grid.Column="1"
                                Text="{Binding Summary.ManifestPath}"
                                FontFamily="Consolas,Menlo,monospace"
@@ -4954,8 +5696,8 @@ public sealed partial class PackVM : ProgressViewModel, INavigationAware
                 </Grid>
             </Border>
 
-            <Button Content="Home"
-                    Command="{Binding HomeCommand}"
+            <Button Content="Done"
+                    Command="{Binding DoneCommand}"
                     HorizontalAlignment="Left"
                     Padding="20,8" />
         </StackPanel>
@@ -4968,12 +5710,12 @@ public sealed partial class PackVM : ProgressViewModel, INavigationAware
             <TextBlock Text="Pack failed"
                        FontSize="18"
                        FontWeight="SemiBold"
-                       Foreground="#F87171" />
+                       Foreground="{StaticResource ErrorBrush}" />
 
-            <Border Background="#1F1414"
-                    BorderBrush="#7F1D1D"
+            <Border Background="{StaticResource SurfaceRaisedBrush}"
+                    BorderBrush="{StaticResource ErrorBrush}"
                     BorderThickness="1"
-                    CornerRadius="4"
+                    CornerRadius="10"
                     Padding="16">
                 <TextBlock Text="{Binding ErrorMessage}"
                            TextWrapping="Wrap"
@@ -4981,19 +5723,11 @@ public sealed partial class PackVM : ProgressViewModel, INavigationAware
                            FontSize="12" />
             </Border>
 
-            <Button Content="Home"
-                    Command="{Binding HomeCommand}"
+            <Button Content="Done"
+                    Command="{Binding DoneCommand}"
                     HorizontalAlignment="Left"
                     Padding="20,8" />
         </StackPanel>
-
-        <!-- Log panel -->
-        <Border Grid.Row="2"
-                Height="200"
-                Margin="0,16,0,0"
-                IsVisible="{Binding !IsConfiguring}">
-            <controls:LogView DataContext="{Binding Log}" />
-        </Border>
 
     </Grid>
 </UserControl>
@@ -5041,6 +5775,10 @@ public static class GuiSharedServices
         services.AddSingleton<LogVM>();
 
         services.AddSingleton<HomeVM>();
+
+        services.AddSingleton<LogsVM>();
+
+        services.AddSingleton<SettingsVM>();
 
         // MainWindowVM регистрируется в клиенте (Firelink.Gui), потому что
         // зависит от IScreenFactory, реализация которого живёт в exe-проекте.
@@ -5285,6 +6023,8 @@ public enum ScreenType
     Install,
     Pack,
     Verify,
+    Logs,
+    Settings,
 }
 
 ````
@@ -5462,6 +6202,27 @@ public sealed partial class LoadingLock : ObservableObject
 
 ````
 
+## src/Firelink.Gui.Shared/ViewModels/LogsVM.cs
+
+````csharp
+namespace Firelink.Gui.Shared.ViewModels;
+
+/// <summary>
+/// VM экрана Logs. По сути — обёртка над LogVM (тот же ObservableLogSink,
+/// зарегистрированный как Singleton). Логи общие между всеми экранами.
+/// </summary>
+public sealed class LogsVM : ViewModel
+{
+    public LogVM Log { get; }
+
+    public LogsVM(LogVM log)
+    {
+        Log = log;
+    }
+}
+
+````
+
 ## src/Firelink.Gui.Shared/ViewModels/LogVM.cs
 
 ````csharp
@@ -5571,6 +6332,8 @@ public sealed partial class NavigationVM : ViewModel
             new("Install", ScreenType.Install),
             new("Pack", ScreenType.Pack),
             new("Verify", ScreenType.Verify),
+            new("Logs", ScreenType.Logs),
+            new("Settings", ScreenType.Settings),
         };
     }
 
@@ -5634,6 +6397,55 @@ public abstract partial class ProgressViewModel : ViewModel
         StepName = "";
         Percent = 0;
         IsBusy = false;
+    }
+}
+
+````
+
+## src/Firelink.Gui.Shared/ViewModels/SettingsVM.cs
+
+````csharp
+using System.Reflection;
+using CommunityToolkit.Mvvm.ComponentModel;
+
+namespace Firelink.Gui.Shared.ViewModels;
+
+/// <summary>
+/// VM экрана Settings. Пока — только About-блок (имя, версия,
+/// копирайт, лицензия). Позже здесь появятся настройки
+/// (Nexus API key, пути, тема).
+/// </summary>
+public sealed partial class SettingsVM : ViewModel
+{
+    /// <summary>Отображаемое имя приложения.</summary>
+    public string ProductName => "Firelink";
+
+    /// <summary>Версия (из Directory.Build.props через assembly).</summary>
+    public string Version { get; } = GetVersion();
+
+    /// <summary>Копирайт.</summary>
+    public string Copyright => "Copyright (C) 2026 omen";
+
+    /// <summary>SPDX-идентификатор лицензии.</summary>
+    public string License => "AGPL-3.0-or-later";
+
+    /// <summary>Строка "Firelink v0.1.0 · AGPL-3.0-or-later · Copyright (C) 2026 omen".</summary>
+    public string Footer =>
+        $"{ProductName} v{Version} · {License} · {Copyright}";
+
+    private static string GetVersion()
+    {
+        var informational = typeof(SettingsVM).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+            ?.InformationalVersion;
+
+        if (!string.IsNullOrWhiteSpace(informational))
+        {
+            var plus = informational.IndexOf('+');
+            return plus >= 0 ? informational[..plus] : informational;
+        }
+
+        return "0.0.0";
     }
 }
 
@@ -5846,7 +6658,7 @@ public sealed class VerifyRowVM
 
     public string StatusGlyph => Passed ? "✓" : "×";
 
-    public string StatusColor => Passed ? "#4ADE80" : "#F87171";
+    public string StatusColor => Passed ? "#7fc98a" : "#d97777";
 }
 
 ````
@@ -5873,7 +6685,6 @@ public sealed partial class VerifyVM : ViewModel, INavigationAware
 {
     private readonly IVerifyRunner _runner;
     private readonly ILogger<VerifyVM> _logger;
-    private Action? _navigateHome;
     private CancellationTokenSource? _cts;
 
     [ObservableProperty]
@@ -5929,7 +6740,7 @@ public sealed partial class VerifyVM : ViewModel, INavigationAware
         _ => $"{Report.FailedCount} check(s) failed",
     };
 
-    public string ResultColor => IsOk ? "#4ADE80" : "#F87171";
+    public string ResultColor => IsOk ? "#7fc98a" : "#d97777";
 
     public string TargetPath => Report?.TargetPath ?? "";
 
@@ -5956,12 +6767,15 @@ public sealed partial class VerifyVM : ViewModel, INavigationAware
         };
     }
 
-    public void SetNavigateHome(Action navigateHome) => _navigateHome = navigateHome;
+    public void SetNavigateHome(Action navigateHome)
+    {
+        // Оставлено для совместимости с INavigationAware.
+        // В UI кнопка Home заменена на Done (3.9.6).
+    }
 
     [RelayCommand(CanExecute = nameof(CanVerify))]
     private async Task VerifyAsync()
     {
-        Log.Clear();
         Rows.Clear();
 
         State = VerifyState.Verifying;
@@ -6010,7 +6824,14 @@ public sealed partial class VerifyVM : ViewModel, INavigationAware
     private bool CanCancel() => State == VerifyState.Verifying;
 
     [RelayCommand]
-    private void Home() => _navigateHome?.Invoke();
+    private void Done()
+    {
+        Report = null;
+        ErrorMessage = null;
+        Rows.Clear();
+        NotifyResultChanged();
+        State = VerifyState.Configuration;
+    }
 
     partial void OnStateChanged(VerifyState value)
     {
@@ -6088,7 +6909,7 @@ public sealed partial class VerifyVM : ViewModel, INavigationAware
              xmlns:controls="using:Firelink.Gui.Controls.Views"
              x:Class="Firelink.Gui.Verify.Views.VerifyView"
              x:DataType="vm:VerifyVM">
-    <Grid RowDefinitions="Auto,*,Auto" Margin="20">
+    <Grid RowDefinitions="Auto,*" Margin="20">
 
         <!-- Header -->
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,16">
@@ -6097,11 +6918,6 @@ public sealed partial class VerifyVM : ViewModel, INavigationAware
                        FontSize="24"
                        FontWeight="Bold"
                        VerticalAlignment="Center" />
-            <Button Grid.Column="1"
-                    Content="Home"
-                    Command="{Binding HomeCommand}"
-                    Padding="12,6"
-                    IsVisible="{Binding IsConfiguring}" />
         </Grid>
 
         <!-- Configuration -->
@@ -6112,15 +6928,15 @@ public sealed partial class VerifyVM : ViewModel, INavigationAware
             <controls:FilePickerView DataContext="{Binding TargetPicker}" />
 
             <TextBlock Text="{Binding ErrorMessage}"
-                       Foreground="#FBBF24"
+                       Foreground="{StaticResource WarningBrush}"
                        FontSize="12"
                        IsVisible="{Binding ErrorMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
 
-            <Button Content="Verify"
+            <Button Classes="accent"
+                    Content="Verify"
                     Command="{Binding VerifyCommand}"
                     HorizontalAlignment="Left"
-                    Padding="20,8"
-                    FontWeight="SemiBold" />
+                    Padding="20,8" />
         </StackPanel>
 
         <!-- Verifying -->
@@ -6156,9 +6972,9 @@ public sealed partial class VerifyVM : ViewModel, INavigationAware
                 <TextBlock Text="{Binding TargetPath}"
                            FontFamily="Consolas,Menlo,monospace"
                            FontSize="12"
-                           Opacity="0.6"
+                           Foreground="{StaticResource TextMutedBrush}"
                            TextTrimming="CharacterEllipsis" />
-                <TextBlock Opacity="0.7" FontSize="12">
+                <TextBlock Foreground="{StaticResource TextSecondaryBrush}" FontSize="12">
                     <Run Text="Passed: " />
                     <Run Text="{Binding PassedCount}" />
                     <Run Text="   Failed: " />
@@ -6174,17 +6990,17 @@ public sealed partial class VerifyVM : ViewModel, INavigationAware
 
             <!-- Rows -->
             <Border Grid.Row="2"
-                    Background="#0B1116"
-                    BorderBrush="#2A3742"
+                    Background="{StaticResource SurfaceRaisedBrush}"
+                    BorderBrush="{StaticResource BorderSubtleBrush}"
                     BorderThickness="1"
-                    CornerRadius="4">
+                    CornerRadius="10">
                 <ScrollViewer HorizontalScrollBarVisibility="Disabled"
                               VerticalScrollBarVisibility="Auto">
                     <ItemsControl ItemsSource="{Binding Rows}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="vm:VerifyRowVM">
                                 <Grid ColumnDefinitions="20,*,Auto"
-                                      Margin="10,3">
+                                      Margin="12,4">
                                     <TextBlock Grid.Column="0"
                                                Text="{Binding StatusGlyph}"
                                                Foreground="{Binding StatusColor}"
@@ -6200,7 +7016,7 @@ public sealed partial class VerifyVM : ViewModel, INavigationAware
                                                Text="{Binding Message}"
                                                FontFamily="Consolas,Menlo,monospace"
                                                FontSize="11"
-                                               Opacity="0.65"
+                                               Foreground="{StaticResource TextSecondaryBrush}"
                                                TextWrapping="Wrap"
                                                MaxWidth="400" />
                                 </Grid>
@@ -6209,6 +7025,15 @@ public sealed partial class VerifyVM : ViewModel, INavigationAware
                     </ItemsControl>
                 </ScrollViewer>
             </Border>
+
+            <!-- Done -->
+            <Button Grid.Row="2"
+                    Content="Done"
+                    Command="{Binding DoneCommand}"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Bottom"
+                    Margin="0,12,0,0"
+                    Padding="20,8" />
         </Grid>
 
         <!-- Failure -->
@@ -6219,12 +7044,12 @@ public sealed partial class VerifyVM : ViewModel, INavigationAware
             <TextBlock Text="Verify failed"
                        FontSize="18"
                        FontWeight="SemiBold"
-                       Foreground="#F87171" />
+                       Foreground="{StaticResource ErrorBrush}" />
 
-            <Border Background="#1F1414"
-                    BorderBrush="#7F1D1D"
+            <Border Background="{StaticResource SurfaceRaisedBrush}"
+                    BorderBrush="{StaticResource ErrorBrush}"
                     BorderThickness="1"
-                    CornerRadius="4"
+                    CornerRadius="10"
                     Padding="16">
                 <TextBlock Text="{Binding ErrorMessage}"
                            TextWrapping="Wrap"
@@ -6232,19 +7057,11 @@ public sealed partial class VerifyVM : ViewModel, INavigationAware
                            FontSize="12" />
             </Border>
 
-            <Button Content="Home"
-                    Command="{Binding HomeCommand}"
+            <Button Content="Done"
+                    Command="{Binding DoneCommand}"
                     HorizontalAlignment="Left"
                     Padding="20,8" />
         </StackPanel>
-
-        <!-- Log panel -->
-        <Border Grid.Row="2"
-                Height="200"
-                Margin="0,16,0,0"
-                IsVisible="{Binding !IsConfiguring}">
-            <controls:LogView DataContext="{Binding Log}" />
-        </Border>
 
     </Grid>
 </UserControl>
@@ -16629,7 +17446,7 @@ public class InstallVMTests
     }
 
     [Fact]
-    public async Task InstallAsync_ClearsLogOnStart()
+    public async Task InstallAsync_DoesNotClearLog()
     {
         var tmp = MakeTempJson();
         try
@@ -16644,7 +17461,9 @@ public class InstallVMTests
             vm.ModlistPicker.SetPath(tmp);
             await vm.InstallCommand.ExecuteAsync(null);
 
-            vm.Log.Entries.Should().BeEmpty();
+            // Лог не чистится автоматически (решение 3.9.4).
+            vm.Log.Entries.Should().HaveCount(1);
+            vm.Log.Entries[0].Message.Should().Be("old entry");
         }
         finally
         {
@@ -16750,15 +17569,30 @@ public class InstallVMTests
     // ------------------------------------------------------------------
 
     [Fact]
-    public void HomeCommand_InvokesNavigateHome()
+    public async Task DoneCommand_ResetsState()
     {
-        var (vm, _, _) = Make();
-        var navigated = false;
+        var tmp = MakeTempJson();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ResultToReturn = FakeInstallRunner.MakeSummary();
 
-        vm.SetNavigateHome(() => navigated = true);
-        vm.HomeCommand.Execute(null);
+            vm.ModlistPicker.SetPath(tmp);
+            await vm.InstallCommand.ExecuteAsync(null);
 
-        navigated.Should().BeTrue();
+            vm.State.Should().Be(InstallState.Success);
+            vm.Summary.Should().NotBeNull();
+
+            vm.DoneCommand.Execute(null);
+
+            vm.State.Should().Be(InstallState.Configuration);
+            vm.Summary.Should().BeNull();
+            vm.ErrorMessage.Should().BeNull();
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
     }
 
     // ------------------------------------------------------------------
@@ -16937,7 +17771,7 @@ public class PackVMTests
     }
 
     [Fact]
-    public async Task PackAsync_ClearsLogOnStart()
+    public async Task PackAsync_DoesNotClearLog()
     {
         var tmp = MakeTempJson();
         try
@@ -16952,7 +17786,10 @@ public class PackVMTests
             vm.ConfigPicker.SetPath(tmp);
             await vm.PackCommand.ExecuteAsync(null);
 
-            vm.Log.Entries.Should().BeEmpty();
+            // Лог не чистится автоматически (решение 3.9.4).
+            // История копится, пользователь чистит вручную.
+            vm.Log.Entries.Should().HaveCount(1);
+            vm.Log.Entries[0].Message.Should().Be("old entry");
         }
         finally
         {
@@ -17052,16 +17889,35 @@ public class PackVMTests
     //  Home
     // ------------------------------------------------------------------
 
+    // ------------------------------------------------------------------
+    //  Done
+    // ------------------------------------------------------------------
+
     [Fact]
-    public void HomeCommand_InvokesNavigateHome()
+    public async Task DoneCommand_ResetsState()
     {
-        var (vm, _, _) = Make();
-        var navigated = false;
+        var tmp = MakeTempJson();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ResultToReturn = FakePackRunner.MakeSummary();
 
-        vm.SetNavigateHome(() => navigated = true);
-        vm.HomeCommand.Execute(null);
+            vm.ConfigPicker.SetPath(tmp);
+            await vm.PackCommand.ExecuteAsync(null);
 
-        navigated.Should().BeTrue();
+            vm.State.Should().Be(PackState.Success);
+            vm.Summary.Should().NotBeNull();
+
+            vm.DoneCommand.Execute(null);
+
+            vm.State.Should().Be(PackState.Configuration);
+            vm.Summary.Should().BeNull();
+            vm.ErrorMessage.Should().BeNull();
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
     }
 
     // ------------------------------------------------------------------
@@ -17578,16 +18434,18 @@ namespace Firelink.Gui.Shared.Tests;
 public class NavigationVMTests
 {
     [Fact]
-    public void Constructor_PopulatesFourItems()
+    public void Constructor_PopulatesNavigationItems()
     {
         var vm = new NavigationVM(_ => { });
 
-        vm.Items.Should().HaveCount(4);
+        vm.Items.Should().HaveCount(6);
         vm.Items.Select(i => i.Screen).Should().Equal(
             ScreenType.Home,
             ScreenType.Install,
             ScreenType.Pack,
-            ScreenType.Verify);
+            ScreenType.Verify,
+            ScreenType.Logs,
+            ScreenType.Settings);
     }
 
     [Fact]
@@ -17872,6 +18730,58 @@ public class ProgressViewModelTests
         vm.StepName.Should().Be("");
         vm.Percent.Should().Be(0);
         vm.IsBusy.Should().BeFalse();
+    }
+}
+
+````
+
+## tests/Firelink.Gui.Shared.Tests/SettingsVMTests.cs
+
+````csharp
+using FluentAssertions;
+using Firelink.Gui.Shared.ViewModels;
+
+namespace Firelink.Gui.Shared.Tests;
+
+public class SettingsVMTests
+{
+    [Fact]
+    public void ProductName_IsFirelink()
+    {
+        var vm = new SettingsVM();
+        vm.ProductName.Should().Be("Firelink");
+    }
+
+    [Fact]
+    public void Version_IsNotEmpty()
+    {
+        var vm = new SettingsVM();
+        vm.Version.Should().NotBeNullOrWhiteSpace();
+        vm.Version.Should().NotBe("0.0.0");
+    }
+
+    [Fact]
+    public void Copyright_Is2026Omen()
+    {
+        var vm = new SettingsVM();
+        vm.Copyright.Should().Be("Copyright (C) 2026 omen");
+    }
+
+    [Fact]
+    public void License_IsAgpl3OrLater()
+    {
+        var vm = new SettingsVM();
+        vm.License.Should().Be("AGPL-3.0-or-later");
+    }
+
+    [Fact]
+    public void Footer_ContainsAllParts()
+    {
+        var vm = new SettingsVM();
+        vm.Footer.Should().Contain("Firelink");
+        vm.Footer.Should().Contain(vm.Version);
+        vm.Footer.Should().Contain("AGPL-3.0-or-later");
+        vm.Footer.Should().Contain("Copyright (C) 2026 omen");
     }
 }
 
@@ -18318,15 +19228,33 @@ public class VerifyVMTests
     // ------------------------------------------------------------------
 
     [Fact]
-    public void HomeCommand_InvokesNavigateHome()
+    public async Task DoneCommand_ResetsState()
     {
-        var (vm, _, _) = Make();
-        var navigated = false;
+        var dir = MakeTempDir();
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ResultToReturn = FakeVerifyRunner.OkReport(passedCount: 3);
 
-        vm.SetNavigateHome(() => navigated = true);
-        vm.HomeCommand.Execute(null);
+            vm.TargetPicker.SetPath(dir);
+            vm.ShowAllChecks = true;
+            await vm.VerifyCommand.ExecuteAsync(null);
 
-        navigated.Should().BeTrue();
+            vm.State.Should().Be(VerifyState.Success);
+            vm.Report.Should().NotBeNull();
+            vm.Rows.Should().HaveCount(3);
+
+            vm.DoneCommand.Execute(null);
+
+            vm.State.Should().Be(VerifyState.Configuration);
+            vm.Report.Should().BeNull();
+            vm.Rows.Should().BeEmpty();
+            vm.IsOk.Should().BeFalse();
+        }
+        finally
+        {
+            Directory.Delete(dir);
+        }
     }
 
     // ------------------------------------------------------------------
@@ -18334,7 +19262,7 @@ public class VerifyVMTests
     // ------------------------------------------------------------------
 
     [Fact]
-    public async Task VerifyAsync_ClearsLogAndRowsOnStart()
+    public async Task VerifyAsync_KeepsLogClearsRows()
     {
         var dir = MakeTempDir();
         try
@@ -18350,8 +19278,11 @@ public class VerifyVMTests
             vm.TargetPicker.SetPath(dir);
             await vm.VerifyCommand.ExecuteAsync(null);
 
-            vm.Log.Entries.Should().BeEmpty();
-            vm.Rows.Should().BeEmpty(); // OkReport + ShowAllChecks=false
+            // Лог сохраняется (решение 3.9.4).
+            vm.Log.Entries.Should().HaveCount(1);
+
+            // Rows очищаются (VerifyVM.Rows.Clear() остался).
+            vm.Rows.Should().BeEmpty();
         }
         finally
         {
@@ -18369,7 +19300,7 @@ public class VerifyVMTests
         var row = new VerifyRowVM { Name = "x", Passed = true };
 
         row.StatusGlyph.Should().Be("✓");
-        row.StatusColor.Should().Be("#4ADE80");
+        row.StatusColor.Should().Be("#7fc98a");
     }
 
     [Fact]
@@ -18378,7 +19309,7 @@ public class VerifyVMTests
         var row = new VerifyRowVM { Name = "x", Passed = false };
 
         row.StatusGlyph.Should().Be("×");
-        row.StatusColor.Should().Be("#F87171");
+        row.StatusColor.Should().Be("#d97777");
     }
 }
 
@@ -33809,6 +34740,138 @@ public class NexusDownloaderTests
 
 ````
 
+## tools/build-release.bat
+
+````batch
+@echo off
+chcp 65001 >nul
+setlocal enabledelayedexpansion
+
+rem ============================================================
+rem  Firelink release build
+rem
+rem  Usage:
+rem    build-release.bat
+rem
+rem  Результат:
+rem    build_artifacts/Firelink-<version>-win-x64.zip
+rem
+rem  Что внутри:
+rem    Firelink.exe        — GUI
+rem    Firelink.Cli.exe    — CLI
+rem    *.dll               — общие зависимости
+rem    Assets/7z/          — 7z.exe + 7z.dll + License.txt
+rem
+rem  Скрипт ожидает, что лежит в <repo>\tools\build-release.bat.
+rem ============================================================
+
+set "ROOT=%~dp0.."
+pushd "%ROOT%" || (echo Failed to cd to "%ROOT%" & exit /b 1)
+
+set "PROPS=Directory.Build.props"
+set "GUI_PROJECT=src\Firelink.Gui\Firelink.Gui.csproj"
+set "CLI_PROJECT=src\Firelink.Cli\Firelink.Cli.csproj"
+
+echo === Firelink release build ===
+echo Root: %CD%
+echo.
+
+rem --- 1. Читаем версию из Directory.Build.props ---
+if not exist "%PROPS%" (
+    echo ERROR: %PROPS% not found.
+    popd
+    exit /b 1
+)
+
+set "VERSION="
+for /f "usebackq delims=" %%L in (`powershell -NoProfile -Command ^
+    "(Select-Xml -Path '%PROPS%' -XPath '//VersionPrefix').Node.InnerText.Trim()"`) do (
+    set "VERSION=%%L"
+)
+
+if "!VERSION!"=="" (
+    echo ERROR: could not read ^<VersionPrefix^> from %PROPS%.
+    popd
+    exit /b 1
+)
+
+echo Version: !VERSION!
+echo.
+
+set "ARTIFACT_DIR=build_artifacts\Firelink-!VERSION!-win-x64"
+set "ARTIFACT_ZIP=build_artifacts\Firelink-!VERSION!-win-x64.zip"
+
+rem --- 2. Готовим пустую папку для publish ---
+if exist "%ARTIFACT_DIR%" rmdir /s /q "%ARTIFACT_DIR%"
+if exist "%ARTIFACT_ZIP%" del /q "%ARTIFACT_ZIP%"
+mkdir "%ARTIFACT_DIR%" || (echo Failed to create "%ARTIFACT_DIR%" & popd & exit /b 1)
+
+echo Publishing GUI: %GUI_PROJECT%
+dotnet publish "%GUI_PROJECT%" ^
+    -c Release ^
+    -r win-x64 ^
+    --self-contained false ^
+    -o "%ARTIFACT_DIR%"
+if errorlevel 1 (
+    echo ERROR: dotnet publish failed for GUI.
+    popd
+    exit /b 1
+)
+echo.
+
+echo Publishing CLI: %CLI_PROJECT%
+dotnet publish "%CLI_PROJECT%" ^
+    -c Release ^
+    -r win-x64 ^
+    --self-contained false ^
+    -o "%ARTIFACT_DIR%"
+if errorlevel 1 (
+    echo ERROR: dotnet publish failed for CLI.
+    popd
+    exit /b 1
+)
+echo.
+
+rem --- 3. Проверяем, что оба exe на месте ---
+set "GUI_EXE=%ARTIFACT_DIR%\Firelink.exe"
+set "CLI_EXE=%ARTIFACT_DIR%\Firelink.Cli.exe"
+
+if not exist "%GUI_EXE%" (
+    echo ERROR: %GUI_EXE% not found after publish.
+    popd
+    exit /b 1
+)
+if not exist "%CLI_EXE%" (
+    echo ERROR: %CLI_EXE% not found after publish.
+    popd
+    exit /b 1
+)
+
+rem --- 4. Пакуем в zip ---
+echo Packing: %ARTIFACT_ZIP%
+powershell -NoProfile -Command ^
+    "Compress-Archive -Path '%ARTIFACT_DIR%\*' -DestinationPath '%ARTIFACT_ZIP%' -Force"
+if errorlevel 1 (
+    echo ERROR: Compress-Archive failed.
+    popd
+    exit /b 1
+)
+
+rem --- 5. Итог ---
+for %%F in ("%ARTIFACT_ZIP%") do set "ZIP_SIZE=%%~zF"
+set /a ZIP_SIZE_MB=!ZIP_SIZE! / 1048576
+
+echo.
+echo Done.
+echo Zip: %ARTIFACT_ZIP%
+echo Size: !ZIP_SIZE! bytes (~!ZIP_SIZE_MB! MB)
+echo.
+
+popd
+endlocal
+exit /b 0
+````
+
 ## tools/dump-repo.bat
 
 ````batch
@@ -33985,6 +35048,64 @@ for /f "usebackq delims=" %%F in ("%LIST_FILE%") do (
 exit /b 0
 ````
 
+## samples/firelink-pack.back.json
+
+````json
+{
+  "meta": {
+    "name": "OmenRim 7",
+    "version": "0.1.0",
+    "author": "YourName",
+    "game": "skyrimspecialedition",
+    "gameVersion": "1.6.1170"
+  },
+  "instance": {
+    "path": "."
+  },
+  "mo2": {
+    "version": "2.5.2",
+    "profile": "Default",
+    "archive": "Mod.Organizer-2.5.2.7z",
+    "source": {
+      "type": "mirror",
+      "url": "https://github.com/ModOrganizer2/modorganizer/releases/download/v2.5.2/Mod.Organizer-2.5.2.7z",
+      "hash": "xxh64:E574E05EB6C470AD"
+    },
+	  "extensions": [
+		"plugins/curationclub"
+	]
+  },
+  "stockGame": {
+	"extras": [
+    "skse64_loader.exe",
+    "skse64_1_7_104.dll"
+	]
+  },
+  "archiveSources": [
+    {
+      "archive": "Effect 11-415-1.0.0-2026.08.24-[mod.pub].zip",
+      "sources": [
+        {
+          "type": "mirror",
+          "url": "https://mod.pub/skyrim-se/415/files/Effect-11-415-1.0.0-2026.08.24-[mod.pub].zip",
+          "hash": "xxh64:B48AA9BEA422799E"
+        }
+      ]
+    },
+    {
+      "archive": "NAT.ENB - ENB PRESET v3.1.1C-27141-3-1-1C-1685129135.zip",
+      "sources": [
+        {
+          "type": "mirror",
+          "url": "https://mod.pub/skyrim-se/415/files/NAT.ENB-ENB-PRESET-v3-1-1C-27141-3-1-1C-1685129135.zip",
+          "hash": "xxh64:763D3DB4CD3ED579"
+        }
+      ]
+    }
+  ]
+}
+````
+
 ## samples/firelink-pack.full.json
 
 ````json
@@ -34146,6 +35267,43 @@ exit /b 0
   },
   "stockGame": {
     "extras": []
+  },
+  "archiveSources": []
+}
+````
+
+## samples/firelink-pack.json
+
+````json
+{
+  "meta": {
+    "name": "OmenRim 7",
+    "version": "0.1.0",
+    "author": "YourName",
+    "game": "skyrimspecialedition",
+    "gameVersion": "1.6.1170"
+  },
+  "instance": {
+    "path": "."
+  },
+  "mo2": {
+    "version": "2.5.2",
+    "profile": "Default",
+    "archive": "Mod.Organizer-2.5.2.7z",
+    "source": {
+      "type": "mirror",
+      "url": "https://github.com/ModOrganizer2/modorganizer/releases/download/v2.5.2/Mod.Organizer-2.5.2.7z",
+      "hash": "xxh64:E574E05EB6C470AD"
+    },
+	  "extensions": [
+		"plugins/curationclub"
+	]
+  },
+  "stockGame": {
+	"extras": [
+    "skse64_loader.exe",
+    "skse64_1_7_104.dll"
+	]
   },
   "archiveSources": []
 }

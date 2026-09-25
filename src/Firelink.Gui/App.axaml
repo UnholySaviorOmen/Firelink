@@ -13,11 +13,13 @@
 
             <!-- Base surfaces -->
             <Color x:Key="SurfaceBaseColor">#1e1e1e</Color>
+            <Color x:Key="SurfaceSidebarColor">#181818</Color>
             <Color x:Key="SurfaceRaisedColor">#242424</Color>
             <Color x:Key="SurfaceOverlayColor">#2a2a2a</Color>
             <Color x:Key="SurfaceHoverColor">#2f2f2f</Color>
 
             <SolidColorBrush x:Key="SurfaceBaseBrush"    Color="{StaticResource SurfaceBaseColor}" />
+            <SolidColorBrush x:Key="SurfaceSidebarBrush" Color="{StaticResource SurfaceSidebarColor}" />
             <SolidColorBrush x:Key="SurfaceRaisedBrush"  Color="{StaticResource SurfaceRaisedColor}" />
             <SolidColorBrush x:Key="SurfaceOverlayBrush" Color="{StaticResource SurfaceOverlayColor}" />
             <SolidColorBrush x:Key="SurfaceHoverBrush"   Color="{StaticResource SurfaceHoverColor}" />
