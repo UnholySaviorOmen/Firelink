@@ -29,9 +29,6 @@ public sealed partial class MainWindowVM : ViewModel
     {
         var pane = _screens.Create(screen);
 
-        if (pane is INavigationAware nav)
-            nav.SetNavigateHome(() => NavigateTo(ScreenType.Home));
-
         ActivePane = pane;
         Navigation.SelectScreen(screen);
 

@@ -28,8 +28,7 @@
                        FontSize="12"
                        IsVisible="{Binding ErrorMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
 
-            <Button Classes="accent"
-                    Content="Install"
+            <Button Content="Install"
                     Command="{Binding InstallCommand}"
                     HorizontalAlignment="Left"
                     Padding="20,8" />

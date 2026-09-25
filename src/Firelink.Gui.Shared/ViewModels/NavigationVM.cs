@@ -102,7 +102,7 @@ public sealed partial class NavigationVM : ViewModel
     {
         Items.Clear();
 
-        Items.Add(new NavigationItem("Home", ScreenType.Home));
+        Items.Add(new NavigationItem("Dashboard", ScreenType.Home));
 
         if (_settings.IsDevMode)
         {

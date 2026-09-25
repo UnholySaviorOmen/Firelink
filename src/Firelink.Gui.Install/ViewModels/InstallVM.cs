@@ -13,7 +13,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Firelink.Gui.Install.ViewModels;
 
-public sealed partial class InstallVM : ProgressViewModel, INavigationAware, IInstallTarget
+public sealed partial class InstallVM : ProgressViewModel, IInstallTarget
 {
     private readonly IInstallRunner _runner;
     private readonly ILogger<InstallVM> _logger;

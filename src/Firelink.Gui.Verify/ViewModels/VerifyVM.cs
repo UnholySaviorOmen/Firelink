@@ -2,7 +2,6 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Firelink.Core;
-using Firelink.Gui.Shared.Navigation;
 using Firelink.Gui.Shared.Services;
 using Firelink.Gui.Shared.State;
 using Firelink.Gui.Shared.ViewModels;
@@ -13,7 +12,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Firelink.Gui.Verify.ViewModels;
 
-public sealed partial class VerifyVM : ViewModel, INavigationAware
+public sealed partial class VerifyVM : ViewModel
 {
     private readonly IVerifyRunner _runner;
     private readonly ILogger<VerifyVM> _logger;
@@ -52,11 +51,6 @@ public sealed partial class VerifyVM : ViewModel, INavigationAware
     //  Производные свойства для UI
     // ------------------------------------------------------------------
 
-    /// <summary>
-    /// true, если все проверки прошли.
-    /// Нужен отдельно от Report.IsOk, чтобы не дёргать цепочку
-    /// через null при биндинге.
-    /// </summary>
     public bool IsOk => Report?.IsOk ?? false;
 
     public bool HasFailures => Report is not null && Report.FailedCount > 0;
@@ -64,7 +58,6 @@ public sealed partial class VerifyVM : ViewModel, INavigationAware
     public int PassedCount => Report?.PassedCount ?? 0;
     public int FailedCount => Report?.FailedCount ?? 0;
 
-    /// <summary>Заголовок успеха: «All checks passed» или «N checks failed».</summary>
     public string ResultTitle => Report switch
     {
         null => "",

@@ -27,8 +27,7 @@
                        FontSize="12"
                        IsVisible="{Binding ErrorMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
 
-            <Button Classes="accent"
-                    Content="Pack"
+            <Button Content="Pack"
                     Command="{Binding PackCommand}"
                     HorizontalAlignment="Left"
                     Padding="20,8" />

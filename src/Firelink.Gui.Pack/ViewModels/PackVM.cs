@@ -3,7 +3,6 @@ using CommunityToolkit.Mvvm.Input;
 using Firelink.Core;
 using Firelink.Core.Progress;
 using Firelink.Gui.Pack.Services;
-using Firelink.Gui.Shared.Navigation;
 using Firelink.Gui.Shared.Services;
 using Firelink.Gui.Shared.State;
 using Firelink.Gui.Shared.ViewModels;
@@ -13,7 +12,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Firelink.Gui.Pack.ViewModels;
 
-public sealed partial class PackVM : ProgressViewModel, INavigationAware
+public sealed partial class PackVM : ProgressViewModel
 {
     private readonly IPackRunner _runner;
     private readonly ILogger<PackVM> _logger;

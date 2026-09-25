@@ -11,7 +11,7 @@
               ColumnDefinitions="*,Auto"
               Margin="0,0,0,16">
             <TextBlock Grid.Column="0"
-                       Text="Home"
+                       Text="Dashboard"
                        FontSize="24"
                        FontWeight="Bold"
                        VerticalAlignment="Center" />
@@ -50,15 +50,15 @@
                                                 Orientation="Horizontal"
                                                 Spacing="8"
                                                 VerticalAlignment="Center">
-                                        <Button Content="Open MO2"
-                                                Command="{Binding OpenMo2Command}"
-                                                Padding="16,8" />
                                         <Button Content="Install"
-                                                Classes="accent"
+                                                FontWeight="SemiBold"
                                                 Command="{Binding InstallCommand}"
                                                 Padding="16,8" />
                                         <Button Content="Update"
                                                 Command="{Binding UpdateCommand}"
+                                                Padding="16,8" />
+                                        <Button Content="Open MO2"
+                                                Command="{Binding OpenMo2Command}"
                                                 Padding="16,8" />
                                     </StackPanel>
                                 </Grid>

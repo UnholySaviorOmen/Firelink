@@ -68,6 +68,29 @@
             <x:Double x:Key="FontSizeTitle">24</x:Double>
             <x:Double x:Key="FontSizeDisplay">30</x:Double>
 
+            <!-- ============================================================
+           Переопределения Fluent-кнопок: все кнопки выглядят как secondary
+           (нейтральный серый фон, светлый текст). Песочный акцент для
+           кнопок не используется. Ключи читает Fluent-тема Avalonia;
+           их переопределение побеждает встроенные стили Button,
+           Button:pointerover, Button:pressed, Button:disabled.
+           ============================================================ -->
+
+            <SolidColorBrush x:Key="ButtonBackground"             Color="{StaticResource SurfaceOverlayColor}" />
+            <SolidColorBrush x:Key="ButtonBackgroundPointerOver"  Color="{StaticResource SurfaceHoverColor}" />
+            <SolidColorBrush x:Key="ButtonBackgroundPressed"      Color="{StaticResource SurfaceRaisedColor}" />
+            <SolidColorBrush x:Key="ButtonBackgroundDisabled"     Color="{StaticResource SurfaceRaisedColor}" />
+
+            <SolidColorBrush x:Key="ButtonForeground"             Color="{StaticResource TextPrimaryColor}" />
+            <SolidColorBrush x:Key="ButtonForegroundPointerOver"  Color="{StaticResource TextPrimaryColor}" />
+            <SolidColorBrush x:Key="ButtonForegroundPressed"      Color="{StaticResource TextPrimaryColor}" />
+            <SolidColorBrush x:Key="ButtonForegroundDisabled"     Color="{StaticResource TextMutedColor}" />
+
+            <SolidColorBrush x:Key="ButtonBorderBrush"            Color="{StaticResource BorderStrongColor}" />
+            <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="{StaticResource BorderStrongColor}" />
+            <SolidColorBrush x:Key="ButtonBorderBrushPressed"     Color="{StaticResource BorderStrongColor}" />
+            <SolidColorBrush x:Key="ButtonBorderBrushDisabled"    Color="{StaticResource BorderSubtleColor}" />
+
         </ResourceDictionary>
     </Application.Resources>
 
@@ -116,12 +139,13 @@
         </Style>
 
         <!-- ============================================================
-         Button — секондари (без класса)
+         Button — единый secondary-стиль.
+         Фон, рамка и текст всех состояний задаются через Fluent-ключи
+         (Application.Resources: ButtonBackground*, ButtonForeground*,
+         ButtonBorderBrush*). Здесь только геометрия и типографика.
+         Класса .accent нет — все кнопки одинаковые.
          ============================================================ -->
         <Style Selector="Button">
-            <Setter Property="Background"      Value="{StaticResource SurfaceOverlayBrush}" />
-            <Setter Property="Foreground"      Value="{StaticResource TextPrimaryBrush}" />
-            <Setter Property="BorderBrush"     Value="{StaticResource BorderStrongBrush}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius"    Value="8" />
             <Setter Property="Padding"         Value="16,8" />
@@ -129,32 +153,6 @@
             <Setter Property="FontWeight"      Value="Medium" />
         </Style>
 
-        <Style Selector="Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background"  Value="{StaticResource SurfaceHoverBrush}" />
-            <Setter Property="BorderBrush" Value="{StaticResource BorderStrongBrush}" />
-            <Setter Property="Foreground"  Value="{StaticResource TextPrimaryBrush}" />
-        </Style>
-
-        <Style Selector="Button:pressed /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="{StaticResource SurfaceOverlayBrush}" />
-        </Style>
-
-        <!-- Button — accent -->
-        <Style Selector="Button.accent">
-            <Setter Property="Background"  Value="{StaticResource AccentBrush}" />
-            <Setter Property="Foreground"  Value="{StaticResource SurfaceBaseBrush}" />
-            <Setter Property="BorderBrush" Value="Transparent" />
-            <Setter Property="FontWeight"  Value="SemiBold" />
-        </Style>
-
-        <Style Selector="Button.accent:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="{StaticResource AccentHoverBrush}" />
-        </Style>
-
-        <Style Selector="Button.accent:pressed /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="{StaticResource AccentPressedBrush}" />
-        </Style>
-        
         <!-- ============================================================
          TextBox — используется в Settings в будущем.
          Сейчас в проекте TextBox нет, но стили на будущее.
@@ -192,7 +190,7 @@
         <Style Selector="TextBox /template/ TextBlock#PART_Watermark">
             <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}" />
         </Style>
-        
+
         <!-- ============================================================
          CheckBox
          ============================================================ -->
@@ -220,7 +218,6 @@
             <Setter Property="CornerRadius" Value="10" />
         </Style>
 
-        <!-- Item: selected — карточка с фоном -->
         <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
             <Setter Property="Background"   Value="{StaticResource SurfaceOverlayBrush}" />
             <Setter Property="CornerRadius" Value="10" />
