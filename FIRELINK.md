@@ -1,12 +1,12 @@
 # Firelink — состояние проекта и план работ
 
 **Обновлено:** 2026-09-25
-**Всего тестов:** 766, 0 failed
-**Текущий блок:** — (Фаза 3 закрыта: шаги 3.1–3.8; идёт Фаза 3.9 — редизайн GUI, шаги 3.9.1–3.9.6 закрыты, 3.9.7 в обсуждении)
-**Следующий блок:** Фаза 3.9 — шаг 3.9.7 (HomeView v2 / решение: что делать с Home)
+**Всего тестов:** 813, 0 failed
+**Текущий блок:** — (Фаза 3 закрыта; Фаза 3.9 закрыта целиком: шаги 3.9.1–3.9.8)
+**Следующий блок:** не определён (варианты: ручной прогон GUI, техдолг, Фаза 5)
 
 **Спутние документы:**
-- `DOC.md` (v4.4) — формальная документация: форматы, pipeline, CLI, обработка ошибок.
+- `DOC.md` (v4.5) — формальная документация: форматы, pipeline, CLI, обработка ошибок.
 - `repo-dump.md` — свежий дамп репозитория.
 
 ---
@@ -20,7 +20,7 @@ Firelink — инструмент для создания и установки 
 Файлы восстанавливаются по хешам `xxHash64`. Firelink работает с
 **результатом** установки, а не с процессом.
 
-Один CLI (`Firelink.Cli`, exe → `Firelink.Cli.exe`) + в будущем один GUI
+Один CLI (`Firelink.Cli`, exe → `Firelink.Cli.exe`) + один GUI
 (Avalonia, exe → `Firelink.exe`). Логика — в библиотеках, интерфейсы
 (CLI, GUI) — отдельные слои.
 
@@ -38,95 +38,48 @@ Firelink — инструмент для создания и установки 
 
 Продолжаем проект Firelink. Стиль — пошаговые блоки кода с тестами.
 
-Прикладываю: FIRELINK.md, DOC.md (v4.5), repo-dump.md (свежий).
+Прикладываю: FIRELINK.md, DOC.md, repo-dump.md (свежий).
 
-Текущее состояние: 766 тестов, 0 failed. Закрыты: MVP (packer,
+Текущее состояние: 813 тестов, 0 failed. Закрыты: MVP (packer,
 installer, verify), Фаза 1 (единый CLI Firelink.Cli),
 Фаза 2 (общие API для GUI), Фаза 6 (Nexus Premium),
-Фаза 3 (GUI, шаги 3.1–3.8), а также начата Фаза 3.9
-(редизайн GUI, шаги 3.9.1–3.9.6):
+Фаза 3 (GUI, шаги 3.1–3.8), Фаза 3.9 (редизайн GUI +
+Home-дашборд, шаги 3.9.1–3.9.8).
 
-3.1 — проекты GUI + DI + базовые VM (LoadingLock,
-FilePickerVM, ProgressViewModel, ObservableLoggerProvider).
+Фаза 3.9 — редизайн GUI и Home-дашборд:
 
-3.2 — главное окно с навигацией (MainWindowVM, NavigationVM,
-ScreenType, ViewLocator, плейсхолдеры).
+3.9.1 — палитра и типографика в App.axaml.
+3.9.2 — стили базовых контролов.
+3.9.3 — NavigationView v2 (без шапки/глоу/гамбургера).
+3.9.3.3 — Settings: ScreenType.Settings, SettingsVM, SettingsView.
+3.9.5 — FilePickerView v2.
+3.9.4 — Logs в отдельной вкладке; убрана автоочистка лога.
+3.9.6 — убраны хардкод-цвета; Home → Done.
+3.9.7.1 — DevMode (in-memory, тумблер в Settings);
+  NavigationVM перестраивает Items; при DevMode=false
+  только Home и Settings.
+3.9.7.2 — InstalledPackScanner (IInstalledPackScanner,
+  InstalledPackInfo, сканирование <exeDir>/Instances/).
+3.9.7.3 — HomeVM дашборд, InstalledPackVM карточка,
+  HomeView.axaml, навигация Home → Install через
+  IInstallRequestHandler/IInstallTarget.
+3.9.8 — Open MO2 / Install / Update на карточке;
+  IProcessLauncher + ShellProcessLauncher;
+  Update через IFilePickerService (выбор нового
+  modlist.json); IsInstalled убран из InstalledPackInfo;
+  inline WarningMessage на карточке.
 
-3.3 — живые логи в UI (LogVM, LogView, автоскролл).
-
-3.4.1 — инфраструктура: IScreenFactory, INavigationAware,
-IFilePickerService, AvaloniaFilePickerService, ScreenFactory.
-
-3.4.2 — экран Install: InstallVM, InstallView, IInstallRunner,
-проект Firelink.Gui.Controls (общие контролы LogView,
-FilePickerView).
-
-3.5 — экран Pack: PackVM, PackView, IPackRunner/PackRunner,
-проект Firelink.Gui.Pack, AddGuiPack(), удаление
-PackPlaceholderVM/PackPlaceholderView.
-
-3.5.1 — потокобезопасный лог-канал: IUiDispatcher +
-ObservableLogSink с маршалингом мутаций на UI-поток,
-AvaloniaUiDispatcher в Firelink.Gui. Устранена гонка
-ObservableCollection vs worker-потоки pipeline.
-
-3.6 — экран Verify: VerifyVM, VerifyView, IVerifyRunner/VerifyRunner,
-проект Firelink.Gui.Verify, AddGuiVerify(),
-VerifyRowVM (строка таблицы проверок), удаление
-VerifyPlaceholderVM/VerifyPlaceholderView.
-
-3.7 — дистрибутив: Directory.Build.props (VersionPrefix 0.1.0,
-IncludeSourceRevisionInInformationalVersion=false), иконка GUI
-(ApplicationIcon Assets\app.ico), версия CLI из assembly
-(Firelink.Cli/Program.cs GetApplicationVersion()),
-tools/build-release.bat (publish GUI+CLI в одну папку,
-win-x64, framework-dependent, Compress-Archive → zip).
-Тестов не добавляли — 759 passed сохраняется.
-
-3.8 — ручной прогон GUI на OmenRim 7 / OmenTest7:
-pack (71 mods, 7853 files, 4389 directives), install (71 created,
-58 downloaded, 71 meta.ini), verify (4522 passed, 0 failed).
-GUI функционально эквивалентен CLI.
-
-Фаза 3.9 — редизайн GUI (тёмная тема, тёплый песочный акцент
-#d3b181, палитра #1e1e1e, иконки Lucide). Закрыты:
-
-3.9.1 — палитра и типографика в App.axaml (Color- и SolidColorBrush-
-токены, RequestedThemeVariant=Dark).
-3.9.2 — стили базовых контролов (Window, TextBlock + классы h1/h2/
-subtitle/caption/muted, Button + .accent, CheckBox, ListBox/ListBoxItem,
-ScrollBar, ProgressBar).
-3.9.3 — NavigationView v2: убрали шапку с иконкой и гамбургером;
-список навигации + glow-акцент убран (артефакты), фон карточки
-у активного, иконки Lucide для Home/Install/Pack/Verify;
-копирайт вынесен в Settings.
-3.9.3.3 — Settings: новый ScreenType.Settings, SettingsVM,
-SettingsView (About + версия + копирайт + license + placeholder).
-3.9.5 — FilePickerView v2 (замена хардкод-цветов #0B1116/#2A3742
-на токены палитры; TextBox-стили добавлены профилактически).
-3.9.4 — Logs в отдельной вкладке: ScreenType.Logs, LogsVM,
-LogsView, перекраска LogView + LogLevelToBrushConverter;
-убрали LogView из Home/Install/Pack/Verify; убрали Log.Clear()
-из InstallVM/PackVM/VerifyVM (история копится, чистится вручную).
-3.9.6 — Pack/Install/Verify: убрали хардкод-цвета (#4ADE80, #F87171,
-#FBBF24, #0B1116, #2A3742, #1F1414, #7F1D1D); кнопка Home → Done
-(сбрасывает state в Configuration, пикеры не сбрасываются);
-ResultColor/StatusColor в VerifyVM/VerifyRowVM → #7fc98a/#d97777.
-
-Следующая задача: Фаза 3.9 — шаг 3.9.7 (HomeView v2). Обсуждается
-вариант: Home без дублирующих карточек-навигации (В1 — приветствие
-с текстом «как начать»; В2 — убрать Home вообще; В3 — виджеты
-«last operation», «Nexus status»). Ожидается решение.
+Следующая задача: не определена. Варианты:
+- Ручной прогон GUI на OmenRim 7 / OmenTest7 (аналог 3.8).
+- Техдолг (убрать INavigationAware.SetNavigateHome и т.п.).
+- Фаза 5 (Nexus Free, WebView2).
 
 Стиль ответов:
 
-Разбор задачи.
-
-Полный код файлов с путями.
-
-Инструкция по сборке/тестам.
-
-Ожидаемый вывод dotnet test.
+1. Разбор задачи.
+2. Полный код файлов с путями.
+3. Инструкция по сборке/тестам.
+4. Ожидаемый вывод dotnet test.
 
 FIRELINK.md — только по запросу.
 
@@ -165,7 +118,7 @@ FIRELINK.md — только по запросу.
 - **Avalonia** 11.2.1 (`Avalonia`, `Avalonia.Desktop`,
   `Avalonia.Themes.Fluent`, `Avalonia.Fonts.Inter`,
   `Avalonia.Diagnostics` Debug-only).
-- **CommunityToolkit.Mvvm** 8.4.0 (source generators входят в основной пакет).
+- **CommunityToolkit.Mvvm** 8.4.0.
 - **Microsoft.Extensions.DependencyInjection**.
 - **Microsoft.Extensions.Logging**.
 - **AvaloniaUseCompiledBindingsByDefault=true** во всех GUI-проектах.
@@ -178,99 +131,35 @@ FIRELINK.md — только по запросу.
 
 - **Полный pipeline packer-а (13 шагов).**
 - **Полный pipeline installer-а (11 шагов).**
-- **Verify** (pipeline + tests + CLI), включая `meta.ini`, extensions,
-  extras.
-- **Ctrl+C** в CLI, `Cancelled.`, exit 130.
-- **Error-msg для пробелов без кавычек.**
-- **593 теста, 0 failed.**
-- **Реальный прогон на `OmenRim 7`** (pack → install → verify,
-  4338 passed, 0 failed).
-- **Фаза 1 целиком — единый CLI `Firelink.Cli.exe`:**
-  - 1.1 — создан `Firelink.Cli`, pack-сторона перенесена.
-  - 1.2 — install-сторона перенесена, все 5 команд работают.
-  - 1.3 — `Firelink.Pack` стал class library.
-  - 1.4 — `Firelink.Install` стал class library.
-  - 1.5 — `AddFirelinkPack` / `AddFirelinkInstall`.
-  - 1.6 — ручной прогон на OmenRim 7: pack → install (TestInstance3)
-    → verify, 4338 passed, 0 failed. Идентично `TestInstance2`.
-  - 1.7 — Ctrl+C на pack/install/verify (`Cancelled.`, exit 130),
-    пробелы без кавычек (`CLI error` + hint, exit 2). Регрессий нет.
-  - **Фаза 2 — общие API для будущего GUI (шаги 2.1–2.4):**
-  - 2.1 — `StepProgress` + `IProgress<StepProgress>?` в обоих pipeline-ах.
-  - 2.2 — `PackInputFactory` / `InstallInputFactory`.
-    `PackPipeline.Input` введён (симметрично `InstallPipeline.Input`).
-  - 2.3 — `PackSummary` / `InstallSummary` + Builder-ы.
-  - 2.4 — реальный прогон на OmenRim 7 (TestInstance4) + verify.
-  - **Фаза 6 — Nexus Premium (12.8):**
-  - 12.8.1 — `NexusApiKeyProvider` (`INexusApiKeyProvider`,
-    `NullNexusApiKeyProvider`, чтение `%USERPROFILE%\.firelink\nexus.key`).
-  - 12.8.2 — `NexusClient` (`IsPremiumAsync` с кешем,
-    `GetDownloadLinksAsync`, модели ответов).
-  - 12.8.3 — `NexusDownloader : IArchiveDownloader` (`SourceType =>
-    "nexus"`, перебор CDN-нод).
-  - 12.8.4 — DI в `AddFirelinkInstall` (`TryAddEnumerable` для
-    `IArchiveDownloader`, именованные `HttpClient`-ы).
-  - 12.8.4a — рефакторинг:
-    - downloader-ы принимают `IHttpClientFactory` (не `HttpClient`);
-    - `TempFileStream` вместо `MemoryStream` (архивы > 2 ГБ);
-    - кеш `IsPremiumAsync` в `NexusClient`.
-  - 12.8.5 — `DOC.md` v4.3, обновление `FIRELINK.md`.
-  - Ручной прогон на `TestInstance5` — 4 nexus-архива скачаны, USSEP
-    (~250 МБ) без таймаутов.
-  - **Фаза 3 — GUI (Avalonia), частично закрыта:**
-  - 3.1 — проекты GUI + DI + базовые VM.
-    Итог: 688 passed.
-  - 3.2 — главное окно с навигацией.
-    Итог: 700 passed.
-  - 3.3 — живые логи в UI.
-    Итог: 710 passed.
-  - 3.4.1 — инфраструктура навигации и file picker.
-    Итог: 716 passed.
-  - 3.4.2 — экран Install (полный: диалоги, прогресс, сводка, лог).
-    Итог: 731 passed.
-  - 3.5 — экран Pack (симметрично Install) + удаление
-    Pack-плейсхолдеров.
-    Итог: 739 passed (после удаления тестов на плейсхолдеры).
-  - 3.5.1 — потокобезопасный лог-канал (IUiDispatcher).
-    Итог: 744 passed.
-  - 3.6 — экран Verify (таблица проверок + Show all checks) +
-    удаление Verify-плейсхолдеров.
-    Итог: 759 passed.
-  - 3.7 — дистрибутив: Directory.Build.props (VersionPrefix),
-    иконка GUI, версия CLI из assembly, tools/build-release.bat.
-    Итог: 759 passed (тестов не добавляли — шаг чисто
-    инфраструктурный).
-  - 3.8 — ручной прогон GUI на OmenRim 7 / OmenTest7:
-    pack/install/verify через GUI, 4522 passed, 0 failed.
-    Итог: 759 passed.
-  - 3.9.1 — палитра и типографика. Итог: 759 passed.
-  - 3.9.2 — стили базовых контролов. Итог: 759 passed.
-  - 3.9.3 / 3.9.3.2 / 3.9.3.3 — NavigationView v2 (без шапки,
-    без глоу), Settings. Итог: 764 passed (+5 SettingsVMTests).
-  - 3.9.4 — Logs в отдельной вкладке + перекраска LogView.
-    Итог: 764 passed (без изменений счётчика; 4 теста переписаны).
-  - 3.9.5 — FilePickerView v2. Итог: 764 passed.
-  - 3.9.6 — Pack/Install/Verify: убрали хардкод-цвета, Home → Done.
-    Итог: 764 passed.
+- **Verify** (pipeline + tests + CLI).
+- **CLI `Firelink.Cli.exe`** — 5 команд.
+- **GUI `Firelink.exe`** — Avalonia, экраны Home/Install/Pack/
+  Verify/Logs/Settings. Home — дашборд инстансов.
+- **Nexus Premium** (Фаза 6).
+- **Фаза 1** — единый CLI.
+- **Фаза 2** — общие API.
+- **Фаза 3** — GUI (3.1–3.8).
+- **Фаза 3.9** — редизайн GUI + Home-дашборд (3.9.1–3.9.8).
+- **813 тестов, 0 failed.**
+- **Реальный прогон на `OmenRim 7`** через CLI: pack → install →
+  verify, 4338 passed. Через GUI (3.8): 4522 passed.
 
 ### В работе
 
-- Фаза 3.9 — редизайн GUI. Шаг 3.9.7 (HomeView v2) — обсуждается.
+- Ничего. Ожидается выбор следующего блока.
 
 ### Не начато
 
-- Фаза 3 — GUI (Avalonia).
-- Фаза 5 — Nexus Free (WebView2).
+- **Фаза 5** — Nexus Free (WebView2).
 
 ### Вычеркнуто
 
 - **Фаза 4 — вариации дистрибутивов.** Решение 2026-09-21: не делаем.
-  Один CLI, один GUI, один набор exe в дистрибутиве.
-- **E1 (прогон на большом инстансе 4370 модов)** — отменён, не критично.
+- **E1 (прогон на большом инстансе 4370 модов)** — отменён.
 
 ---
 
-## Структура репозитория (после шагов 1.1–1.4)
+## Структура репозитория
 
 ```
     src/
@@ -299,10 +188,16 @@ FIRELINK.md — только по запросу.
       Firelink.Gui.Verify.Tests/
 ```
 
-После шага 1.4 — **только один exe** в solution: `Firelink.Cli.exe`.
-`Firelink.Pack.exe` и `Firelink.Install.exe` больше нет. Команды:
-`firelink pack`, `firelink install`, `firelink verify`, `firelink hash`,
-`firelink doctor` (usage-строка; имя exe — `Firelink.Cli.exe`).
+### Новые сервисы `Firelink.Gui.Shared` (3.9.7–3.9.8)
+
+- `IInstalledPackScanner` / `InstalledPackScanner` — скан
+  `<exeDir>/Instances/` (Models/InstalledPackInfo.cs).
+- `IProcessLauncher` — абстракция запуска процесса
+  (реализация `ShellProcessLauncher` — в `Firelink.Gui.Services`).
+- `IInstallRequestHandler` (Navigation/) — Home → MainWindowVM
+  запрос перехода в Install с `(manifestPath, targetPath)`.
+- `IInstallTarget` (Navigation/) — MainWindowVM → InstallVM,
+  `PrepareForInstall(manifestPath, targetPath)`.
 
 ---
 
@@ -329,11 +224,13 @@ GenerateMetaIniStep → RegenerateProfileStep
 **CLI:** `firelink install <manifest> [--target <dir>]`.
 **CLI:** `firelink verify <target> [--verbose]`.
 
-## GUI-навигация (Фаза 3)
+## GUI-навигация
 
 MainWindow (Grid: sidebar + content)
   ├── NavigationView (DataContext = NavigationVM)
-  │     └── ListBox с NavigationItem[Home|Install|Pack|Verify]
+  │     └── ListBox с NavigationItem
+  │          DevMode=false: Home, Settings
+  │          DevMode=true:  Home, Install, Pack, Verify, Logs, Settings
   └── ContentControl (Content = MainWindowVM.ActivePane)
         └── ViewLocator → View
 
@@ -344,86 +241,80 @@ MainWindowVM:
     if (pane is INavigationAware) pane.SetNavigateHome(...)
     ActivePane = pane
     Navigation.SelectScreen(screen)
+    if (pane is HomeVM) { подписка на InstallRequested; Refresh(); }
+
+  OnInstallRequested(manifestPath, targetPath):
+    NavigateTo(Install)
+    if (ActivePane is IInstallTarget t)
+        t.PrepareForInstall(manifestPath, targetPath)
 
 ScreenFactory (в Firelink.Gui):
   Home    → HomeVM
   Install → InstallVM          (Firelink.Gui.Install)
   Pack    → PackVM             (Firelink.Gui.Pack)
   Verify  → VerifyVM           (Firelink.Gui.Verify)
+  Logs    → LogsVM
+  Settings→ SettingsVM
 
-ViewLocator:
-  param.ViewModels.XxxVM → ищет Control с FullName *".Views.XxxView"
-  через перебор всех загруженных сборок.
+ViewLocator: param.ViewModels.XxxVM → ищет Control с FullName
+*".Views.XxxView" через перебор всех загруженных сборок.
 
-Плейсхолдеров больше нет — все 4 экрана реальные.
+Плейсхолдеров нет — все 6 экранов реальные.
 
 ---
 
 ## Прогоны на реальных инстансах
 
 **`C:\Firelink\TestInstance\` (19.09.2026, до 12.13.x):**
-
 - Install: 82 мода, 68 архивов, 82 meta.ini, профиль `Default`.
-- Verify: 4337 passed (здоровый), 4310/2 (сломанный), install
-  восстанавливает.
+- Verify: 4337 passed.
 
-**`C:\Firelink\TestInstance2\` (20.09.2026, после 12.13.6, `OmenRim 7`):**
-
+**`C:\Firelink\TestInstance2\` (20.09.2026, после 12.13.6, OmenRim 7):**
 - Pack: 82 мода, 4236 matched, 69 архивов, 49/49 extensions, 2/2 extras.
 - Install: 82 мода, 1 extension written, 2 extras written, 82 meta.ini.
 - Verify: **4338 passed, 0 failed**.
 
-**Перепроверка через `Firelink.Cli.exe install ... --target ...` (21.09.2026,
-после шага 1.2):**
+**`TestInstance5` (22.09.2026, Nexus Premium):**
+- 4 nexus-архива скачаны через Premium API, включая USSEP (~250 МБ).
+- Verify идентичен TestInstance2.
 
-- Archives already present: 69.
-- Mods skipped: 82. meta.ini written: 82.
-- Extensions/extras: 0 written, 1/2 skipped.
-- Done.
+**`OmenTest7` через GUI (25.09.2026, 3.8):**
+- Pack: 71 мод, 7853 файла, 4389 директив, 58 архивов.
+- Install: 71 created, 58 downloaded, 71 meta.ini.
+- Verify: **4522 passed, 0 failed**.
 
 **Важно:** `install` без `--target` создаёт инстанс в
-`<exeDir>/Instances/<meta.name>/`, а не рядом с манифестом. Это
-архитектурное решение (см. решение №52). Для переустановки поверх
-существующего инстанса — всегда указывать `--target`.
+`<exeDir>/Instances/<meta.name>/`, а не рядом с манифестом.
+Это архитектурное решение (см. решение №74).
 
 ---
 
-## Ключевые архитектурные решения (не переделывать)
+## Ключевые архитектурные решения
 
-Ниже — накопленный список. Сгруппирован по темам, но **пункты
-сохранены все**. Нумерация — историческая, чтобы не сбиться при
-ссылках.
+Накопленный список. Сгруппирован по темам. Нумерация — историческая,
+чтобы не сбиться при ссылках.
 
 ### Общие принципы (1–19)
 
-1. **Манифест — единственный источник правды.** Профиль MO2
-   генерируется из манифеста, а не копируется.
-2. **Файлы восстанавливаются по хешам** (`xxHash64`), не по именам
-   и путям.
-3. **Firelink работает с результатом, а не с процессом.** Никаких
-   FOMOD-парсеров, XML, `meta.ini` (читается только для метаданных).
-4. **Одна папка `downloads/` для всех архивов.** Моды, MO2, extras —
-   всё в одном месте.
-5. **Идентификация архивов — канонический id.** Не по имени файла:
-   `nexus_{game}_{modId}_{fileId}` / `local_{slug}`.
-6. **Глобальный реестр архивов** — SQLite в `%USERPROFILE%\.firelink\archives.db`
-   (v0.2.0).
+1. **Манифест — единственный источник правды.**
+2. **Файлы восстанавливаются по хешам** (`xxHash64`).
+3. **Firelink работает с результатом, а не с процессом.**
+4. **Одна папка `downloads/` для всех архивов.**
+5. **Идентификация архивов — канонический id.**
+6. **Глобальный реестр архивов** — SQLite (v0.2.0).
 7. **Ничего не удаляем** из `downloads/`.
 8. **Директивы выполняются последовательно.** `lastWins`.
 9. **`[NoDelete]` в имени папки** защищает пользовательские моды.
-10. **BSA/BA2 — единые файлы.** Не разбираем содержимое.
-11. **Никаких исполняемых скриптов.** Только декларативные директивы.
+10. **BSA/BA2 — единые файлы.**
+11. **Никаких исполняемых скриптов.**
 12. **Installer идемпотентен.**
 13. **Installer не работает с игрой.** `Stock Game/` — просто папка.
-14. **Шаги pipeline изолированы.** Pipeline — единственный
-    оркестратор.
+14. **Шаги pipeline изолированы.**
 15. **Nexus — один источник, несколько стратегий доступа.**
-16. **Параллелизм на уровне pipeline** (`Parallel.ForEach`).
-17. **Кеш хешей обязателен** (`FileHashCache`, in-memory; persist —
-    v0.2.0).
-18. **Манифест самодостаточен.** Installer не ходит на Nexus за
-    метаданными.
-19. **Unmatched → `__Firelink_Output`.** Не `InlineFile`, не base64.
+16. **Параллелизм на уровне pipeline.**
+17. **Кеш хешей обязателен.**
+18. **Манифест самодостаточен.**
+19. **Unmatched → `__Firelink_Output`.**
 
 ### Packer (20–51)
 
@@ -431,11 +322,9 @@ ViewLocator:
 21. **`instance.path`** — относительный.
 22. **`mo2.profile`** — обязательный.
 23. **`mo2.source` — обязательно `MirrorSourceRef`.**
-24. **`mo2.archive.size/hash` — из `mo2.source.hash`** (size с диска,
-    если файл есть).
+24. **`mo2.archive.size/hash` — из `mo2.source.hash`.**
 25. **MO2-архив НЕ попадает в `manifest.Archives[]`.**
-26. **`mo2.extensions`** — от `MO2/`. **`stockGame.extras`** — от
-    `Stock Game/`.
+26. **`mo2.extensions`** — от `MO2/`. **`stockGame.extras`** — от `Stock Game/`.
 27. **`.meta`** — Nexus-формат. `MetaReader.TryRead`.
 28. **Канонический id:** `nexus_...` / `local_{slug}`.
 29. **`archiveSources`** вместо `mirrors`.
@@ -466,8 +355,8 @@ ViewLocator:
 
 52. **`MatchResult`** — `ModDirectives` + `Unmatched` + `ModMetas`.
 53. **`MetaIniReader`** — `[General]`. Ключи case-insensitive.
-54. **`MetaIniWriter`** — `[General]`, camelCase, без
-    `[installedFiles]`, без BOM, CRLF. Не пишет `category`.
+54. **`MetaIniWriter`** — `[General]`, camelCase, без `[installedFiles]`,
+    без BOM, CRLF.
 55. **`ModMeta` — без `Category`.**
 56. **`.mohidden` — часть пути.**
 57. **`mods[].meta` со всеми полями** (кроме `Category`).
@@ -481,33 +370,22 @@ ViewLocator:
     директивами.**
 64. **`ArchiveMatcher`** — в `Firelink.Pack.Matching`. Детерминизм
     при дубликатах: минимальный `archiveId` (Ordinal).
-    `InternalsVisibleTo("Firelink.Pack.Tests")`. Принимает
-    `ILogger<ArchiveMatcher>`. Метод — `BuildAsync(ct)`.
-65. **`ScanExtensionsStep`/`ScanExtrasStep`** — тип результата
-    `EntryScanResult`. `RelativePath` файла — ОТ КОРНЯ `MO2/` или
-    `Stock Game/`. `Parallel.ForEach` + восстановление порядка
-    ключей. Отсутствие entry → `FileNotFoundException`.
-66. **`MatchExtensionsStep`/`MatchExtrasStep`** — тип результата
+65. **`ScanExtensionsStep`/`ScanExtrasStep`** — тип `EntryScanResult`.
+66. **`MatchExtensionsStep`/`MatchExtrasStep`** — тип
     `MatchEntriesResult`. Принимают `ArchiveMatcher` через
-    `Input.Matcher` (`internal`, не `required`). Unmatched **не
-    пишут** на диск — это делает `PackPipeline`.
+    `Input.Matcher` (`internal`, не `required`).
 67. **`Mo2ArchiveBuilder`** — статический класс в
-    `Firelink.Pack.Matching`. Один источник правды для построения
-    `ArchiveEntry` MO2-архива.
+    `Firelink.Pack.Matching`.
 68. **Unmatched extensions** → `__Firelink_Output/MO2/<relativePath>`
     (плоско). **Unmatched extras** → `__Firelink_Output/Stock Game/<relativePath>`.
-    `EntryName` на путь не влияет — только `RelativePath`.
 69. **`PackPipeline`** перед write unmatched чистит
     `__Firelink_Output/MO2/` (кроме `mods/`) и
-    `__Firelink_Output/Stock Game/`. Папки `MO2/` (без `mods/`) и
-    `Stock Game/` создаются **только** при `entries.Count > 0`.
-70. **`PackPipeline`** создаёт `ArchiveMatcher` один раз, `BuildAsync`,
-    передаёт в `MatchStep`, `MatchExtensions`, `MatchExtras`.
+    `__Firelink_Output/Stock Game/`.
+70. **`PackPipeline`** создаёт `ArchiveMatcher` один раз.
 71. **`BuildManifestStep.BuildExtensions`/`BuildExtras`** пропускают
     entry с пустым списком директив.
 72. **`PackPipeline`** добавляет MO2-архив в `ArchiveIndex` перед
-    созданием `ArchiveMatcher`: `archiveIndexWithMo2 =
-    AddMo2ArchiveToResolved(...)`.
+    созданием `ArchiveMatcher`.
 73. **`Slug.FromFileName`** отрезает **последнее** расширение до
     slug-ификации.
 
@@ -526,8 +404,7 @@ ViewLocator:
 84. **`BootstrapInstanceStep`** — создаёт все папки.
 85. **`IArchiveDownloader`** — абстракция.
 86. **`DownloaderRegistry`** — map sourceType → downloader.
-87. **`SyncArchivesStep`** — только `manifest.Archives`, не трогает
-    MO2.
+87. **`SyncArchivesStep`** — только `manifest.Archives`, не трогает MO2.
 88. **Hash — источник правды.**
 89. **Ничего не удаляем** из `downloads/`.
 90. **GitHub — удалён.** Всё через `mirror`.
@@ -550,8 +427,7 @@ ViewLocator:
 106. **`GenerateMetaIniStep`:** reconcile `meta.ini`.
 107. **`RegenerateProfileStep`:** сортировка по `Order` ascending,
      **без `Reverse()`**.
-108. **`BootstrapMo2Step` — самодостаточный.** Распаковка всегда,
-     с заменой.
+108. **`BootstrapMo2Step` — самодостаточный.**
 109. **`BootstrapMo2Step.Output = Input`.**
 110. **Порядок pipeline:** BootstrapInstance → BootstrapMo2 →
      SyncArchives → ExecuteExtensions → ExecuteExtras → SyncMods →
@@ -569,933 +445,501 @@ ViewLocator:
 118. **`VerifyContext`** — единый контекст.
 119. **`VerifyReport`** — `Checks`, `IsOk`, `PassedCount`, `FailedCount`.
 120. **`VerifyCheckResult`** — `Name`, `Passed`, `Message`.
-121. **Регенерация modlist.txt / plugins.txt / loadorder.txt в память**
-     через `Serialize`-методы writer-ов.
+121. **Регенерация modlist.txt / plugins.txt / loadorder.txt в память.**
 122. **Сравнение `meta.ini`** — семантическое.
 123. **`schemaVersion`** — через `ManifestSchema.IsSupported`.
 124. **Пустые директивы у disabled-мода** — OK.
-125. **Return code CLI:** 0 — OK, 1 — есть падения, 2 — ошибка, 130 — Ctrl+C.
+125. **Return code CLI:** 0/1/2/130.
 126. **`ManifestJson.Load` / `Save` — sync-версии для verify.**
 127. **`VerifyCommand`** — summary + провалы; `--verbose` — все проверки.
-      `Markup.Escape`.
 128. **`VerifySettings`** — `<target>` + `--verbose`/`-v`.
 129. **`CheckMod` делает `yield break`** при отсутствии папки мода.
-130. **Verify проверяет extensions/extras.** Общий helper
-      `CheckDirectiveFile(displayPrefix, rootPath, directive)`.
+130. **Verify проверяет extensions/extras.**
 
 ### Cancellation / CLI (131–136)
 
-131. **`CancellationHelper.IsCancellation`** в `Firelink.Core` —
-      распознаёт отмену, включая `AggregateException` со всеми
-      cancellation-inner.
-132. **`ArchiveMatcher.BuildAsync`** — async; `catch (OperationCanceledException)
-      { throw; }` **перед** `catch (Exception)`.
-133. **`PackCommand`/`InstallCommand`/`VerifyCommand`** — `catch (Exception ex)
-      when (CancellationHelper.IsCancellation(ex))` → `Cancelled.` + exit 130.
-      `Console.CancelKeyPress` подписывается на время выполнения команды,
-      `e.Cancel = true` + `cts.Cancel()`, отписка в `finally`.
-134. **`Program.cs` CLI** — `catch (Exception ex)
-      when (CancellationHelper.IsCancellation(ex))` → `Cancelled.` + exit 130
-      (fallback на случай отмены до подписки).
-135. **`config.PropagateExceptions()`** включено в CLI. Без него
-      Spectre перехватывает `CommandParseException` и
-      `OperationCanceledException` до нашего `try/catch`.
-136. **`catch (CommandParseException ex)`** в `Program.cs` — печатает
-      `CLI error: <msg>` + `Hint: paths with spaces must be quoted: ...`
-      (hint только если в `argv` нет строк с пробелами).
+131. **`CancellationHelper.IsCancellation`** в `Firelink.Core`.
+132. **`ArchiveMatcher.BuildAsync`** — async.
+133. **`PackCommand`/`InstallCommand`/`VerifyCommand`** — `catch (...)
+      when (CancellationHelper.IsCancellation(ex))` → `Cancelled.` + 130.
+134. **`Program.cs` CLI** — fallback-обработчик отмены.
+135. **`config.PropagateExceptions()`.**
+136. **`catch (CommandParseException ex)`** — `CLI error` + hint.
 
 ### 12.13.x / 13.1 (137–143)
 
-137. **`MatchStep` использует общий `ArchiveMatcher` через
-     `Input.Matcher`.**
+137. **`MatchStep` использует общий `ArchiveMatcher`.**
 138. **`.bsa`/`.ba2` — единые файлы, не контейнеры.**
-139. **CLI-таблицы `PackCommand`/`InstallCommand` включают
-     extensions/extras.**
-140. **`ArchiveDownloadHelper`** в `Firelink.Core.Archives` —
-     общий helper скачивания (`.part`, retry через Polly, hash-check).
+139. **CLI-таблицы `PackCommand`/`InstallCommand` включают extensions/extras.**
+140. **`ArchiveDownloadHelper`** в `Firelink.Core.Archives`.
 141. **`ExecuteExtensionsStep`** — раскладывает `manifest.Mo2.Extensions[]`
-     в `<target>/MO2/`. Группирует директивы по archiveId, extract
-     один раз на архив, `FileMatches`-skip для идемпотентности.
-142. **`ExecuteExtrasStep`** — симметричен `ExecuteExtensionsStep`,
-     корень `<target>/Stock Game/`.
+      в `<target>/MO2/`.
+142. **`ExecuteExtrasStep`** — симметричен, корень `<target>/Stock Game/`.
 143. **`ExecuteExtensionsStep`/`ExecuteExtrasStep` — Skipped**, если
-     файлы уже на месте.
+      файлы уже на месте.
 
 ### Фаза 1 — Единый CLI (144–152)
 
-Решения, принятые при рефакторинге CLI (шаги 1.1–1.7, 2026-09-21).
-
-144. **Один CLI-проект:** `Firelink.Cli`, exe → `Firelink.Cli.exe`.
-     `<AssemblyName>` не задаём — имя exe берётся из имени `.csproj`.
+144. **Один CLI-проект:** `Firelink.Cli`.
 145. **`Firelink.Pack` и `Firelink.Install` — class libraries.**
-     Не exe. Все `Program.cs`, `Commands/`, `Settings/`,
-     `Infrastructure/` переехали в `Firelink.Cli`.
-146. **Namespace `Firelink.Cli.*`.** Команды —
-     `Firelink.Cli.Commands`, настройки — `Firelink.Cli.Settings`,
-     `TypeRegistrar` — `Firelink.Cli.Infrastructure`.
-147. **`SetApplicationName("firelink")`** — usage-строка `firelink pack`,
-     `firelink install` и т.д. Имя exe — `Firelink.Cli.exe`. Это
-     сознательное расхождение display name и file name (как `dotnet`
-     vs `dotnet.exe`).
-148. **`Firelink.exe`** зарезервировано под GUI (Фаза 3).
-     `<AssemblyName>Firelink</AssemblyName>` будет у `Firelink.Gui.csproj`.
-     В дистрибутиве будут оба exe: `Firelink.Cli.exe` (CLI) и
-     `Firelink.exe` (GUI).
-149. **`TryAddSingleton` вместо `AddSingleton`** для
-     `FileHashCache`, `IArchiveExtractor` — эти регистрации
-     встречаются и в pack-, и в install-части. `TryAdd` не даёт
-     плодить дубли в DI-контейнере.
+146. **Namespace `Firelink.Cli.*`.**
+147. **`SetApplicationName("firelink")`.**
+148. **`Firelink.exe`** зарезервировано под GUI.
+149. **`TryAddSingleton` вместо `AddSingleton`** для общих сервисов.
 150. **DI-extension-методы: `AddFirelinkPack` / `AddFirelinkInstall`.**
-     Регистрируют все сервисы своей библиотеки.
-     Файлы: `Firelink.Pack/PackServices.cs`,
-     `Firelink.Install/InstallServices.cs`.
-     Namespace'ы — `Firelink.Pack` / `Firelink.Install` (то есть
-     extension-метод виден из CLI без лишних using'ов).
 151. **`AddFirelinkInstall` регистрирует `MirrorDownloader`** через
-     `AddHttpClient<T>` (таймаут 10 минут). Требует
-     `Microsoft.Extensions.Http` — явная `<PackageReference>` в
-     `Firelink.Install.csproj`.
-152. **`Firelink.Cli/Program.cs` регистрирует только то, что
-     относится к CLI:** `AddLogging`, `IAnsiConsole`, `ParallelOptions`.
-     Всё остальное — через `AddFirelinkPack()` и `AddFirelinkInstall()`.
+      `AddHttpClient<T>`.
+152. **`Firelink.Cli/Program.cs` регистрирует только CLI-специфику.**
 
 ### Фаза 2 — Общие API (153–160)
 
-Решения, принятые при подготовке общих API для GUI (шаги 2.1–2.4,
-2026-09-21).
-
-153. **`StepProgress` — общий тип в `Firelink.Core.Progress`.** Record
-     `(int StepIndex, int TotalSteps, string StepName)`. StepIndex
-     — 1-based. StepName — стабильный контракт для GUI: имена не
-     менять без причины.
+153. **`StepProgress` — общий тип в `Firelink.Core.Progress`.**
 154. **`IProgress<StepProgress>? progress = null` — опциональный
-     последний параметр** в `PackPipeline.ExecuteAsync` и
-     `InstallPipeline.ExecuteAsync`. `Report` вызывается **перед**
-     шагом, не после. Packer: 14 имён шагов. Installer: 11.
-155. **`PackPipeline.Input` введён.** Симметрично
-     `InstallPipeline.Input`. `ExecuteAsync(Input, ct, progress?)`.
-     Все тесты packer-а обновлены.
-156. **`PackInputFactory` / `InstallInputFactory`** — статические
-     классы. Единственная точка, где `Path.GetFullPath` и
-     `ParallelOptions`. Принимают `ParallelOptions? = null`,
-     дефолт — `Environment.ProcessorCount`.
+      последний параметр.**
+155. **`PackPipeline.Input` введён.**
+156. **`PackInputFactory` / `InstallInputFactory`** — статические.
 157. **`PackSummary` / `InstallSummary`** — `sealed record` с
-     `required` полями. Только примитивы. Никаких ссылок на
-     `PackResult`/`InstallPipeline.Output`. Плоские DTO для
-     отображения.
-158. **`PackSummaryBuilder` / `InstallSummaryBuilder`** —
-     статические классы. Единственное место, где решается
-     «что показывать пользователю». Логика подсчёта
-     `DirectivesTotal`/`DirectivesFromArchive` (была в
-     `PackCommand`) ушла сюда.
+      `required` полями.
+158. **`PackSummaryBuilder` / `InstallSummaryBuilder`** — статические.
 159. **CLI-таблицы строятся из Summary, не из Output.**
-     Внешний вид таблиц не изменился. Поменялся только источник
-     данных: `summary.X` вместо `output.Xxx.Yyy.Count`.
-160. **`ParallelOptions` остаётся в DI.** Фабрики принимают его
-     параметром. CLI передаёт `_parallelOptions` из DI. GUI
-     сможет передавать свой.
+160. **`ParallelOptions` остаётся в DI.**
 
 ### Фаза 6 — Nexus Premium (161–167)
 
-Решения, принятые при реализации 12.8 (2026-09-22).
-
 161. **`NexusDownloader` перебирает CDN-ноды внутри `DownloadAsync`.**
-     Не расширяем `IArchiveDownloader` до перебора источников.
-     Nexus API отдаёт массив `URI`; логика «попробовать следующую» —
-     деталь реализации источника nexus, а не общая механика
-     pipeline-а. `ArchiveDownloadHelper` по-прежнему делает retry
-     на уровне «попытка скачать весь архив».
-
 162. **`NexusClient` и `NexusDownloader` используют разные именованные
-     `HttpClient`-ы.** Через `IHttpClientFactory`:
-     `"nexus-api"` — 2 минуты, `"nexus"` — 10 минут, `"mirror"` —
-     10 минут.
-
+      `HttpClient`-ы.**
 163. **`IArchiveDownloader` регистрируется через `TryAddEnumerable`
-     с явным `ImplementationType`.**
-     `TryAddSingleton<IArchiveDownloader>` регистрирует только одну
-     реализацию — вторая молча теряется. `TryAddEnumerable` с фабрикой
-     падает: у descriptor-а `ImplementationType == null`, и вторая
-     регистрация считается дубликатом. Правильно:
-     `ServiceDescriptor.Singleton<IArchiveDownloader, TConcrete>()`.
-
-164. **Nexus API-ключ — plaintext-файл
-     `%USERPROFILE%\.firelink\nexus.key`.** Одна строка, trim,
-     BOM-agnostic. `INexusApiKeyProvider` — абстракция для тестов.
-     DPAPI и SQLite — v0.2.0 (в техдолге).
-
+      с явным `ImplementationType`.**
+164. **Nexus API-ключ — plaintext-файл `%USERPROFILE%\.firelink\nexus.key`.**
 165. **Downloader-ы принимают `IHttpClientFactory`, а не `HttpClient`.**
-     `TryAddEnumerable(ServiceDescriptor.Singleton<IArchiveDownloader,
-     TConcrete>())` создаёт downloader через активацию конструктора.
-     Если конструктор принимает `HttpClient`, DI подставит
-     **безымянный** `HttpClient.Default` (таймаут 100 секунд) — этого
-     мало для гигабайтных архивов. `IHttpClientFactory.CreateClient(
-     "nexus")` даёт клиент с 10-минутным таймаутом.
-
 166. **Скачивание идёт в `TempFileStream`, а не в `MemoryStream`.**
-     `MemoryStream` не держит файлы > ~2 ГБ (`int.MaxValue`). У Nexus
-     есть моды на 3+ ГБ. `TempFileStream` создаёт файл в системном
-     temp с `FileOptions.DeleteOnClose` — O(1) памяти, любые размеры.
-     Цена — двойная запись: downloader → temp → `.part`.
-
 167. **`NexusClient.IsPremiumAsync` кешируется на время жизни клиента.**
-     Первый успешный запрос к `/users/validate.json` запоминается как
-     `Task<bool>`; параллельные вызовы ждут ту же Task — один
-     HTTP-запрос на весь pipeline. Faulted/canceled результат
-     **не** кешируется: retry не должен получить «отравленный» результат.
 
-### Фаза 3 — GUI (168–181)
+### Фаза 3 — GUI (168–187)
 
-168. Стек GUI: Avalonia 11.2.1 + CommunityToolkit.Mvvm 8.4.0,
-     никаких ReactiveUI/DynamicData/MessageBus.
+168. Стек GUI: Avalonia 11.2.1 + CommunityToolkit.Mvvm 8.4.0.
 169. `<AssemblyName>Firelink</AssemblyName>` у `Firelink.Gui.csproj`.
-     Имя exe — `Firelink.exe`, root namespace — `Firelink.Gui`.
-     Сознательное расхождение.
-170. Отказ от `IGuiModule` в пользу плоского `MainWindowVM.ActivePane`
-     + `ScreenType` enum.
-171. Навигация — прямой `MainWindowVM.NavigateTo(ScreenType)`,
-     без MessageBus. `NavigationVM` принимает `Action<ScreenType>`.
-172. Lazy-резолв панелей через `IScreenFactory`. VM — singleton
-     в DI, состояние сохраняется между переходами.
+170. Отказ от `IGuiModule` в пользу плоского `MainWindowVM.ActivePane`.
+171. Навигация — прямой `MainWindowVM.NavigateTo(ScreenType)`.
+172. Lazy-резолв панелей через `IScreenFactory`.
 173. `INavigationAware` вместо `event HomeRequested`.
-174. `IFilePickerService` в Shared, `AvaloniaFilePickerService`
-     в Gui.
+174. `IFilePickerService` в Shared, `AvaloniaFilePickerService` в Gui.
 175. `Firelink.Gui.Shared` — без Avalonia.
 176. `Firelink.Gui.Controls` — отдельный проект для общих контролов.
-177. `IInstallRunner` в `Firelink.Gui.Install.Services` — обёртка
-     над `InstallPipeline`. Тестируемость через fake runner.
-178. `LogVM.Clear()` — публичный метод (`[RelayCommand] public void Clear()`).
-179. `ViewLocator` — перебор по всем загруженным сборкам,
-     поиск по суффиксу `.Views.<ShortName>`. Обрабатывает
-     `ReflectionTypeLoadException`.
-180. `ObservableLoggerProvider` регистрируется как `ILoggerProvider`
-     в `AddGuiShared` через `AddSingleton<ILoggerProvider>(sp => ...)`.
-181. `MainWindowVM` регистрируется в `Firelink.Gui`, не в `AddGuiShared`.
-182. **`IUiDispatcher` — абстракция UI-диспетчера в
-     `Firelink.Gui.Shared.Logging`.** Один метод `Post(Action)`.
-     Реализация — `AvaloniaUiDispatcher` в `Firelink.Gui`
-     (`Dispatcher.UIThread.Post`). `Firelink.Gui.Shared` остаётся
-     без Avalonia (решение №175).
-
-183. **`ObservableLogSink` маршалит мутации `Entries` через
-     `IUiDispatcher`.** Конструктор принимает `IUiDispatcher?`.
-     Если `null` (тесты, не-GUI) — синхронный путь. Если задан —
-     `Add`/`Clear` идут через `Post`. Устраняет гонку
-     `ObservableCollection<T>` (worker-потоки pipeline vs
-     UI-биндинг `ItemsControl`), которая роняла процесс вне
-     `try/catch` VM.
-
-184. **`FakeUiDispatcher` (синхронный) и `DeferredUiDispatcher`
-     (очередь + Flush) — две тестовые реализации `IUiDispatcher`.**
-     Первая нужна там, где `ObservableLogSink` резолвится через DI
-     (MainWindowVMTests). Вторая доказывает, что маршалинг реальный:
-     до `Flush` коллекция не меняется.
-
-185. **`VerifyPipeline.Execute` синхронный, `IVerifyRunner.RunAsync`
-     асинхронный.** `VerifyRunner` оборачивает вызов в `Task.Run`,
-     чтобы не блокировать UI-поток. `CancellationToken`
-     пробрасывается внутрь `Execute`. `IProgress<StepProgress>` у
-     Verify нет — шагов не публикуется.
-
-186. **`VerifyVM` — три состояния в Success-ветке через производные
-     свойства.** `Report.IsOk=true` → «All checks passed», строк нет.
-     `Report.IsOk=false` → «N check(s) failed» + таблица `Failures`.
-     `VerifyState` (Configuration/Verifying/Success/Failure) остаётся
-     как в `Firelink.Gui.Shared.State`.
-
-187. **`VerifyVM.Rows` + чекбокс `ShowAllChecks` заменяют CLI-флаг
-     `--verbose`.** По умолчанию показываются только `Failures`;
-     при включении — все `Checks`. `Rows` перестраивается после
-     каждого прогона и при переключении чекбокса. `VerifyRowVM` —
-     плоская обёртка над `VerifyCheckResult` с `StatusGlyph`
-     («✓»/«×») и `StatusColor` (hex).
+177. `IInstallRunner` в `Firelink.Gui.Install.Services`.
+178. `LogVM.Clear()` — публичный метод.
+179. `ViewLocator` — перебор по всем загруженным сборкам.
+180. `ObservableLoggerProvider` регистрируется как `ILoggerProvider`.
+181. `MainWindowVM` регистрируется в `Firelink.Gui`.
+182. **`IUiDispatcher` — абстракция UI-диспетчера.**
+183. **`ObservableLogSink` маршалит мутации через `IUiDispatcher`.**
+184. **`FakeUiDispatcher` и `DeferredUiDispatcher` — две тестовые реализации.**
+185. **`VerifyPipeline.Execute` синхронный, `IVerifyRunner.RunAsync` асинхронный.**
+186. **`VerifyVM` — три состояния в Success-ветке через производные свойства.**
+187. **`VerifyVM.Rows` + чекбокс `ShowAllChecks` заменяют `--verbose`.**
 
 ### Фаза 3 — дистрибутив (188–191)
 
-188. **`Directory.Build.props` в корне репо — единый источник
-     правды для версии.** `<VersionPrefix>0.1.0</VersionPrefix>`,
-     `<IncludeSourceRevisionInInformationalVersion>false</...>`
-     (без git-хэша в `InformationalVersion`).
-     `AssemblyInformationalVersion` = `"0.1.0"`.
-
-189. **Версия CLI читается из assembly, не хардкодится.**
-     `Firelink.Cli/Program.cs` →
-     `GetApplicationVersion()` через
-     `AssemblyInformationalVersionAttribute` entry assembly,
-     fallback `"0.0.0"`. Обрезка `+...` на всякий случай
-     (страховка, если `IncludeSourceRevision` когда-то
-     вернут в `true`).
-
-190. **Иконка GUI — `src/Firelink.Gui/Assets/app.ico` +
-     `<ApplicationIcon>Assets\app.ico</ApplicationIcon>`.**
-     Иконка вшивается в PE-заголовок exe, в output не
-     копируется. Иконки CLI нет (сознательно — Q3).
-
+188. **`Directory.Build.props` в корне репо — единый источник версии.**
+189. **Версия CLI читается из assembly.**
+190. **Иконка GUI — `src/Firelink.Gui/Assets/app.ico`.**
 191. **`tools/build-release.bat` — релизный скрипт.**
-     Читает `<VersionPrefix>` из `Directory.Build.props`,
-     publish GUI+CLI в одну папку
-     `build_artifacts/Firelink-<version>-win-x64/`
-     (`-c Release -r win-x64 --self-contained false`),
-     `Compress-Archive` → zip с файлами в корне.
-     Раскладка дистрибутива — «как есть» (≈90 файлов,
-     `lib/`-схема сознательно не делается).
 
 ### Фаза 3 — редизайн GUI (192–207)
 
 192. **Палитра Firelink в `Application.Resources` (App.axaml).**
-     Нейтральный тёмный фон + тёплый песочный акцент. `Color` и
-     `SolidColorBrush`-токены. Использование: `{StaticResource
-     XxxBrush}` для фонов/текста/рамок, `{StaticResource XxxColor}`
-     внутри градиентов и структур.
-     Токены: SurfaceBase `#1e1e1e`, SurfaceRaised `#242424`,
-     SurfaceOverlay `#2a2a2a`, SurfaceHover `#2f2f2f`,
-     BorderSubtle `#333333`, BorderStrong `#3f3f3f`,
-     TextPrimary `#e8e8e8`, TextSecondary `#a0a0a0`,
-     TextMuted `#6a6a6a`, Accent `#d3b181`, AccentHover `#e0c090`,
-     AccentPressed `#b89868`, AccentMuted `#4a3e2a`,
-     Success `#7fc98a`, Error `#d97777`, Warning `#d3b181`.
-
-193. **Только тёмная тема.** `RequestedThemeVariant="Dark"` жёстко.
-     Светлой темы нет (сознательно). Переключателя нет.
-
-194. **Шрифт Inter.** Без serif. `WithInterFont()` уже подключён;
-     `FontFamily` в стилях не задаём (Inter — дефолт).
-
-195. **Классы `TextBlock`: `.h1`, `.h2`, `.subtitle`, `.caption`,
-     `.muted`.** Глобальные стили `TextBlock` дают базовый
-     `TextPrimary` + `FontSizeBody`; классы переопределяют
-     размер/вес/цвет.
-
-196. **`Button` — секондари (без класса) + `.accent`.**
-     Секондари: фон SurfaceOverlay, рамка BorderStrong,
-     CornerRadius 8, паддинг 16,8. Accent: фон Accent, текст
-     SurfaceBase (тёмный). Hover/pressed — через
-     `/template/ ContentPresenter#PART_ContentPresenter`.
-     `Cursor="Hand"` в стилях **не ставим** — падает
-     при загрузке `App.axaml`.
-
-197. **`BoxShadow` в Avalonia — 5 токенов:**
-     `OffsetX OffsetY Blur Spread Color`. Лишние токены → `FormatException`.
-     `{StaticResource}` внутри строки `BoxShadow` **не раскрывается** —
-     цвет задаётся hex'ом.
-
-198. **У `Grid` нет `RowSpacing`/`ColumnSpacing`.** (Это WPF/MAUI-
-     наследие.) Используем `StackPanel.Spacing` или `Margin`-ы.
-
-199. **`ScreenIconConverter` — `public sealed`.** XAML-компилятор
-     Avalonia создаёт экземпляр конвертера в сгенерированной
-     сборке; `internal` не работает без `InternalsVisibleTo`
-     на динамическую XAML-сборку.
-
-200. **`FilePickerView` — не TextBox.** Поле пути — `Border` +
-     `TextBlock`. Стилизовано в палитре; хардкод `#0B1116`/`#2A3742`
-     убран.
-
+193. **Только тёмная тема.**
+194. **Шрифт Inter.**
+195. **Классы `TextBlock`: `.h1`, `.h2`, `.subtitle`, `.caption`, `.muted`.**
+196. **`Button` — секондари + `.accent`.**
+197. **`BoxShadow` в Avalonia — 5 токенов.**
+198. **У `Grid` нет `RowSpacing`/`ColumnSpacing`.**
+199. **`ScreenIconConverter` — `public sealed`.**
+200. **`FilePickerView` — не TextBox.**
 201. **Кнопка `Home` в Pack/Install/Verify заменена на `Done`.**
-     `Done()` сбрасывает `State = Configuration`, обнуляет
-     `Summary`/`Report`/`ErrorMessage`; в Verify дополнительно
-     `Rows.Clear()`. Пикеры **не** сбрасываются.
-     `INavigationAware.SetNavigateHome` остаётся реализацией-
-     заглушкой (совместимость с `MainWindowVM`).
+202. **Автоочистка лога убрана.**
+203. **Logs — отдельный экран.**
+204. **Settings — отдельный экран.**
+205. **Хардкод-цвета в `*View.axaml` отсутствуют.**
+206. **Sidebar без шапки.**
+207. **Навигация между экранами — через sidebar.**
 
-202. **Автоочистка лога убрана.** `Log.Clear()` в начале
-     `InstallAsync`/`PackAsync`/`VerifyAsync` удалён. История
-     логов копится; пользователь чистит вручную через кнопку
-     `Clear` в `LogView`.
+### Фаза 3.9 — DevMode и Home-дашборд (208–219)
 
-203. **Logs — отдельный экран** (`ScreenType.Logs`,
-     `LogsVM`, `LogsView`). Из Home/Install/Pack/Verify
-     `LogView` убран. `LogVM` и `ObservableLogSink` —
-     singleton, все экраны смотрят на один лог.
+208. **`SettingsVM.IsDevMode` — in-memory, default false.**
+     Меняется через `CheckBox` в SettingsView. NavigationVM подписан
+     на `PropertyChanged` и перестраивает `Items`. Persist — v0.2.0.
 
-204. **Settings — отдельный экран** (`ScreenType.Settings`,
-     `SettingsVM`, `SettingsView`). Содержит About (Name/Version/
-     License) и копирайт-строку: `Firelink v0.1.0 · AGPL-3.0-or-later
-     · Copyright (C) 2026 omen`. Версия — из `AssemblyInformationalVersion`
-     entry assembly, как в CLI.
+209. **`NavigationVM` принимает `SettingsVM` вторым параметром.**
+     `MainWindowVM` резолвит `SettingsVM` из DI и передаёт в
+     `NavigationVM`. `Items` перестраивается через `RebuildItems()`.
+     При выключении DevMode, если текущий экран скрывается —
+     `SelectedItem = Home` + `_navigate(Home)`.
 
-205. **Хардкод-цвета в `*View.axaml` отсутствуют.** Все цвета —
-     через `{StaticResource XxxBrush}` из палитры. Grep по
-     `#[0-9A-Fa-f]{6}` в `src/Firelink.Gui*/**/*.axaml` — пусто
-     (кроме `App.axaml`).
-     `VerifyVM.ResultColor` и `VerifyRowVM.StatusColor` — тоже
-     из палитры (`#7fc98a`/`#d97777`).
+210. **`ScreenType.Logs` и `ScreenType.Settings` видны всегда.**
+     `ScreenType.Home` — всегда. `Install`/`Pack`/`Verify`/`Logs` —
+     только при DevMode=true. Итог: DevMode=false → `[Home, Settings]`,
+     DevMode=true → `[Home, Install, Pack, Verify, Logs, Settings]`.
 
-206. **Sidebar без шапки.** Логотип и версия приложения в sidebar
-     отсутствуют — переехали в Settings. Sidebar содержит только
-     `ListBox` навигации. Гамбургер-кнопки нет.
+211. **`InstalledPackScanner` / `IInstalledPackScanner` — в
+     `Firelink.Gui.Shared.Services`.**
+     Сканирует `<exeDir>/Instances/*/modlist.json` через
+     `ManifestJson.Load`. Битые/отсутствующие манифесты — skip + log.
+     Корень передаётся в конструктор (тестируемость), DI-регистрация
+     вычисляет `Path.Combine(AppContext.BaseDirectory, "Instances")`.
+     Синхронный `Scan()` без `ct`.
 
-207. **Навигация между экранами — через sidebar.** Никаких
-     карточек-«плиток» на Home, дублирующих sidebar.
-     (См. обсуждение 3.9.7 — возможно, Home без карточек вообще,
-     или другой дизайн.)
+212. **`InstalledPackInfo` — record с 7 полями.**
+     `Name`, `Version`, `Game`, `GameVersion`, `CreatedAt`,
+     `InstancePath`, `ManifestPath`. Без `IsInstalled` — состояние
+     «MO2 установлен» проверяется на клике `Open MO2`, не хранится
+     в модели (нет stale-состояния).
+
+213. **`HomeVM` — дашборд.**
+     `ObservableCollection<InstalledPackVM> Items`.
+     `Refresh()` вызывается `MainWindowVM.NavigateTo(Home)` и в
+     конструкторе `MainWindowVM`. Реализует `IInstallRequestHandler`.
+
+214. **`InstalledPackVM` — карточка с тремя командами.**
+     `OpenMo2` (всегда активна; проверяет `File.Exists(<InstancePath>/
+     MO2/ModOrganizer.exe)`; если нет — `WarningMessage`),
+     `Install` (`InstallRequested(<InstancePath>/modlist.json,
+     <InstancePath>)`),
+     `UpdateAsync` (диалог `IFilePickerService.PickFileAsync`;
+     `InstallRequested(<выбранный>, <InstancePath>)`).
+     `WarningMessage` — `[ObservableProperty]`, стирается только при
+     `Refresh()` (пересоздании VM).
+
+215. **Кнопка `Open MO2` — всегда активна.**
+     Не используем `CanExecute`/`IsVisible` для `File.Exists`:
+     Avalonia дёргает `CanExecute` один раз, дизейбл «залипает».
+     Вместо этого: попытка запуска, inline `WarningMessage` при ошибке.
+     Сообщение: `"ModOrganizer.exe not found. Reinstall the pack to
+     restore MO2."`.
+
+216. **`IProcessLauncher` — абстракция `Process.Start`.**
+     В `Firelink.Gui.Shared.Services`. Реализация
+     `ShellProcessLauncher` — в `Firelink.Gui.Services`
+     (`Process.Start` + `UseShellExecute = true`). В DI —
+     singleton. В тестах — `FakeProcessLauncher`.
+
+217. **`IInstallRequestHandler` — Home → MainWindowVM.**
+     `event Action<string, string>? InstallRequested` —
+     `(manifestPath, targetPath)`. Оба обязательны. `MainWindowVM`
+     подписывается при `NavigateTo(Home)`, отписывается до подписки
+     (идемпотентность: HomeVM singleton).
+
+218. **`IInstallTarget` — MainWindowVM → InstallVM.**
+     `PrepareForInstall(string manifestPath, string targetPath)`.
+     `MainWindowVM` после `NavigateTo(Install)` проверяет
+     `ActivePane is IInstallTarget`. Контракт: сбрасывает `State`
+     в `Configuration`, обнуляет `Summary`/`ErrorMessage`,
+     устанавливает `ModlistPicker.Path` и `TargetPicker.Path`.
+
+219. **`Install` всегда шлёт `target = InstancePath`.**
+     Не `null`. Гарантирует, что переустановка идёт в тот же
+     инстанс, независимо от расхождений `meta.name` и имени папки.
+     Installer без target (`<exeDir>/Instances/<meta.name>/`) —
+     только через CLI.
 
 ---
 
 ## План работ
 
-### Фаза 1 — Единый CLI (`Firelink.Cli`) ✅ ЗАКРЫТА
+### Фаза 1 — Единый CLI ✅ ЗАКРЫТА
 
-**Цель:** объединить `Firelink.Pack` и `Firelink.Install` в один exe.
-
-**Статус:** закрыта 2026-09-21.
-
-**Все шаги:**
-
-- ✅ 1.1 — создан `Firelink.Cli`, pack-сторона перенесена.
-- ✅ 1.2 — install-сторона перенесена, все 5 команд работают.
-- ✅ 1.3 — `Firelink.Pack` стал class library.
-- ✅ 1.4 — `Firelink.Install` стал class library. Один exe
-  (`Firelink.Cli.exe`).
-- ✅ 1.5 — `AddFirelinkPack` / `AddFirelinkInstall`. DI-регистрация
-  в библиотеках, `Firelink.Cli/Program.cs` сокращён.
-- ✅ 1.6 — ручной прогон на OmenRim 7: pack → install (TestInstance3)
-  → verify, **4338 passed, 0 failed**. Идентично `TestInstance2`
-  (modlist.txt, plugins.txt, loadorder.txt, ModOrganizer.exe).
-- ✅ 1.7 — Ctrl+C на pack/install/verify (`Cancelled.`, exit 130),
-  пробелы без кавычек (`CLI error` + hint, exit 2). Регрессий нет.
-
-**Итог Фазы 1:**
-
-- Один exe `Firelink.Cli.exe`, все 5 команд.
-- `Firelink.Pack` и `Firelink.Install` — чистые библиотеки.
-- Все 593 теста зелёные на каждом шаге.
-- Ручной прогон на OmenRim 7 подтверждает отсутствие регрессий.
-
----
+Закрыта 2026-09-21. Итог: один exe `Firelink.Cli.exe`, все 5 команд,
+593 теста.
 
 ### Фаза 2 — Общие API для будущего GUI ✅ ЗАКРЫТА
 
-**Цель:** подготовить код так, чтобы GUI мог переиспользовать
-pipeline без дублирования логики.
+Закрыта 2026-09-21. Итог: `StepProgress`, фабрики, Summary.
+621 тест.
 
-**Статус:** закрыта 2026-09-21.
+### Фаза 6 — Nexus Premium ✅ ЗАКРЫТА
 
-**Все шаги:**
+Закрыта 2026-09-22. Итог: `NexusDownloader` через Premium API.
+674 теста.
 
-- ✅ 2.1 — `StepProgress` + `IProgress<StepProgress>?` в
-  `PackPipeline` и `InstallPipeline`.
-- ✅ 2.2 — `PackInputFactory` / `InstallInputFactory`.
-  `PackPipeline.Input` введён.
-- ✅ 2.3 — `PackSummary` / `InstallSummary` + Builder-ы.
-- ✅ 2.4 — ручной прогон на OmenRim 7 (pack → install →
-  verify), **4338 passed, 0 failed**.
+### Фаза 3 — GUI (Avalonia) ✅ ЗАКРЫТА
 
-**Итог Фазы 2:**
+- ✅ 3.1 — проекты GUI + DI + базовые VM. 688.
+- ✅ 3.2 — главное окно с навигацией. 700.
+- ✅ 3.3 — живые логи в UI. 710.
+- ✅ 3.4.1 — инфраструктура навигации и file picker. 716.
+- ✅ 3.4.2 — экран Install. 731.
+- ✅ 3.5 — экран Pack. 739.
+- ✅ 3.5.1 — потокобезопасный лог-канал. 744.
+- ✅ 3.6 — экран Verify. 759.
+- ✅ 3.7 — дистрибутив. 759.
+- ✅ 3.8 — ручной прогон GUI. 759.
 
-- Публичный API библиотек готов к использованию из GUI:
-  - `PackInputFactory.Create(...)` / `InstallInputFactory.Create(...)`.
-  - `pipeline.ExecuteAsync(input, ct, progress)`.
-  - `PackSummaryBuilder.Build(result)` / `InstallSummaryBuilder.Build(output)`.
-- CLI — первый потребитель этих API.
-- Все 621 тест зелёные на каждом шаге.
+### Фаза 3.9 — редизайн GUI + Home-дашборд ✅ ЗАКРЫТА
 
----
+- ✅ 3.9.1 — палитра и типографика.
+- ✅ 3.9.2 — стили базовых контролов.
+- ✅ 3.9.3 / 3.9.3.2 / 3.9.3.3 — NavigationView v2, Settings. 764.
+- ✅ 3.9.4 — Logs в отдельной вкладке.
+- ✅ 3.9.5 — FilePickerView v2.
+- ✅ 3.9.6 — Pack/Install/Verify: без хардкод-цветов, Home → Done.
+- ✅ 3.9.7.1 — DevMode (in-memory) + тумблер в Settings + NavigationVM.
+- ✅ 3.9.7.2 — InstalledPackScanner + InstalledPackInfo.
+- ✅ 3.9.7.3 — HomeVM дашборд + InstalledPackVM карточка + HomeView.
+- ✅ 3.9.8 — Open MO2 / Install / Update + IProcessLauncher +
+  WarningMessage. **813 тестов.**
 
-### Фаза 6 — Nexus Premium (12.8) ✅ ЗАКРЫТА
+### Следующий блок — не определён
 
-**Цель:** убрать warning `No downloader for source type 'nexus'` и
-дать возможность скачивать архивы с Nexus через Premium-API.
+Варианты:
 
-**Статус:** закрыта 2026-09-22.
-
-**Все шаги:**
-
-- ✅ 12.8.1 — `NexusApiKeyProvider`.
-- ✅ 12.8.2 — `NexusClient`.
-- ✅ 12.8.3 — `NexusDownloader : IArchiveDownloader`.
-- ✅ 12.8.4 — DI в `AddFirelinkInstall`.
-- ✅ 12.8.4a — рефакторинг (`IHttpClientFactory`, `TempFileStream`,
-  кеш `IsPremiumAsync`).
-- ✅ 12.8.5 — обновление `DOC.md` (v4.3) и `FIRELINK.md`.
-
-**Итог Фазы 6:**
-
-- `NexusDownloader` скачивает архивы через Premium-API.
-- Оба `IArchiveDownloader` (`mirror`, `nexus`) в `DownloaderRegistry`.
-- Гигабайтные архивы работают: `TempFileStream` + 10-минутный
-  таймаут на CDN.
-- Ручной прогон на `TestInstance5`: 4 nexus-архива (включая USSEP
-  ~250 МБ) скачаны без ошибок; verify идентичен `TestInstance2`.
-- 674 теста зелёные.
-
----
-
-### Фаза 3 — GUI (Avalonia) — ЧАСТИЧНО ЗАКРЫТА
-
-**Цель:** графический интерфейс поверх pipeline.
-
-**Статус:** шаги 3.1–3.4.2 закрыты (731 тест). Следующий — 3.5.
-
-**Стек:** Avalonia 11.2.1, CommunityToolkit.Mvvm 8.4.0,
-Microsoft.Extensions.DependencyInjection, Microsoft.Extensions.Logging.
-
-**Структура проектов:**
-
-src/
-  Firelink.Gui.Shared/       ← MVVM-инфра, без Avalonia
-  Firelink.Gui.Controls/     ← общие Avalonia-контролы
-  Firelink.Gui.Install/      ← модуль installer
-  Firelink.Gui.Pack/         ← модуль packer
-  Firelink.Gui/              ← exe → Firelink.exe
-
-**Все шаги:**
-
-- ✅ **3.1** — проекты GUI + DI + базовые VM.
-  - 14 тестов. Итог: 688 passed.
-- ✅ **3.2** — главное окно с навигацией.
-  - 12 тестов. Итог: 700 passed.
-- ✅ **3.3** — живые логи в UI.
-  - 10 тестов. Итог: 710 passed.
-- ✅ **3.4.1** — инфраструктура навигации и file picker.
-  - `IScreenFactory`, `INavigationAware`, `IFilePickerService`,
-    `ScreenFactory`, `AvaloniaFilePickerService`.
-  - 6 тестов. Итог: 716 passed.
-- ✅ **3.4.2** — экран Install:
-  - Новый проект `Firelink.Gui.Controls`.
-  - `IInstallRunner` + `InstallRunner`.
-  - `InstallVM` (наследует `ProgressViewModel`, реализует
-    `INavigationAware`).
-  - `InstallView.axaml` — четыре состояния.
-  - 13 тестов. Итог: 731 passed.
-- ✅ **3.5** — экран Pack:
-  - `IPackRunner` + `PackRunner` в `Firelink.Gui.Pack.Services`.
-  - `PackVM` в `Firelink.Gui.Pack.ViewModels`.
-  - `PackView.axaml`.
-  - `PackPlaceholderVM`/`PackPlaceholderView` удалены.
-  - 13 тестов. Итог: 739 passed.
-- ✅ **3.5.1** — потокобезопасный лог-канал:
-  - `IUiDispatcher` в `Firelink.Gui.Shared.Logging`.
-  - `AvaloniaUiDispatcher` в `Firelink.Gui.Services`.
-  - `ObservableLogSink` маршалит мутации через `IUiDispatcher`.
-  - `FakeUiDispatcher` (синхронный), `DeferredUiDispatcher`
-    (очередь + Flush).
-  - 5 тестов. Итог: 744 passed.
-- ✅ **3.6** — экран Verify:
-  - Новый проект `Firelink.Gui.Verify`.
-  - `IVerifyRunner` + `VerifyRunner` (обёртка над `VerifyPipeline`
-    через `Task.Run`).
-  - `VerifyVM` в `Firelink.Gui.Verify.ViewModels` — три состояния
-    Success через `IsOk`.
-  - `VerifyRowVM` — строка таблицы.
-  - `VerifyView.axaml` — таблица проверок + чекбокс
-    «Show all checks».
-  - `VerifyPlaceholderVM`/`VerifyPlaceholderView` удалены.
-  - 18 тестов. Итог: 759 passed.
-
-- ✅ **3.7** — дистрибутив:
-  - `Directory.Build.props` (VersionPrefix 0.1.0,
-    IncludeSourceRevisionInInformationalVersion=false).
-  - Иконка GUI (`Assets\app.ico` + `<ApplicationIcon>`).
-  - Версия CLI из assembly (`GetApplicationVersion()`).
-  - `tools/build-release.bat` — publish GUI+CLI в одну папку,
-    zip с файлами в корне.
-  - `<AssemblyName>Firelink</AssemblyName>` — уже был
-    (решение №169), проверено.
-  - Раскладка дистрибутива оставлена «как есть» (~90 файлов,
-    `lib/` не делаем — см. решение №191).
-  - Тестов не добавляли — 759 passed.
-
-- ✅ **3.8** — ручной прогон:
-  - GUI-прогон pack/install/verify на OmenRim 7 / OmenTest7.
-  - Pack: 71 mods, 7853 files, 4389 directives, 58 archives.
-  - Install: 71 created, 58 downloaded, 71 meta.ini.
-  - Verify: 4522 passed, 0 failed.
-  - Итог: 759 passed.
-
-### Фаза 3.9 — редизайн GUI (закрыта частично)
-
-**Цель:** тёмная тема с тёплым песочным акцентом (#d3b181),
-чистый монохромный UI, иконки Lucide, отказ от хардкод-цветов.
-
-**Статус:** шаги 3.9.1–3.9.6 закрыты. Шаг 3.9.7 (HomeView v2)
-в обсуждении.
-
-- ✅ **3.9.1** — палитра и типографика (`App.axaml`,
-  `Application.Resources`).
-- ✅ **3.9.2** — стили базовых контролов (`Button`, `CheckBox`,
-  `ListBox`, `ScrollBar`, `ProgressBar`, `TextBlock`-классы).
-- ✅ **3.9.3** — NavigationView v2 (без шапки/глоу/гамбургера;
-  список навигации; иконки Lucide).
-- ✅ **3.9.3.3** — Settings: `ScreenType.Settings`, `SettingsVM`,
-  `SettingsView` (+5 тестов). Итог: 764 passed.
-- ✅ **3.9.4** — Logs в отдельной вкладке, перекраска LogView
-  и LogLevelToBrushConverter, убрана автоочистка лога.
-- ✅ **3.9.5** — FilePickerView v2 (палитра, TextBox-стили
-  профилактически).
-- ✅ **3.9.6** — Pack/Install/Verify: убраны хардкод-цвета,
-  Home → Done.
-- ⬜ **3.9.7** — HomeView v2. Обсуждается:
-  - В1 — Home без карточек, приветствие с текстом «как начать».
-  - В2 — убрать Home вообще.
-  - В3 — Home с виджетами («last operation», «Nexus status»).
-
----
-
-### Фаза 5 — Nexus Free (WebView2)
-
-**Цель:** скачивание модов с Nexus для Free-аккаунтов через
-WebView2.
-
-**Статус:** не начата. Технически — после Фазы 3.
-
-**Контекст:**
-
-- Nexus не отдаёт прямые ссылки для Free-аккаунтов через API.
-- Premium — через `download_link` API (Фаза 6).
-- Free — только через автоматизацию UI (как Wabbajack, Nolvus).
-
-**Задачи:**
-
-- Новый проект `Firelink.NexusHelper` — отдельное Avalonia-приложение
-  (не библиотека!).
-- WebView2.
-- Открывает `nexusmods.com`, пользователь логинится.
-- Кликает «Slow Download» для каждого мода из списка.
-- Скачанные файлы кладёт в `downloads/`.
-- CLI-команда `firelink nexus-helper` — запускает
-  `Firelink.NexusHelper.exe` как отдельный процесс.
-- В GUI — отдельный экран «Nexus Free Download».
-
-**Время:** ~2–3 недели. **Риск:** средний (юридические нюансы,
-хрупкость UI).
-
----
-
-### Порядок фаз
-
-**Строгая последовательность:**
-
-1. **Фаза 1** — единый CLI. ✅ закрыта.
-2. **Фаза 2** — общие API. ✅ закрыта.
-3. **Фаза 6** (12.8) — Nexus Premium. ✅ закрыта.
-4. **Фаза 3** — GUI. **← следующая**.
-5. **Фаза 5** — Nexus Free. Расширение для Free.
-
-**Почему 12.8 (Фаза 6) перед GUI (Фаза 3):**
-
-- 12.8 быстрый и независимый. Даёт Premium-функционал.
-- После 12.8 можно сразу работать с Nexus-архивами — GUI уже будет
-  надстраивать UI над этой функциональностью.
-
-**Почему Free (Фаза 5) — последняя:**
-
-- Требует WebView2 — это уже GUI-стек.
-- Premium-путь проще и даёт работающий продукт для многих.
-- Free — расширение, не базис.
-
-**Фаза 4 — вариации дистрибутивов — вычеркнута.**
+- **Ручной прогон GUI на OmenRim 7 / OmenTest7** (аналог 3.8) —
+  проверить Home-дашборд, DevMode, Update, Open MO2 на реальных
+  данных.
+- **Техдолг** — убрать `INavigationAware.SetNavigateHome` (заглушка,
+  никто не использует, решение №201); возможно, вычистить
+  `INavigationAware` целиком.
+- **Фаза 5** — Nexus Free (WebView2). Большая работа.
 
 ---
 
 ## Ключевые принципы рефакторинга
 
-- Никаких больших изменений за один шаг. Каждый шаг компилируется.
-- 593 теста — зелёные на каждом шаге. Если упали — откат.
+- Никаких больших изменений за один шаг.
+- 813 тестов — зелёные на каждом шаге.
 - Ручной прогон на OmenRim 7 после каждой фазы.
 - Никаких изменений в pipeline, шагах, моделях. Только композиция.
-- `TryAddSingleton` в DI-extensions — защита от дублирования.
-- Никаких `Process.Start` для внутренних вызовов. Только прямые
-  вызовы pipeline.
-- GUI — отдельные проекты, ссылаются на pipeline. Обратных ссылок
-  нет.
-- CLI — первоклассный клиент. GUI — дополнение, не замена.
-- `Firelink.Gui.Shared` — **без Avalonia**. Всё Avalonia-зависимое —
-  в `Firelink.Gui.Controls`, `Firelink.Gui.Install`,
-  `Firelink.Gui.Pack`, `Firelink.Gui`.
-- `Firelink.Gui.Install`/`Firelink.Gui.Pack` не ссылаются на
-  `Firelink.Gui` (обратной ссылки нет).
+- `TryAddSingleton` в DI-extensions.
+- Никаких `Process.Start` для внутренних вызовов.
+- GUI — отдельные проекты, ссылаются на pipeline. Обратных ссылок нет.
+- CLI — первоклассный клиент. GUI — дополнение.
+- `Firelink.Gui.Shared` — **без Avalonia**.
 - VM в GUI-модулях не зависят от pipeline напрямую — только через
   `IRunner` интерфейсы.
-- GUI — отдельные проекты, ссылаются на pipeline. Обратных ссылок нет.
 
 ## Что НЕ делать
 
 - Не делать «единый exe через `Process.Start` дочерних процессов».
-- Не выносить presentation в pipeline. Pipeline — оркестрация,
-  presentation — в клиентах.
+- Не выносить presentation в pipeline.
 - Не делать GUI до Фазы 2 (общие API).
 - Не делать Free-стратегию (Фаза 5) до Premium (Фаза 6).
-- Не трогать `Firelink.Core`, `Firelink.Platform.*` — они не меняются.
+- Не трогать `Firelink.Core`, `Firelink.Platform.*`.
 - Не использовать ReactiveUI/DynamicData/MessageBus.
 - Не использовать `Avalonia` в `Firelink.Gui.Shared`.
-- Не давать `Firelink.Gui.Install`/`Firelink.Gui.Pack`
-  обратных ссылок на `Firelink.Gui`.
+- Не давать `Firelink.Gui.Install`/`Firelink.Gui.Pack` обратных
+  ссылок на `Firelink.Gui`.
 
 ---
 
 ## Грабли и подводные камни
 
-Накопленные замечания. Актуальны при правках.
-
 ### Про GUI
 
 **Про `<AssemblyName>Firelink</AssemblyName>` (решение 169).**
 Имя сборки `Firelink.Gui` — `Firelink`. Root namespace — `Firelink.Gui`.
-Это ломает наивный `asm.GetName().Name + ".Views." + shortName` в
-`ViewLocator`. Правильный алгоритм — перебор `asm.GetTypes()` и
-поиск по суффиксу `.Views.<ShortName>`. Решение 179.
+Ломает наивный `asm.GetName().Name + ".Views." + shortName` в
+`ViewLocator`. Правильный алгоритм — перебор `asm.GetTypes()`.
+Решение 179.
 
 **Про `Grid.ColumnSpacing`/`RowSpacing`.**
-В Avalonia 11.x у `Grid` **нет** этих свойств (WPF-наследие).
-Используем `Margin` на детях или `StackPanel.Spacing`.
+В Avalonia 11.x у `Grid` нет этих свойств.
 
 **Про `Color` — неоднозначность.**
 `Color` есть и в `System.Drawing`, и в `Avalonia.Media`.
-В файлах с обоими using — CS0104. Решение: alias
-`using AvaloniaColor = Avalonia.Media.Color;`.
+Alias `using AvaloniaColor = Avalonia.Media.Color;`.
 
 **Про `[RelayCommand]` и публичность.**
-`[RelayCommand] private void Clear()` — генерирует `ClearCommand`,
-но не даёт публичного метода `Clear()`. Если нужен программный
-вызов — `[RelayCommand] public void Clear()`. Решение 178.
+`private void Clear()` генерирует `ClearCommand`, но не публичный
+`Clear()`. Решение 178.
 
 **Про `ObservableLoggerProvider` и `AddLogging`.**
-`builder.AddProvider(sp => ...)` **не существует**. Провайдер
-регистрируется через `services.AddSingleton<ILoggerProvider>(...)`,
-`AddLogging` сам подтянет. Решение 180.
+`builder.AddProvider(sp => ...)` не существует. Через
+`services.AddSingleton<ILoggerProvider>(...)`. Решение 180.
 
-**Про `ObservableCollection<T>` в VM.** Любая мутация `ObservableCollection`
-из не-UI-потока — потенциальная гонка с UI-биндингом. Если коллекция
-наполняется из worker-потока (как `ObservableLogSink.Entries` от
-`Parallel.ForEach` в pipeline) — нужен маршалинг через `IUiDispatcher`.
-Решение №183. `VerifyVM.Rows` наполняется на UI-потоке — гонки нет.
+**Про `ObservableCollection<T>` в VM.**
+Мутации из не-UI-потока → маршалинг через `IUiDispatcher`.
+Решение 183.
 
-**Про `Task.Run` в `VerifyRunner`.** `VerifyPipeline.Execute` —
-синхронный (решение №116). Без `Task.Run` UI-поток блокируется на
-время верификации инстанса (десятки секунд на OmenRim 7). Решение №185.
+**Про `Task.Run` в `VerifyRunner`.**
+`VerifyPipeline.Execute` — синхронный. Решение 185.
 
-**Про производные свойства в CommunityToolkit.** `[ObservableProperty]
-private VerifyReport? _report;` **не** уведомляет об изменениях
-`IsOk`, `HasFailures`, `PassedCount`, `FailedCount`, `ResultTitle`,
-`ResultColor`, `TargetPath`, если они объявлены как `=> Report?.X`.
-Стандартное решение — ручной `OnPropertyChanged(nameof(X))` после
-присвоения `Report`. В `VerifyVM` это делает `NotifyResultChanged()`.
+**Про производные свойства в CommunityToolkit.**
+`[ObservableProperty]` не уведомляет об изменениях computed properties.
+Ручной `OnPropertyChanged(nameof(X))`.
 
-**Про `Placeholders`-папку.** После 3.6 удалены все плейсхолдеры
-(`PackPlaceholderVM`, `VerifyPlaceholderVM`). Папка
-`Firelink.Gui.Shared/ViewModels/Placeholders/` и одноимённые View в
-`Firelink.Gui/Views/` больше не существуют. Если добавляешь новый
-экран — делай сразу настоящий VM, не плейсхолдер.
+**Про `internal` между проектами.**
+`internal` виден **только внутри одной сборки**. Если файл
+`src/Firelink.Gui.Shared/Services/Foo.cs` объявлен `internal` и
+namespace `Firelink.Gui.Services`, то `Firelink.Gui` (exe) его
+**не увидит**, даже если namespace совпадает. Симптом: `CS0122`
+«недоступен из-за уровня защиты» на строке регистрации в DI.
+Решение: положить файл физически в ту сборку, где он используется,
+или сделать тип `public`. Пример 3.9.8: `ShellProcessLauncher`
+должен лежать в `src/Firelink.Gui/Services/`, не в Shared.
 
-**Про `FakeScreenFactory` в `Firelink.Gui.Shared.Tests`.** Этот
-проект **не** ссылается на `Firelink.Gui.Pack`/`Firelink.Gui.Verify`
-(они Avalonia-зависимые). Фабрика умеет только Home; для
-Pack/Install/Verify возвращает Home. Реальная маршрутизация
-тестируется в `Firelink.Gui.Install.Tests`/`Pack.Tests`/`Verify.Tests`.
+**Про `Update` vs `Install` на карточке.**
+`Install` — `<InstancePath>/modlist.json`, `target = <InstancePath>`.
+`Update` — выбранный через диалог файл, `target = <InstancePath>`.
+Оба ведут в `InstallVM.PrepareForInstall(manifestPath, targetPath)`.
+Installer сам копирует manifest в target (`ResolveTargetStep`).
+Отдельного копирования в HomeVM нет.
+
+**Про пустой Home.**
+Если в `<exeDir>/Instances/` нет валидных манифестов — список пуст,
+Home пустой. Заголовок «Home» остаётся. Решение 3.9.7.3.
+
+**Про `FakeScreenFactory` в `Firelink.Gui.Shared.Tests`.**
+Не ссылается на `Firelink.Gui.Pack`/`Firelink.Gui.Verify` (Avalonia).
+Фабрика умеет только Home. Настоящая маршрутизация тестируется в
+своих проектах.
 
 ### Про копипаст
 
-Были ошибки (`Pack.Steps` vs `Install.Steps`, пропущенные `Profile`,
-`params` vs named args, shadowing в тестах, `PluginsEntry` вместо
-`PluginEntry`). Если билд падает — вероятнее ошибка в коде ассистента.
+Были ошибки в коде ассистента. Если билд падает — вероятнее ошибка
+в коде ассистента, не в проекте.
 
 ### Про BOM
 
-Файлы в репозитории часто с BOM (`\uFEFF`). При перезаписи файлов
-не копировать BOM из вывода dump. `firelink-pack.json` у автора тоже
-бывает с BOM — `PackConfigJson` читает его корректно, но лучше без.
+Файлы в репозитории часто с BOM (`\uFEFF`). При перезаписи —
+не копировать BOM из вывода dump.
 
 ### Про samples
 
 `samples/*.json` копируются в output тестов через `PreserveNewest`.
-Если правите sample — обновите и исходник, и (при необходимости)
-очистите `bin/obj`.
 
 ### Про пути
 
-Все проекты живут в `src/` и `tests/`. Новые проекты создавать
-**строго** в `tests/<Name>/`, иначе `..\..\src\...` в
-`ProjectReference` не разрешится.
+Все проекты в `src/` и `tests/`. Новые проекты — строго в `tests/<Name>/`.
 
 ### Про пустой DisabledMod
 
 Мод без восстановимых файлов остаётся в манифесте с пустыми
-директивами. Installer создаёт папку, файлов нет. Это норма.
+директивами. Installer создаёт папку, файлов нет. Норма.
 
 ### Про пустой extension/extra
 
 Entry с пустым списком директив **не попадает** в манифест.
-Unmatched уже выгружены в `__Firelink_Output`; entry без директив
-бессмысленна.
 
 ### Про xUnit1031
 
-Не использовать `.GetAwaiter().GetResult()` в тестах. Если API
-async — тест `async Task`, `await`.
+Не использовать `.GetAwaiter().GetResult()`. Async API → async-тест.
 
 ### Про Spectre markup
 
-`[...]` — это разметка. Для имён файлов и мод-неймов (особенно
-`[NoDelete]`) — обязательно `Markup.Escape`.
+`[...]` — разметка. `Markup.Escape` для имён файлов.
 
 ### Про verify-счётчики
 
-При отсутствии папки мода `CheckMod` делает `yield break` — одна
-fail-проверка вместо 10+ «file missing». Сознательное решение.
+`CheckMod` делает `yield break` — одна fail-проверка вместо 10+.
 
 ### Про `Slug.FromFileName`
 
-`.7z` отрезается **до** slug-ификации. `FomodTools.7z` →
-`fomodtools`, `Mod.Organizer-2.5.2.7z` → `mod-organizer-2-5-2`.
+`.7z` отрезается до slug-ификации.
 
 ### Про `MatchStep.Input.Matcher`
 
-`internal`, не `required`. При создании `MatchStep` из тестов (не
-через DI) — **обязательно** задавать.
-`MatchExtensionsStep`/`MatchExtrasStep` — аналогично.
+`internal`, не `required`. В тестах — задавать обязательно.
 
 ### Про `Mod.Organizer-2.5.2.7z`
 
-Если файла нет в `OmenRim 7\MO2\downloads\`, pack пишет `Size = 0`
-для `manifest.Mo2.Archive`. **Не ошибка.** Hash берётся из
-`mo2.source.hash`.
+Отсутствие файла в downloads/ → `Size = 0`. Hash из `mo2.source.hash`.
 
 ### Про runtime-файлы
 
-`.log`/`.ini` от SKSE-плагинов не восстанавливаются из архивов и
-уходят в `__Firelink_Output`. **Не пытаться «чинить»** — это
-правильное поведение.
+`.log`/`.ini` от SKSE-плагинов → `__Firelink_Output`. Не «чинить».
 
 ### Про `.bsa`/`.ba2`
 
-Единые файлы, не контейнеры для Firelink. Отдельных `.bsa` в
-`downloads/` не бывает на практике.
+Единые файлы, не контейнеры.
 
 ### Про `meta.ini` в verify
 
-Сравнение **семантическое** (парсим через `MetaIniReader.Parse`,
-сравниваем `ModMeta` по полям). Нормализация: `null ≡ ""`.
-`mod.Meta == null` + файл есть → fail.
+Семантическое сравнение. `null ≡ ""`.
 
 ### Про `ArchiveMatcher.BuildAsync`
 
-Async, отмена пробрасывается как есть
-(`catch (OperationCanceledException) { throw; }` **перед**
-`catch (Exception)`). В тестах хелпер называется
-`MakeMatcherAsync`, `await matcher.BuildAsync(ct)`.
+Async, отмена пробрасывается как есть.
 
 ### Про `CancellationHelper`
 
-В `Firelink.Core`. Используется в `PackCommand`, `InstallCommand`,
-`VerifyCommand` и в `Program.cs` — `catch (Exception ex) when
-(CancellationHelper.IsCancellation(ex))`.
+`catch (Exception ex) when (CancellationHelper.IsCancellation(ex))`.
 
 ### Про `config.PropagateExceptions()`
 
-Включено в CLI. Без него Spectre ловит `CommandParseException` сам
-и печатает свой формат без hint.
+Включено в CLI.
 
-### Про `install` без `--target` (Фаза 1)
+### Про `install` без `--target`
 
-`firelink install <manifest>` без `--target` создаёт инстанс в
-`<exeDir>/Instances/<meta.name>/`, а **не рядом с манифестом**.
-Это архитектурное решение. Для переустановки поверх существующего
-инстанса — всегда указывать `--target`.
+`<exeDir>/Instances/<meta.name>/`, а не рядом с манифестом.
 
-### Про CS0104 при переезде CLI (Фаза 1)
+### Про CS0104 при переезде CLI
 
-При переносе команд в `Firelink.Cli` возникли коллизии имён
-(`PackSettings`, `PackCommand` и т.д.) между `Firelink.Cli.*` и
-`Firelink.Pack.*`/`Firelink.Install.*`. Решались псевдонимами
-(`using X = Firelink.Cli.X;`). После шагов 1.3/1.4 псевдонимы убраны —
-коллизий больше нет, потому что `Firelink.Pack.Commands` и
-`Firelink.Install.Commands` больше не существуют.
+Псевдонимы `using X = Firelink.Cli.X;` — историческое, после 1.3/1.4
+не нужно.
 
 ---
 
 ## Технический долг
 
 - Persist кеша хешей в SQLite (v0.2.0).
-- Убрать `INavigationAware.SetNavigateHome` — после перехода на
-  кнопку `Done` в Pack/Install/Verify метод не используется,
-  остаётся только для совместимости.
+- Persist DevMode в `%USERPROFILE%\.firelink\settings.json` (v0.2.0).
+- **Убрать `INavigationAware.SetNavigateHome`** — заглушка, никто
+  не использует после 3.9.6 (решение №201). Возможно, вычистить
+  `INavigationAware` целиком.
 - Глобальный реестр `archives.db` — v0.2.0.
 - Прогресс-бар Spectre — v0.2.0.
 - File-logging — v0.3.0.
 - `SyncModsStep` поддерживает только `FromArchive`.
 - `ConfigureMo2Step` — не делаем.
-- E1 (прогон на большом инстансе) — отменён по решению.
+- E1 (прогон на большом инстансе) — отменён.
 - Механизм патчей для inline-файлов — v0.2.0+.
 
 ## Сознательно не делаем
 
-- `ConfigureMo2Step` — автоконфигурация MO2.
-- Автопатчи / autoPack / inlinePatterns — отменены.
-- `repair` в CLI — install идемпотентен.
-- Обработка `.bsa`/`.ba2` как контейнеров — они единые файлы.
+- `ConfigureMo2Step`.
+- Автопатчи / autoPack / inlinePatterns.
+- `repair` в CLI.
+- Обработка `.bsa`/`.ba2` как контейнеров.
 - `firelink index`.
-- Фаза 4 — вариации дистрибутивов (2026-09-21).
-- Nexus Premium API как отдельная подписка (кроме Фазы 6).
+- Фаза 4 — вариации дистрибутивов.
+- Nexus Premium API как отдельная подписка.
 - Кеширование Nexus download-ссылок.
+- `IDialogService` для `Open MO2` — inline-предупреждение проще
+  (решение №215).
 
 ---
 
 ## Окружение
 
 - Windows 10/11.
-- .NET 8 SDK (SDK 10 тоже).
+- .NET 8 SDK.
 - Visual Studio 2022.
-- `C:\Firelink\TestInstance\` — MVP прогон (до 12.13.x), verify OK.
-- `C:\Firelink\TestInstance2\` — после 12.13.6, extensions/extras,
-  verify 0 failed.
+- `C:\Firelink\TestInstance\` — MVP прогон (до 12.13.x).
+- `C:\Firelink\TestInstance2\` — после 12.13.6.
 - `C:\Firelink\OmenRim 7\` — тестовый оригинал.
+- `OmenTest7` — GUI-прогон 3.8.
 - Большой инстанс — 4370 модов (не используется).
 
 ---
 
 ## История изменений документа
 
-- **2026-09-21** — создан `FIRELINK.md`: объединены `HANDOFF.md`,
-  `PROJECT-STATE.md`, `ROADMAP.md`. Фаза 4 вычеркнута. Добавлен
-  раздел «Фаза 1 — Единый CLI» (решения 144–150). Обновлён план
-  работ с учётом закрытых шагов 1.1–1.4.
-- **2026-09-21** — Фаза 1 закрыта. Добавлены решения 150–152
-  (`AddFirelinkPack`/`AddFirelinkInstall`, `AddHttpClient<MirrorDownloader>`,
-  регистрация только CLI-специфики в `Program.cs`).
-  Раздел «План работ → Фаза 1» помечен как закрытый.
-- **2026-09-22** — legacy cleanup: удалены `HANDOFF.md` и
-  `PROJECT-STATE.md` (объединены в `FIRELINK.md` 2026-09-21).
-  Убраны записи из `Firelink.slnx`. Обновлена версия `DOC.md` до
-  v4.2 в шапке.
-- **2026-09-22** — Фаза 6 (Nexus Premium, 12.8) закрыта.
-- Добавлены решения 161–167.
-- Обновлён план работ, `DOC.md` v4.3, `FIRELINK.md`.
-- Ручной прогон на `TestInstance5`: 4 nexus-архива скачаны через
-Premium API, включая USSEP (~250 МБ). CDN-запросы идут через
-именованный `HttpClient.nexus` (10 мин), API — через
-`HttpClient.nexus-api` (2 мин).
-- Тесты: 621 → 674.
-- **2026-09-23** — Фаза 3, шаги 3.1–3.4.2 закрыты.
-- Добавлены решения 168–181.
-- Обновлён план работ, `DOC.md` v4.4.
-- Тесты: 674 → 731.
-- Новый проект `Firelink.Gui.Controls`.
-- `ViewLocator` переписан на перебор сборок.
-- **2026-09-24** — Фаза 3, шаги 3.5, 3.5.1, 3.6 закрыты.
-- Добавлены решения 182–187.
-- Обновлён план работ, `DOC.md` v4.5.
-- Тесты: 731 → 759.
-- Новые проекты `Firelink.Gui.Pack`, `Firelink.Gui.Verify`.
-- Добавлен `IUiDispatcher` — фикс гонки `ObservableCollection`.
-- Удалены все плейсхолдеры GUI.
-- **2026-09-24** — Фаза 3, шаг 3.7 закрыт.
-- Добавлены решения 188–191.
-- Новый файл `Directory.Build.props` (версия 0.1.0).
-- Новый файл `tools/build-release.bat`.
-- Иконка GUI (`src/Firelink.Gui/Assets/app.ico`).
-- Версия CLI читается из assembly.
-- Тестов не добавляли: 759 passed.
-- Раскладка дистрибутива — «как есть» (без `lib/`).
-- **2026-09-25** — Фаза 3, шаг 3.8 закрыт (ручной прогон
-  GUI на OmenRim 7 / OmenTest7, 4522 passed).
-- **2026-09-25** — Фаза 3.9, шаги 3.9.1–3.9.6 закрыты
-  (редизайн GUI: тёмная тема, палитра #1e1e1e + #d3b181,
-  иконки Lucide, Logs и Settings в отдельных вкладках,
-  Home → Done, удалены хардкод-цвета).
-- Добавлены решения 192–207.
-- Тесты: 759 → 766 (+5 SettingsVMTests, +2 HomeVMTests
-  в обсуждении 3.9.7).
-- Шаг 3.9.7 (HomeView v2) — в обсуждении.
+- **2026-09-21** — создан `FIRELINK.md`.
+- **2026-09-21** — Фаза 1 закрыта. Решения 150–152.
+- **2026-09-22** — legacy cleanup, DOC.md v4.2.
+- **2026-09-22** — Фаза 6 закрыта. Решения 161–167. DOC.md v4.3.
+- **2026-09-23** — Фаза 3, шаги 3.1–3.4.2. Решения 168–181. DOC.md v4.4.
+  674 → 731.
+- **2026-09-24** — Фаза 3, шаги 3.5–3.6. Решения 182–187. DOC.md v4.5.
+  731 → 759.
+- **2026-09-24** — Фаза 3, шаг 3.7. Решения 188–191.
+- **2026-09-25** — Фаза 3, шаг 3.8 (ручной прогон GUI, 4522 passed).
+- **2026-09-25** — Фаза 3.9, шаги 3.9.1–3.9.6. Решения 192–207.
+  759 → 766.
+- **2026-09-25** — Фаза 3.9, шаги 3.9.7.1–3.9.7.3 (DevMode,
+  InstalledPackScanner, Home-дашборд). 766 → 808.
+- **2026-09-25** — Фаза 3.9, шаг 3.9.8 (Open MO2 / Install / Update
+  на карточке, IProcessLauncher, WarningMessage). Решения 208–219.
+  808 → **813**. Фаза 3.9 закрыта целиком.
 
 ---

@@ -4,12 +4,26 @@ using CommunityToolkit.Mvvm.ComponentModel;
 namespace Firelink.Gui.Shared.ViewModels;
 
 /// <summary>
-/// VM экрана Settings. Пока — только About-блок (имя, версия,
-/// копирайт, лицензия). Позже здесь появятся настройки
-/// (Nexus API key, пути, тема).
+/// VM экрана Settings. Пока — About-блок (имя, версия, копирайт,
+/// лицензия) и переключатель DevMode.
+///
+/// DevMode — in-memory, default false. При включении в сайдбаре
+/// появляются пункты Install/Pack/Verify/Logs; при выключении
+/// остаются только Home и Settings. Persist — отдельный шаг (v0.2.0).
+///
+/// SettingsVM — singleton в DI (AddGuiShared). MainWindowVM резолвит
+/// его напрямую и передаёт в NavigationVM.
 /// </summary>
 public sealed partial class SettingsVM : ViewModel
 {
+    /// <summary>
+    /// DevMode. In-memory, default false. Меняется через UI
+    /// (CheckBox в SettingsView). NavigationVM подписан на
+    /// PropertyChanged и перестраивает Items.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isDevMode;
+
     /// <summary>Отображаемое имя приложения.</summary>
     public string ProductName => "Firelink";
 

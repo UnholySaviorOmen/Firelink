@@ -13,7 +13,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Firelink.Gui.Install.ViewModels;
 
-public sealed partial class InstallVM : ProgressViewModel, INavigationAware
+public sealed partial class InstallVM : ProgressViewModel, INavigationAware, IInstallTarget
 {
     private readonly IInstallRunner _runner;
     private readonly ILogger<InstallVM> _logger;
@@ -155,5 +155,44 @@ public sealed partial class InstallVM : ProgressViewModel, INavigationAware
         IsInstalling = State == InstallState.Installing;
         IsSuccess = State == InstallState.Success;
         IsFailure = State == InstallState.Failure;
+    }
+
+    /// <summary>
+    /// Реализация IInstallTarget. Вызывается MainWindowVM при
+    /// навигации из Home-дашборда:
+    ///   - Install: manifest = &lt;InstancePath&gt;/modlist.json,
+    ///              target   = &lt;InstancePath&gt;.
+    ///   - Update:  manifest = выбранный юзером файл,
+    ///              target   = &lt;InstancePath&gt;.
+    ///
+    /// Сбрасывает State в Configuration (если InstallVM был в Success/
+    /// Failure), обнуляет Summary и ErrorMessage, устанавливает оба
+    /// пикера.
+    /// </summary>
+    public void PrepareForInstall(string manifestPath, string targetPath)
+    {
+        if (string.IsNullOrWhiteSpace(manifestPath))
+        {
+            _logger.LogWarning(
+                "PrepareForInstall called with empty manifest path");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(targetPath))
+        {
+            _logger.LogWarning(
+                "PrepareForInstall called with empty target path");
+            return;
+        }
+
+        ModlistPicker.SetPath(manifestPath);
+        TargetPicker.SetPath(targetPath);
+
+        if (State != InstallState.Configuration)
+        {
+            Summary = null;
+            ErrorMessage = null;
+            State = InstallState.Configuration;
+        }
     }
 }

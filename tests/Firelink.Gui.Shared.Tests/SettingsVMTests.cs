@@ -5,6 +5,10 @@ namespace Firelink.Gui.Shared.Tests;
 
 public class SettingsVMTests
 {
+    // ------------------------------------------------------------------
+    //  About
+    // ------------------------------------------------------------------
+
     [Fact]
     public void ProductName_IsFirelink()
     {
@@ -42,5 +46,41 @@ public class SettingsVMTests
         vm.Footer.Should().Contain(vm.Version);
         vm.Footer.Should().Contain("AGPL-3.0-or-later");
         vm.Footer.Should().Contain("Copyright (C) 2026 omen");
+    }
+
+    // ------------------------------------------------------------------
+    //  DevMode
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void IsDevMode_DefaultsToFalse()
+    {
+        var vm = new SettingsVM();
+        vm.IsDevMode.Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsDevMode_CanBeToggled()
+    {
+        var vm = new SettingsVM();
+
+        vm.IsDevMode = true;
+        vm.IsDevMode.Should().BeTrue();
+
+        vm.IsDevMode = false;
+        vm.IsDevMode.Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsDevMode_RaisesPropertyChanged()
+    {
+        var vm = new SettingsVM();
+        var changed = new List<string?>();
+
+        vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        vm.IsDevMode = true;
+
+        changed.Should().Contain(nameof(SettingsVM.IsDevMode));
     }
 }

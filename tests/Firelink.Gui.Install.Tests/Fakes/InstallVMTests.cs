@@ -238,8 +238,6 @@ public class InstallVMTests
         try
         {
             var (vm, runner, _) = Make();
-
-            // Runner бросит OperationCanceledException.
             runner.ExceptionToThrow = new OperationCanceledException();
 
             vm.ModlistPicker.SetPath(tmp);
@@ -269,14 +267,11 @@ public class InstallVMTests
 
             vm.ModlistPicker.SetPath(tmp);
 
-            // Запускаем InstallAsync и не ждём его завершения.
             var installTask = vm.InstallCommand.ExecuteAsync(null);
 
-            // Убеждаемся, что мы в Installing.
             vm.State.Should().Be(InstallState.Installing);
             vm.CancelCommand.CanExecute(null).Should().BeTrue();
 
-            // Отменяем.
             vm.CancelCommand.Execute(null);
 
             await installTask;
@@ -299,7 +294,7 @@ public class InstallVMTests
     }
 
     // ------------------------------------------------------------------
-    //  Home
+    //  Done
     // ------------------------------------------------------------------
 
     [Fact]
@@ -342,14 +337,12 @@ public class InstallVMTests
             var (vm, runner, _) = Make();
             runner.ResultToReturn = FakeInstallRunner.MakeSummary();
 
-            // Configuration.
             vm.IsConfiguring.Should().BeTrue();
             vm.IsInstalling.Should().BeFalse();
 
             vm.ModlistPicker.SetPath(tmp);
             await vm.InstallCommand.ExecuteAsync(null);
 
-            // Success.
             vm.IsConfiguring.Should().BeFalse();
             vm.IsInstalling.Should().BeFalse();
             vm.IsSuccess.Should().BeTrue();
@@ -359,5 +352,114 @@ public class InstallVMTests
         {
             File.Delete(tmp);
         }
+    }
+
+    // ------------------------------------------------------------------
+    //  PrepareForInstall (IInstallTarget)
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void PrepareForInstall_SetsBothPickersAndResetsToConfiguration()
+    {
+        var tmp = MakeTempJson();
+        var target = Path.Combine(Path.GetTempPath(), "firelink-target-" + Guid.NewGuid());
+        Directory.CreateDirectory(target);
+        try
+        {
+            var (vm, _, _) = Make();
+
+            vm.ModlistPicker.Path.Should().BeNull();
+            vm.TargetPicker.Path.Should().BeNull();
+
+            vm.PrepareForInstall(tmp, target);
+
+            vm.ModlistPicker.Path.Should().Be(tmp);
+            vm.TargetPicker.Path.Should().Be(target);
+            vm.State.Should().Be(InstallState.Configuration);
+        }
+        finally
+        {
+            File.Delete(tmp);
+            Directory.Delete(target);
+        }
+    }
+
+    [Fact]
+    public async Task PrepareForInstall_FromSuccess_ResetsState()
+    {
+        var tmp = MakeTempJson();
+        var target = Path.Combine(Path.GetTempPath(), "firelink-target-" + Guid.NewGuid());
+        Directory.CreateDirectory(target);
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ResultToReturn = FakeInstallRunner.MakeSummary();
+
+            vm.ModlistPicker.SetPath(tmp);
+            await vm.InstallCommand.ExecuteAsync(null);
+            vm.State.Should().Be(InstallState.Success);
+
+            vm.PrepareForInstall(tmp, target);
+
+            vm.State.Should().Be(InstallState.Configuration);
+            vm.Summary.Should().BeNull();
+            vm.ErrorMessage.Should().BeNull();
+        }
+        finally
+        {
+            File.Delete(tmp);
+            Directory.Delete(target);
+        }
+    }
+
+    [Fact]
+    public async Task PrepareForInstall_FromFailure_ResetsState()
+    {
+        var tmp = MakeTempJson();
+        var target = Path.Combine(Path.GetTempPath(), "firelink-target-" + Guid.NewGuid());
+        Directory.CreateDirectory(target);
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ExceptionToThrow = new InvalidOperationException("boom");
+
+            vm.ModlistPicker.SetPath(tmp);
+            await vm.InstallCommand.ExecuteAsync(null);
+            vm.State.Should().Be(InstallState.Failure);
+
+            vm.PrepareForInstall(tmp, target);
+
+            vm.State.Should().Be(InstallState.Configuration);
+            vm.ErrorMessage.Should().BeNull();
+        }
+        finally
+        {
+            File.Delete(tmp);
+            Directory.Delete(target);
+        }
+    }
+
+    [Fact]
+    public void PrepareForInstall_EmptyManifestPath_NoOp()
+    {
+        var (vm, _, _) = Make();
+
+        var act = () => vm.PrepareForInstall("", "/some/target");
+        act.Should().NotThrow();
+
+        vm.ModlistPicker.Path.Should().BeNull();
+        vm.TargetPicker.Path.Should().BeNull();
+    }
+
+    [Fact]
+    public void PrepareForInstall_EmptyTargetPath_NoOp()
+    {
+        var (vm, _, _) = Make();
+
+        var act = () => vm.PrepareForInstall("/some/manifest.json", "");
+        act.Should().NotThrow();
+
+        vm.ModlistPicker.Path.Should().BeNull();
+        vm.TargetPicker.Path.Should().BeNull();
     }
 }

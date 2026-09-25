@@ -57,6 +57,7 @@ public partial class App : Application
         // UI-инфраструктура exe-проекта.
         services.AddSingleton<IUiDispatcher, AvaloniaUiDispatcher>();
         services.AddSingleton<IFilePickerService, AvaloniaFilePickerService>();
+        services.AddSingleton<IProcessLauncher, ShellProcessLauncher>();
         services.AddSingleton<IScreenFactory, ScreenFactory>();
 
         // GUI-модули.

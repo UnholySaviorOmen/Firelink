@@ -13,15 +13,16 @@ public sealed partial class MainWindowVM : ViewModel
     public NavigationVM Navigation { get; }
     public HomeVM Home { get; }
 
-    public MainWindowVM(IScreenFactory screens)
+    public MainWindowVM(IScreenFactory screens, SettingsVM settings)
     {
         _screens = screens;
 
         Home = (HomeVM)_screens.Create(ScreenType.Home);
-        Navigation = new NavigationVM(NavigateTo);
+        Navigation = new NavigationVM(NavigateTo, settings);
 
         _activePane = Home;
         Navigation.SelectScreen(ScreenType.Home);
+        Home.Refresh();
     }
 
     public void NavigateTo(ScreenType screen)
@@ -32,7 +33,21 @@ public sealed partial class MainWindowVM : ViewModel
             nav.SetNavigateHome(() => NavigateTo(ScreenType.Home));
 
         ActivePane = pane;
-
         Navigation.SelectScreen(screen);
+
+        if (pane is HomeVM home)
+        {
+            home.InstallRequested -= OnInstallRequested;
+            home.InstallRequested += OnInstallRequested;
+            home.Refresh();
+        }
+    }
+
+    private void OnInstallRequested(string manifestPath, string targetPath)
+    {
+        NavigateTo(ScreenType.Install);
+
+        if (ActivePane is IInstallTarget target)
+            target.PrepareForInstall(manifestPath, targetPath);
     }
 }

@@ -63,7 +63,7 @@
                     </Border>
                 </StackPanel>
 
-                <!-- Placeholder -->
+                <!-- Application settings -->
                 <StackPanel Spacing="8">
                     <TextBlock Text="Application settings"
                                FontSize="16"
@@ -74,9 +74,16 @@
                             BorderThickness="1"
                             CornerRadius="10"
                             Padding="16">
-                        <TextBlock Text="Settings will appear here in a future version."
-                                   Foreground="{StaticResource TextMutedBrush}"
-                                   TextWrapping="Wrap" />
+                        <StackPanel Spacing="12">
+
+                            <CheckBox Content="Developer mode"
+                                      IsChecked="{Binding IsDevMode}" />
+
+                            <TextBlock Text="Shows Install, Pack, Verify and Logs in the sidebar."
+                                       Foreground="{StaticResource TextMutedBrush}"
+                                       FontSize="12"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
                     </Border>
                 </StackPanel>
 
