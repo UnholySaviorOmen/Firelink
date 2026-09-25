@@ -1,6 +1,6 @@
 # Firelink -- repo dump
 
-**Generated:** 25.09.2026 10:14:00,81
+**Generated:** 25.09.2026 13:02:29,08
 **Root:** D:\Code\repos\Firelink
 
 ---
@@ -3890,6 +3890,7 @@ public partial class App : Application
         // UI-инфраструктура exe-проекта.
         services.AddSingleton<IUiDispatcher, AvaloniaUiDispatcher>();
         services.AddSingleton<IFilePickerService, AvaloniaFilePickerService>();
+        services.AddSingleton<IProcessLauncher, ShellProcessLauncher>();
         services.AddSingleton<IScreenFactory, ScreenFactory>();
 
         // GUI-модули.
@@ -4210,6 +4211,39 @@ internal sealed class ScreenFactory : IScreenFactory
 
 ````
 
+## src/Firelink.Gui/Services/ShellProcessLauncher.cs
+
+````csharp
+using System.Diagnostics;
+using Firelink.Gui.Shared.Services;
+
+namespace Firelink.Gui.Services;
+
+/// <summary>
+/// Реализация IProcessLauncher через Process.Start + ShellExecute.
+///
+/// UseShellExecute = true нужен, чтобы ОС сама разобралась, как
+/// открыть файл — для .exe это запуск, для .txt — ассоциированная
+/// программа. На Windows это работает из коробки.
+/// </summary>
+internal sealed class ShellProcessLauncher : IProcessLauncher
+{
+    public void OpenFile(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            throw new ArgumentException(
+                "Path must be non-empty.", nameof(path));
+
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = path,
+            UseShellExecute = true,
+        });
+    }
+}
+
+````
+
 ## src/Firelink.Gui/Views/HomeView.axaml
 
 ````text
@@ -4218,20 +4252,85 @@ internal sealed class ScreenFactory : IScreenFactory
              xmlns:vm="using:Firelink.Gui.Shared.ViewModels"
              x:Class="Firelink.Gui.Views.HomeView"
              x:DataType="vm:HomeVM">
-    <Grid>
-        <StackPanel VerticalAlignment="Center"
-                    HorizontalAlignment="Center"
-                    Spacing="12"
-                    Margin="0,60,0,30">
-            <TextBlock Text="{Binding Title}"
-                       FontSize="36"
+
+    <Grid RowDefinitions="Auto,*" Margin="20">
+
+        <!-- Header -->
+        <Grid Grid.Row="0"
+              ColumnDefinitions="*,Auto"
+              Margin="0,0,0,16">
+            <TextBlock Grid.Column="0"
+                       Text="Home"
+                       FontSize="24"
                        FontWeight="Bold"
-                       HorizontalAlignment="Center" />
-            <TextBlock Text="{Binding Subtitle}"
-                       FontSize="14"
-                       Opacity="0.7"
-                       HorizontalAlignment="Center" />
-        </StackPanel>
+                       VerticalAlignment="Center" />
+        </Grid>
+
+        <!-- Cards -->
+        <ScrollViewer Grid.Row="1"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding Items}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="vm:InstalledPackVM">
+                        <Border Background="{StaticResource SurfaceRaisedBrush}"
+                                BorderBrush="{StaticResource BorderSubtleBrush}"
+                                BorderThickness="1"
+                                CornerRadius="10"
+                                Padding="16"
+                                Margin="0,0,0,8">
+                            <StackPanel Spacing="12">
+
+                                <!-- Top row: info + buttons -->
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <StackPanel Grid.Column="0" Spacing="4">
+                                        <TextBlock Text="{Binding Name}"
+                                                   FontSize="16"
+                                                   FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding VersionLabel}"
+                                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                                   FontSize="12" />
+                                        <TextBlock Text="{Binding GameLabel}"
+                                                   Foreground="{StaticResource TextMutedBrush}"
+                                                   FontSize="11" />
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Column="1"
+                                                Orientation="Horizontal"
+                                                Spacing="8"
+                                                VerticalAlignment="Center">
+                                        <Button Content="Open MO2"
+                                                Command="{Binding OpenMo2Command}"
+                                                Padding="16,8" />
+                                        <Button Content="Install"
+                                                Classes="accent"
+                                                Command="{Binding InstallCommand}"
+                                                Padding="16,8" />
+                                        <Button Content="Update"
+                                                Command="{Binding UpdateCommand}"
+                                                Padding="16,8" />
+                                    </StackPanel>
+                                </Grid>
+
+                                <!-- Warning -->
+                                <Border Background="{StaticResource SurfaceBaseBrush}"
+                                        BorderBrush="{StaticResource ErrorBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="6"
+                                        Padding="10,8"
+                                        IsVisible="{Binding WarningMessage, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                    <TextBlock Text="{Binding WarningMessage}"
+                                               Foreground="{StaticResource ErrorBrush}"
+                                               FontSize="12"
+                                               TextWrapping="Wrap" />
+                                </Border>
+
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
     </Grid>
 </UserControl>
 
@@ -4463,7 +4562,7 @@ public partial class NavigationView : UserControl
                     </Border>
                 </StackPanel>
 
-                <!-- Placeholder -->
+                <!-- Application settings -->
                 <StackPanel Spacing="8">
                     <TextBlock Text="Application settings"
                                FontSize="16"
@@ -4474,9 +4573,16 @@ public partial class NavigationView : UserControl
                             BorderThickness="1"
                             CornerRadius="10"
                             Padding="16">
-                        <TextBlock Text="Settings will appear here in a future version."
-                                   Foreground="{StaticResource TextMutedBrush}"
-                                   TextWrapping="Wrap" />
+                        <StackPanel Spacing="12">
+
+                            <CheckBox Content="Developer mode"
+                                      IsChecked="{Binding IsDevMode}" />
+
+                            <TextBlock Text="Shows Install, Pack, Verify and Logs in the sidebar."
+                                       Foreground="{StaticResource TextMutedBrush}"
+                                       FontSize="12"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
                     </Border>
                 </StackPanel>
 
@@ -4951,7 +5057,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Firelink.Gui.Install.ViewModels;
 
-public sealed partial class InstallVM : ProgressViewModel, INavigationAware
+public sealed partial class InstallVM : ProgressViewModel, INavigationAware, IInstallTarget
 {
     private readonly IInstallRunner _runner;
     private readonly ILogger<InstallVM> _logger;
@@ -5093,6 +5199,45 @@ public sealed partial class InstallVM : ProgressViewModel, INavigationAware
         IsInstalling = State == InstallState.Installing;
         IsSuccess = State == InstallState.Success;
         IsFailure = State == InstallState.Failure;
+    }
+
+    /// <summary>
+    /// Реализация IInstallTarget. Вызывается MainWindowVM при
+    /// навигации из Home-дашборда:
+    ///   - Install: manifest = &lt;InstancePath&gt;/modlist.json,
+    ///              target   = &lt;InstancePath&gt;.
+    ///   - Update:  manifest = выбранный юзером файл,
+    ///              target   = &lt;InstancePath&gt;.
+    ///
+    /// Сбрасывает State в Configuration (если InstallVM был в Success/
+    /// Failure), обнуляет Summary и ErrorMessage, устанавливает оба
+    /// пикера.
+    /// </summary>
+    public void PrepareForInstall(string manifestPath, string targetPath)
+    {
+        if (string.IsNullOrWhiteSpace(manifestPath))
+        {
+            _logger.LogWarning(
+                "PrepareForInstall called with empty manifest path");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(targetPath))
+        {
+            _logger.LogWarning(
+                "PrepareForInstall called with empty target path");
+            return;
+        }
+
+        ModlistPicker.SetPath(manifestPath);
+        TargetPicker.SetPath(targetPath);
+
+        if (State != InstallState.Configuration)
+        {
+            Summary = null;
+            ErrorMessage = null;
+            State = InstallState.Configuration;
+        }
     }
 }
 
@@ -5755,6 +5900,7 @@ public partial class PackView : UserControl
 
 ````csharp
 using Firelink.Gui.Shared.Logging;
+using Firelink.Gui.Shared.Services;
 using Firelink.Gui.Shared.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -5779,6 +5925,14 @@ public static class GuiSharedServices
         services.AddSingleton<LogsVM>();
 
         services.AddSingleton<SettingsVM>();
+
+        // InstalledPackScanner — скан <exeDir>/Instances/.
+        // Корень вычисляется здесь, не внутри сканера: сканер
+        // принимает готовый путь (тестируемость).
+        services.AddSingleton<IInstalledPackScanner>(sp =>
+            new InstalledPackScanner(
+                Path.Combine(AppContext.BaseDirectory, "Instances"),
+                sp.GetRequiredService<ILogger<InstalledPackScanner>>()));
 
         // MainWindowVM регистрируется в клиенте (Firelink.Gui), потому что
         // зависит от IScreenFactory, реализация которого живёт в exe-проекте.
@@ -5967,6 +6121,88 @@ public sealed class ObservableLogSink
 
 ````
 
+## src/Firelink.Gui.Shared/Models/InstalledPackInfo.cs
+
+````csharp
+namespace Firelink.Gui.Shared.Models;
+
+/// <summary>
+/// Информация об инстансе, найденном в &lt;exeDir&gt;/Instances/.
+///
+/// Один инстанс = одна папка с modlist.json. Модель — плоская,
+/// только для отображения и навигации.
+///
+/// Display name берётся из manifest.Meta.Name (источник правды),
+/// не из имени папки: пользователь мог переименовать папку вручную.
+///
+/// Состояние «установлен ли MO2» (наличие ModOrganizer.exe) здесь
+/// НЕ хранится: это UI-деталь карточки, проверяется в момент клика
+/// на Open MO2 — чтобы не было stale-состояния.
+/// </summary>
+public sealed record InstalledPackInfo
+{
+    public required string Name { get; init; }
+    public required string Version { get; init; }
+    public required string Game { get; init; }
+    public required string GameVersion { get; init; }
+    public required DateTimeOffset CreatedAt { get; init; }
+    public required string InstancePath { get; init; }
+    public required string ManifestPath { get; init; }
+}
+
+````
+
+## src/Firelink.Gui.Shared/Navigation/IInstallRequestHandler.cs
+
+````csharp
+namespace Firelink.Gui.Shared.Navigation;
+
+/// <summary>
+/// Реализуется VM, которые могут запросить переход на экран Install
+/// с предзаполненными путями (manifest + target). Сейчас — HomeVM.
+///
+/// MainWindowVM подписывается на событие при навигации на такой экран
+/// и сам решает, как переключить ActivePane и передать пути в InstallVM.
+///
+/// Оба аргумента обязательны:
+///   - manifestPath — путь к modlist.json (Install: &lt;InstancePath&gt;/modlist.json,
+///                    Update: выбранный юзером через диалог).
+///   - targetPath   — куда ставить (всегда InstancePath карточки).
+///
+/// Install без target (в &lt;exeDir&gt;/Instances/&lt;meta.name&gt;/) — только
+/// через CLI --target=null. В GUI всегда явный target: карточка знает,
+/// какой инстанс она представляет.
+/// </summary>
+public interface IInstallRequestHandler
+{
+    event Action<string, string>? InstallRequested;
+}
+
+````
+
+## src/Firelink.Gui.Shared/Navigation/IInstallTarget.cs
+
+````csharp
+namespace Firelink.Gui.Shared.Navigation;
+
+/// <summary>
+/// Реализуется VM экрана Install, который умеет принимать
+/// предзаполненные пути (manifest + target) от другого экрана (Home).
+///
+/// MainWindowVM после NavigateTo(Install) проверяет, реализует ли
+/// ActivePane этот интерфейс, и если да — вызывает PrepareForInstall.
+///
+/// Контракт: PrepareForInstall сбрасывает состояние в Configuration,
+/// обнуляет Summary/ErrorMessage, устанавливает ModlistPicker.Path
+/// и TargetPicker.Path.
+/// </summary>
+public interface IInstallTarget
+{
+    void PrepareForInstall(string manifestPath, string targetPath);
+}
+
+````
+
 ## src/Firelink.Gui.Shared/Navigation/INavigationAware.cs
 
 ````csharp
@@ -6086,6 +6322,177 @@ public interface IFilePickerService
 
 ````
 
+## src/Firelink.Gui.Shared/Services/IInstalledPackScanner.cs
+
+````csharp
+using Firelink.Gui.Shared.Models;
+
+namespace Firelink.Gui.Shared.Services;
+
+/// <summary>
+/// Сканирует &lt;exeDir&gt;/Instances/ и возвращает список готовых
+/// к установке/установленных сборок.
+///
+/// Абстракция нужна для тестируемости HomeVM: в тестах
+/// подставляется fake с готовым списком.
+///
+/// Синхронный: папка Instances/ маленькая (единицы подпапок),
+/// файловые операции быстрые. Если окажется, что скан тормозит
+/// (десятки инстансов на сетевом диске) — введём async.
+/// </summary>
+public interface IInstalledPackScanner
+{
+    /// <summary>
+    /// Просканировать Instances/ и вернуть все валидные сборки.
+    ///
+    /// Что считаем валидным:
+    ///   - папка в Instances/ существует,
+    ///   - в ней есть modlist.json,
+    ///   - modlist.json успешно парсится как ModlistManifest.
+    ///
+    /// Битые/отсутствующие манифесты — skip + log warning.
+    /// Отсутствие самой папки Instances/ — пустой список
+    /// (валидное состояние: приложение только что установлено).
+    ///
+    /// Результат отсортирован по Name (Ordinal).
+    /// </summary>
+    IReadOnlyList<InstalledPackInfo> Scan();
+}
+
+````
+
+## src/Firelink.Gui.Shared/Services/InstalledPackScanner.cs
+
+````csharp
+using Firelink.Core.Models.Manifest;
+using Firelink.Gui.Shared.Models;
+using Microsoft.Extensions.Logging;
+
+namespace Firelink.Gui.Shared.Services;
+
+/// <summary>
+/// Реализация IInstalledPackScanner поверх файловой системы.
+///
+/// Корень передаётся в конструктор (а не берётся из AppContext
+/// внутри) — чтобы тесты могли подсунуть temp-папку.
+/// В DI регистрируется фабрика с
+/// AppContext.BaseDirectory + "Instances".
+///
+/// Симметрично ResolveTargetStep: installer без --target кладёт
+/// инстансы именно сюда (решение №74).
+/// </summary>
+internal sealed class InstalledPackScanner : IInstalledPackScanner
+{
+    private const string ManifestFileName = "modlist.json";
+
+    private readonly string _instancesRoot;
+    private readonly ILogger<InstalledPackScanner> _logger;
+
+    public InstalledPackScanner(
+        string instancesRoot,
+        ILogger<InstalledPackScanner> logger)
+    {
+        _instancesRoot = instancesRoot;
+        _logger = logger;
+    }
+
+    public IReadOnlyList<InstalledPackInfo> Scan()
+    {
+        if (!Directory.Exists(_instancesRoot))
+        {
+            _logger.LogDebug(
+                "Instances root does not exist: {Path}", _instancesRoot);
+            return Array.Empty<InstalledPackInfo>();
+        }
+
+        var result = new List<InstalledPackInfo>();
+
+        foreach (var dir in Directory.EnumerateDirectories(_instancesRoot)
+            .OrderBy(d => d, StringComparer.Ordinal))
+        {
+            var info = TryReadInstance(dir);
+            if (info is not null)
+                result.Add(info);
+        }
+
+        result.Sort(static (a, b) =>
+            string.CompareOrdinal(a.Name, b.Name));
+
+        _logger.LogDebug(
+            "Instances scan complete: {Count} valid pack(s) in {Path}",
+            result.Count, _instancesRoot);
+
+        return result;
+    }
+
+    // ------------------------------------------------------------------
+    //  Один инстанс
+    // ------------------------------------------------------------------
+
+    private InstalledPackInfo? TryReadInstance(string instancePath)
+    {
+        var manifestPath = Path.Combine(instancePath, ManifestFileName);
+
+        if (!File.Exists(manifestPath))
+        {
+            _logger.LogDebug(
+                "Skipping instance without modlist.json: {Path}",
+                instancePath);
+            return null;
+        }
+
+        ModlistManifest manifest;
+        try
+        {
+            manifest = ManifestJson.Load(manifestPath);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Skipping instance with malformed modlist.json: {Path}",
+                manifestPath);
+            return null;
+        }
+
+        return new InstalledPackInfo
+        {
+            Name = manifest.Meta.Name,
+            Version = manifest.Meta.Version,
+            Game = manifest.Meta.Game,
+            GameVersion = manifest.Meta.GameVersion,
+            CreatedAt = manifest.CreatedAt,
+            InstancePath = instancePath,
+            ManifestPath = manifestPath,
+        };
+    }
+}
+
+````
+
+## src/Firelink.Gui.Shared/Services/IProcessLauncher.cs
+
+````csharp
+namespace Firelink.Gui.Shared.Services;
+
+/// <summary>
+/// Абстракция запуска процесса по пути к файлу.
+/// Живёт в Shared (без Avalonia), реализуется в Firelink.Gui
+/// через Process.Start с UseShellExecute = true.
+///
+/// Используется InstalledPackVM для запуска ModOrganizer.exe.
+/// В тестах подменяется fake-ом — Process.Start не вызывается.
+/// </summary>
+public interface IProcessLauncher
+{
+    /// <summary>
+    /// Открыть файл средствами ОС (ShellExecute).
+    /// Бросает исключение, если файл не найден или запуск невозможен.
+    /// </summary>
+    void OpenFile(string path);
+}
+
+````
+
 ## src/Firelink.Gui.Shared/State/InstallState.cs
 
 ````csharp
@@ -6134,23 +6541,216 @@ public enum VerifyState
 ## src/Firelink.Gui.Shared/ViewModels/HomeVM.cs
 
 ````csharp
+using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Firelink.Gui.Shared.Navigation;
+using Firelink.Gui.Shared.Services;
+using Microsoft.Extensions.Logging;
 
 namespace Firelink.Gui.Shared.ViewModels;
 
-public sealed partial class HomeVM : ViewModel
+/// <summary>
+/// VM экрана Home — дашборд готовых к установке сборок.
+///
+/// Сканирует &lt;exeDir&gt;/Instances/ через IInstalledPackScanner,
+/// строит карточки InstalledPackVM. Пустой список — пустой экран.
+///
+/// Реализует IInstallRequestHandler: при клике на Install/Update
+/// в карточке поднимает InstallRequested(manifestPath, targetPath).
+/// MainWindowVM переключает на Install и передаёт пути.
+///
+/// Refresh() вызывается MainWindowVM при каждой навигации на Home,
+/// чтобы список отражал актуальное состояние Instances/.
+/// </summary>
+public sealed partial class HomeVM : ViewModel, IInstallRequestHandler
 {
-    [ObservableProperty]
-    private string _title = "Firelink";
+    private readonly IInstalledPackScanner _scanner;
+    private readonly IFilePickerService _picker;
+    private readonly IProcessLauncher _launcher;
+    private readonly ILoggerFactory _loggerFactory;
+    private readonly ILogger<HomeVM> _logger;
 
-    [ObservableProperty]
-    private string _subtitle = "Reproducible modpack builds for Mod Organizer 2";
+    public event Action<string, string>? InstallRequested;
 
-    public LogVM Log { get; }
+    public ObservableCollection<InstalledPackVM> Items { get; } = new();
 
-    public HomeVM(LogVM log)
+    public HomeVM(
+        IInstalledPackScanner scanner,
+        IFilePickerService picker,
+        IProcessLauncher launcher,
+        ILoggerFactory loggerFactory,
+        ILogger<HomeVM> logger)
     {
-        Log = log;
+        _scanner = scanner;
+        _picker = picker;
+        _launcher = launcher;
+        _loggerFactory = loggerFactory;
+        _logger = logger;
+    }
+
+    public void Refresh()
+    {
+        Items.Clear();
+
+        var packs = _scanner.Scan();
+
+        foreach (var pack in packs)
+        {
+            Items.Add(new InstalledPackVM(
+                pack,
+                OnInstallRequested,
+                _picker,
+                _launcher,
+                _loggerFactory.CreateLogger<InstalledPackVM>()));
+        }
+
+        _logger.LogDebug(
+            "Home refreshed: {Count} pack(s)", Items.Count);
+    }
+
+    private void OnInstallRequested(string manifestPath, string targetPath)
+    {
+        InstallRequested?.Invoke(manifestPath, targetPath);
+    }
+}
+
+````
+
+## src/Firelink.Gui.Shared/ViewModels/InstalledPackVM.cs
+
+````csharp
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using Firelink.Gui.Shared.Models;
+using Firelink.Gui.Shared.Services;
+using Microsoft.Extensions.Logging;
+
+namespace Firelink.Gui.Shared.ViewModels;
+
+/// <summary>
+/// VM одной карточки на Home-дашборде.
+///
+/// Три команды:
+///   - OpenMo2  — всегда активна. Проверяет наличие ModOrganizer.exe
+///                в момент клика; если нет — выставляет WarningMessage.
+///   - Install  — InstallRequested(&lt;InstancePath&gt;/modlist.json, InstancePath).
+///   - Update   — диалог выбора нового modlist.json; если юзер выбрал,
+///                InstallRequested(выбранный, InstancePath). Отмена — no-op.
+///
+/// WarningMessage — inline-предупреждение под кнопками; стирается
+/// только при следующем Refresh() (карточка пересоздаётся).
+/// </summary>
+public sealed partial class InstalledPackVM : ViewModel
+{
+    private const string Mo2DirName = "MO2";
+    private const string ModOrganizerExeName = "ModOrganizer.exe";
+    private const string NotFoundMessage =
+        "ModOrganizer.exe not found. Reinstall the pack to restore MO2.";
+    private const string PickManifestTitle = "Select new modlist.json";
+    private const string PickManifestFilter = ".json";
+
+    private readonly Action<string, string> _installRequested;
+    private readonly IFilePickerService _picker;
+    private readonly IProcessLauncher _launcher;
+    private readonly ILogger<InstalledPackVM> _logger;
+
+    public string Name { get; }
+    public string Version { get; }
+    public string Game { get; }
+    public string GameVersion { get; }
+    public string InstancePath { get; }
+    public string ManifestPath { get; }
+
+    public string VersionLabel => $"v{Version}";
+    public string GameLabel => $"{Game} · {GameVersion}";
+
+    [ObservableProperty]
+    private string? _warningMessage;
+
+    public InstalledPackVM(
+        InstalledPackInfo info,
+        Action<string, string> installRequested,
+        IFilePickerService picker,
+        IProcessLauncher launcher,
+        ILogger<InstalledPackVM> logger)
+    {
+        Name = info.Name;
+        Version = info.Version;
+        Game = info.Game;
+        GameVersion = info.GameVersion;
+        InstancePath = info.InstancePath;
+        ManifestPath = info.ManifestPath;
+
+        _installRequested = installRequested;
+        _picker = picker;
+        _launcher = launcher;
+        _logger = logger;
+    }
+
+    // ------------------------------------------------------------------
+    //  Open MO2
+    // ------------------------------------------------------------------
+
+    [RelayCommand]
+    private void OpenMo2()
+    {
+        WarningMessage = null;
+
+        var mo2ExePath = Path.Combine(
+            InstancePath, Mo2DirName, ModOrganizerExeName);
+
+        if (!File.Exists(mo2ExePath))
+        {
+            _logger.LogWarning(
+                "ModOrganizer.exe not found: {Path}", mo2ExePath);
+            WarningMessage = NotFoundMessage;
+            return;
+        }
+
+        try
+        {
+            _launcher.OpenFile(mo2ExePath);
+            _logger.LogDebug(
+                "Opened ModOrganizer.exe: {Path}", mo2ExePath);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Failed to open ModOrganizer.exe: {Path}", mo2ExePath);
+            WarningMessage = $"Failed to open ModOrganizer.exe: {ex.Message}";
+        }
+    }
+
+    // ------------------------------------------------------------------
+    //  Install (из манифеста в инстансе)
+    // ------------------------------------------------------------------
+
+    [RelayCommand]
+    private void Install()
+    {
+        WarningMessage = null;
+        _installRequested(ManifestPath, InstancePath);
+    }
+
+    // ------------------------------------------------------------------
+    //  Update (новый манифест через диалог)
+    // ------------------------------------------------------------------
+
+    [RelayCommand]
+    private async Task UpdateAsync()
+    {
+        WarningMessage = null;
+
+        var picked = await _picker.PickFileAsync(
+            PickManifestTitle, PickManifestFilter);
+
+        if (string.IsNullOrWhiteSpace(picked))
+        {
+            _logger.LogDebug("Update cancelled by user");
+            return;
+        }
+
+        _installRequested(picked, InstancePath);
     }
 }
 
@@ -6267,15 +6867,16 @@ public sealed partial class MainWindowVM : ViewModel
     public NavigationVM Navigation { get; }
     public HomeVM Home { get; }
 
-    public MainWindowVM(IScreenFactory screens)
+    public MainWindowVM(IScreenFactory screens, SettingsVM settings)
     {
         _screens = screens;
 
         Home = (HomeVM)_screens.Create(ScreenType.Home);
-        Navigation = new NavigationVM(NavigateTo);
+        Navigation = new NavigationVM(NavigateTo, settings);
 
         _activePane = Home;
         Navigation.SelectScreen(ScreenType.Home);
+        Home.Refresh();
     }
 
     public void NavigateTo(ScreenType screen)
@@ -6286,8 +6887,22 @@ public sealed partial class MainWindowVM : ViewModel
             nav.SetNavigateHome(() => NavigateTo(ScreenType.Home));
 
         ActivePane = pane;
-
         Navigation.SelectScreen(screen);
+
+        if (pane is HomeVM home)
+        {
+            home.InstallRequested -= OnInstallRequested;
+            home.InstallRequested += OnInstallRequested;
+            home.Refresh();
+        }
+    }
+
+    private void OnInstallRequested(string manifestPath, string targetPath)
+    {
+        NavigateTo(ScreenType.Install);
+
+        if (ActivePane is IInstallTarget target)
+            target.PrepareForInstall(manifestPath, targetPath);
     }
 }
 
@@ -6308,14 +6923,30 @@ public sealed record NavigationItem(string Title, ScreenType Screen);
 
 ````csharp
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Firelink.Gui.Shared.Navigation;
 
 namespace Firelink.Gui.Shared.ViewModels;
 
+/// <summary>
+/// VM сайдбара.
+///
+/// Список пунктов зависит от SettingsVM.IsDevMode:
+///   - DevMode = false: Home, Settings.
+///   - DevMode = true:  Home, Install, Pack, Verify, Logs, Settings.
+///
+/// Подписан на SettingsVM.PropertyChanged. При смене IsDevMode
+/// перестраивает Items. Если текущий SelectedItem скрывается —
+/// переключается на Home и уведомляет _navigate.
+///
+/// _suppressCallback защищает от рекурсии: SelectScreen и RebuildItems
+/// меняют SelectedItem программно, не желая дёргать callback.
+/// </summary>
 public sealed partial class NavigationVM : ViewModel
 {
     private readonly Action<ScreenType> _navigate;
+    private readonly SettingsVM _settings;
     private bool _suppressCallback;
 
     public ObservableCollection<NavigationItem> Items { get; }
@@ -6323,20 +6954,25 @@ public sealed partial class NavigationVM : ViewModel
     [ObservableProperty]
     private NavigationItem? _selectedItem;
 
-    public NavigationVM(Action<ScreenType> navigate)
+    public NavigationVM(Action<ScreenType> navigate, SettingsVM settings)
     {
         _navigate = navigate;
-        Items = new ObservableCollection<NavigationItem>
-        {
-            new("Home", ScreenType.Home),
-            new("Install", ScreenType.Install),
-            new("Pack", ScreenType.Pack),
-            new("Verify", ScreenType.Verify),
-            new("Logs", ScreenType.Logs),
-            new("Settings", ScreenType.Settings),
-        };
+        _settings = settings;
+
+        Items = new ObservableCollection<NavigationItem>();
+        RebuildItemsCore();
+
+        _settings.PropertyChanged += OnSettingsPropertyChanged;
     }
 
+    // ------------------------------------------------------------------
+    //  Public API (совместимость с MainWindowVM)
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// Программно выбрать пункт навигации без вызова callback.
+    /// Используется MainWindowVM при NavigateTo.
+    /// </summary>
     public void SelectScreen(ScreenType screen)
     {
         var item = Items.FirstOrDefault(i => i.Screen == screen);
@@ -6346,6 +6982,66 @@ public sealed partial class NavigationVM : ViewModel
         SelectedItem = item;
         _suppressCallback = false;
     }
+
+    // ------------------------------------------------------------------
+    //  Реакция на SettingsVM.IsDevMode
+    // ------------------------------------------------------------------
+
+    private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(SettingsVM.IsDevMode))
+            return;
+
+        RebuildItems();
+    }
+
+    /// <summary>
+    /// Перестроить Items под текущий IsDevMode, сохранив SelectedItem
+    /// (если его screen всё ещё виден). Если скрыт — переключиться
+    /// на Home и уведомить _navigate.
+    /// </summary>
+    private void RebuildItems()
+    {
+        var previousScreen = SelectedItem?.Screen;
+
+        RebuildItemsCore();
+
+        if (previousScreen is ScreenType prev
+            && Items.Any(i => i.Screen == prev))
+        {
+            SelectScreen(prev);
+            return;
+        }
+
+        // Предыдущий экран скрыт (или его не было) — на Home.
+        SelectScreen(ScreenType.Home);
+        _navigate(ScreenType.Home);
+    }
+
+    /// <summary>
+    /// Заполнить Items согласно SettingsVM.IsDevMode.
+    /// SelectedItem при этом не трогаем — вызывающий решает.
+    /// </summary>
+    private void RebuildItemsCore()
+    {
+        Items.Clear();
+
+        Items.Add(new NavigationItem("Home", ScreenType.Home));
+
+        if (_settings.IsDevMode)
+        {
+            Items.Add(new NavigationItem("Install", ScreenType.Install));
+            Items.Add(new NavigationItem("Pack", ScreenType.Pack));
+            Items.Add(new NavigationItem("Verify", ScreenType.Verify));
+            Items.Add(new NavigationItem("Logs", ScreenType.Logs));
+        }
+
+        Items.Add(new NavigationItem("Settings", ScreenType.Settings));
+    }
+
+    // ------------------------------------------------------------------
+    //  Реакция на смену SelectedItem (клик пользователя)
+    // ------------------------------------------------------------------
 
     partial void OnSelectedItemChanged(NavigationItem? value)
     {
@@ -6411,12 +7107,26 @@ using CommunityToolkit.Mvvm.ComponentModel;
 namespace Firelink.Gui.Shared.ViewModels;
 
 /// <summary>
-/// VM экрана Settings. Пока — только About-блок (имя, версия,
-/// копирайт, лицензия). Позже здесь появятся настройки
-/// (Nexus API key, пути, тема).
+/// VM экрана Settings. Пока — About-блок (имя, версия, копирайт,
+/// лицензия) и переключатель DevMode.
+///
+/// DevMode — in-memory, default false. При включении в сайдбаре
+/// появляются пункты Install/Pack/Verify/Logs; при выключении
+/// остаются только Home и Settings. Persist — отдельный шаг (v0.2.0).
+///
+/// SettingsVM — singleton в DI (AddGuiShared). MainWindowVM резолвит
+/// его напрямую и передаёт в NavigationVM.
 /// </summary>
 public sealed partial class SettingsVM : ViewModel
 {
+    /// <summary>
+    /// DevMode. In-memory, default false. Меняется через UI
+    /// (CheckBox в SettingsView). NavigationVM подписан на
+    /// PropertyChanged и перестраивает Items.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isDevMode;
+
     /// <summary>Отображаемое имя приложения.</summary>
     public string ProductName => "Firelink";
 
@@ -17504,8 +18214,6 @@ public class InstallVMTests
         try
         {
             var (vm, runner, _) = Make();
-
-            // Runner бросит OperationCanceledException.
             runner.ExceptionToThrow = new OperationCanceledException();
 
             vm.ModlistPicker.SetPath(tmp);
@@ -17535,14 +18243,11 @@ public class InstallVMTests
 
             vm.ModlistPicker.SetPath(tmp);
 
-            // Запускаем InstallAsync и не ждём его завершения.
             var installTask = vm.InstallCommand.ExecuteAsync(null);
 
-            // Убеждаемся, что мы в Installing.
             vm.State.Should().Be(InstallState.Installing);
             vm.CancelCommand.CanExecute(null).Should().BeTrue();
 
-            // Отменяем.
             vm.CancelCommand.Execute(null);
 
             await installTask;
@@ -17565,7 +18270,7 @@ public class InstallVMTests
     }
 
     // ------------------------------------------------------------------
-    //  Home
+    //  Done
     // ------------------------------------------------------------------
 
     [Fact]
@@ -17608,14 +18313,12 @@ public class InstallVMTests
             var (vm, runner, _) = Make();
             runner.ResultToReturn = FakeInstallRunner.MakeSummary();
 
-            // Configuration.
             vm.IsConfiguring.Should().BeTrue();
             vm.IsInstalling.Should().BeFalse();
 
             vm.ModlistPicker.SetPath(tmp);
             await vm.InstallCommand.ExecuteAsync(null);
 
-            // Success.
             vm.IsConfiguring.Should().BeFalse();
             vm.IsInstalling.Should().BeFalse();
             vm.IsSuccess.Should().BeTrue();
@@ -17625,6 +18328,115 @@ public class InstallVMTests
         {
             File.Delete(tmp);
         }
+    }
+
+    // ------------------------------------------------------------------
+    //  PrepareForInstall (IInstallTarget)
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void PrepareForInstall_SetsBothPickersAndResetsToConfiguration()
+    {
+        var tmp = MakeTempJson();
+        var target = Path.Combine(Path.GetTempPath(), "firelink-target-" + Guid.NewGuid());
+        Directory.CreateDirectory(target);
+        try
+        {
+            var (vm, _, _) = Make();
+
+            vm.ModlistPicker.Path.Should().BeNull();
+            vm.TargetPicker.Path.Should().BeNull();
+
+            vm.PrepareForInstall(tmp, target);
+
+            vm.ModlistPicker.Path.Should().Be(tmp);
+            vm.TargetPicker.Path.Should().Be(target);
+            vm.State.Should().Be(InstallState.Configuration);
+        }
+        finally
+        {
+            File.Delete(tmp);
+            Directory.Delete(target);
+        }
+    }
+
+    [Fact]
+    public async Task PrepareForInstall_FromSuccess_ResetsState()
+    {
+        var tmp = MakeTempJson();
+        var target = Path.Combine(Path.GetTempPath(), "firelink-target-" + Guid.NewGuid());
+        Directory.CreateDirectory(target);
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ResultToReturn = FakeInstallRunner.MakeSummary();
+
+            vm.ModlistPicker.SetPath(tmp);
+            await vm.InstallCommand.ExecuteAsync(null);
+            vm.State.Should().Be(InstallState.Success);
+
+            vm.PrepareForInstall(tmp, target);
+
+            vm.State.Should().Be(InstallState.Configuration);
+            vm.Summary.Should().BeNull();
+            vm.ErrorMessage.Should().BeNull();
+        }
+        finally
+        {
+            File.Delete(tmp);
+            Directory.Delete(target);
+        }
+    }
+
+    [Fact]
+    public async Task PrepareForInstall_FromFailure_ResetsState()
+    {
+        var tmp = MakeTempJson();
+        var target = Path.Combine(Path.GetTempPath(), "firelink-target-" + Guid.NewGuid());
+        Directory.CreateDirectory(target);
+        try
+        {
+            var (vm, runner, _) = Make();
+            runner.ExceptionToThrow = new InvalidOperationException("boom");
+
+            vm.ModlistPicker.SetPath(tmp);
+            await vm.InstallCommand.ExecuteAsync(null);
+            vm.State.Should().Be(InstallState.Failure);
+
+            vm.PrepareForInstall(tmp, target);
+
+            vm.State.Should().Be(InstallState.Configuration);
+            vm.ErrorMessage.Should().BeNull();
+        }
+        finally
+        {
+            File.Delete(tmp);
+            Directory.Delete(target);
+        }
+    }
+
+    [Fact]
+    public void PrepareForInstall_EmptyManifestPath_NoOp()
+    {
+        var (vm, _, _) = Make();
+
+        var act = () => vm.PrepareForInstall("", "/some/target");
+        act.Should().NotThrow();
+
+        vm.ModlistPicker.Path.Should().BeNull();
+        vm.TargetPicker.Path.Should().BeNull();
+    }
+
+    [Fact]
+    public void PrepareForInstall_EmptyTargetPath_NoOp()
+    {
+        var (vm, _, _) = Make();
+
+        var act = () => vm.PrepareForInstall("/some/manifest.json", "");
+        act.Should().NotThrow();
+
+        vm.ModlistPicker.Path.Should().BeNull();
+        vm.TargetPicker.Path.Should().BeNull();
     }
 }
 
@@ -18243,6 +19055,682 @@ public class FilePickerVMTests
 
 ````
 
+## tests/Firelink.Gui.Shared.Tests/HomeVMTests.cs
+
+````csharp
+using FluentAssertions;
+using Firelink.Gui.Shared.Tests.Fakes;
+using Firelink.Gui.Shared.ViewModels;
+using Microsoft.Extensions.Logging.Abstractions;
+
+namespace Firelink.Gui.Shared.Tests;
+
+public class HomeVMTests
+{
+    private static (
+        HomeVM vm,
+        FakeInstalledPackScanner scanner,
+        FakeFilePickerService picker,
+        FakeProcessLauncher launcher)
+        Make()
+    {
+        var scanner = new FakeInstalledPackScanner();
+        var picker = new FakeFilePickerService();
+        var launcher = new FakeProcessLauncher();
+
+        var vm = new HomeVM(
+            scanner,
+            picker,
+            launcher,
+            NullLoggerFactory.Instance,
+            NullLogger<HomeVM>.Instance);
+
+        return (vm, scanner, picker, launcher);
+    }
+
+    // ------------------------------------------------------------------
+    //  Refresh
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void InitialState_EmptyItems()
+    {
+        var (vm, _, _, _) = Make();
+        vm.Items.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Refresh_NoPacks_LeavesEmpty()
+    {
+        var (vm, _, _, _) = Make();
+        vm.Refresh();
+        vm.Items.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Refresh_OnePack_AddsOneItem()
+    {
+        var (vm, scanner, _, _) = Make();
+        scanner.Packs.Add(FakeInstalledPackScanner.MakePack(name: "My Pack"));
+
+        vm.Refresh();
+
+        vm.Items.Should().HaveCount(1);
+        vm.Items[0].Name.Should().Be("My Pack");
+    }
+
+    [Fact]
+    public void Refresh_MultiplePacks_AddsAll()
+    {
+        var (vm, scanner, _, _) = Make();
+        scanner.Packs.Add(FakeInstalledPackScanner.MakePack(name: "A"));
+        scanner.Packs.Add(FakeInstalledPackScanner.MakePack(name: "B"));
+        scanner.Packs.Add(FakeInstalledPackScanner.MakePack(name: "C"));
+
+        vm.Refresh();
+
+        vm.Items.Should().HaveCount(3);
+        vm.Items.Select(i => i.Name).Should().Equal("A", "B", "C");
+    }
+
+    [Fact]
+    public void Refresh_CalledTwice_ReplacesItems_NotAppends()
+    {
+        var (vm, scanner, _, _) = Make();
+        scanner.Packs.Add(FakeInstalledPackScanner.MakePack(name: "First"));
+
+        vm.Refresh();
+        vm.Items.Should().HaveCount(1);
+
+        scanner.Packs.Clear();
+        scanner.Packs.Add(FakeInstalledPackScanner.MakePack(name: "Second"));
+        scanner.Packs.Add(FakeInstalledPackScanner.MakePack(name: "Third"));
+
+        vm.Refresh();
+
+        vm.Items.Should().HaveCount(2);
+        vm.Items.Select(i => i.Name).Should().Equal("Second", "Third");
+    }
+
+    // ------------------------------------------------------------------
+    //  Маппинг полей
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void Refresh_MapsAllFields()
+    {
+        var (vm, scanner, _, _) = Make();
+        scanner.Packs.Add(FakeInstalledPackScanner.MakePack(
+            name: "My Pack",
+            version: "2.5.1",
+            game: "skyrimspecialedition",
+            gameVersion: "1.6.1170",
+            instancePath: "/custom/path",
+            manifestPath: "/custom/path/modlist.json"));
+
+        vm.Refresh();
+
+        var item = vm.Items[0];
+        item.Name.Should().Be("My Pack");
+        item.Version.Should().Be("2.5.1");
+        item.Game.Should().Be("skyrimspecialedition");
+        item.GameVersion.Should().Be("1.6.1170");
+        item.InstancePath.Should().Be("/custom/path");
+        item.ManifestPath.Should().Be("/custom/path/modlist.json");
+    }
+
+    [Fact]
+    public void VersionLabel_HasVPrefix()
+    {
+        var (vm, scanner, _, _) = Make();
+        scanner.Packs.Add(FakeInstalledPackScanner.MakePack(version: "1.2.3"));
+
+        vm.Refresh();
+
+        vm.Items[0].VersionLabel.Should().Be("v1.2.3");
+    }
+
+    [Fact]
+    public void GameLabel_CombinesGameAndVersion()
+    {
+        var (vm, scanner, _, _) = Make();
+        scanner.Packs.Add(FakeInstalledPackScanner.MakePack(
+            game: "skyrimspecialedition", gameVersion: "1.6.1170"));
+
+        vm.Refresh();
+
+        vm.Items[0].GameLabel.Should().Be("skyrimspecialedition · 1.6.1170");
+    }
+
+    // ------------------------------------------------------------------
+    //  InstallRequested
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void InstallCommand_RaisesInstallRequested_WithManifestAndTarget()
+    {
+        var (vm, scanner, _, _) = Make();
+        scanner.Packs.Add(FakeInstalledPackScanner.MakePack(
+            instancePath: "/custom/Instances/MyPack",
+            manifestPath: "/custom/Instances/MyPack/modlist.json"));
+
+        vm.Refresh();
+
+        (string, string)? received = null;
+        vm.InstallRequested += (m, t) => received = (m, t);
+
+        vm.Items[0].InstallCommand.Execute(null);
+
+        received.Should().NotBeNull();
+        received!.Value.Item1.Should().Be("/custom/Instances/MyPack/modlist.json");
+        received.Value.Item2.Should().Be("/custom/Instances/MyPack");
+    }
+
+    [Fact]
+    public void InstallCommand_NoSubscribers_DoesNotThrow()
+    {
+        var (vm, scanner, _, _) = Make();
+        scanner.Packs.Add(FakeInstalledPackScanner.MakePack());
+
+        vm.Refresh();
+
+        var act = () => vm.Items[0].InstallCommand.Execute(null);
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void MultipleSubscribers_AllNotified()
+    {
+        var (vm, scanner, _, _) = Make();
+        scanner.Packs.Add(FakeInstalledPackScanner.MakePack(
+            instancePath: "/x", manifestPath: "/x/modlist.json"));
+
+        vm.Refresh();
+
+        var calls = new List<string>();
+        vm.InstallRequested += (m, t) => calls.Add($"first:{m}|{t}");
+        vm.InstallRequested += (m, t) => calls.Add($"second:{m}|{t}");
+
+        vm.Items[0].InstallCommand.Execute(null);
+
+        calls.Should().Equal(
+            "first:/x/modlist.json|/x",
+            "second:/x/modlist.json|/x");
+    }
+
+    // ------------------------------------------------------------------
+    //  OpenMo2Command
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void OpenMo2_FileMissing_SetsWarningMessage()
+    {
+        var (vm, scanner, _, launcher) = Make();
+        scanner.Packs.Add(FakeInstalledPackScanner.MakePack(
+            instancePath: "/no/such/instance"));
+
+        vm.Refresh();
+
+        var item = vm.Items[0];
+        item.OpenMo2Command.Execute(null);
+
+        item.WarningMessage.Should().Contain("not found");
+        launcher.OpenedPaths.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void OpenMo2_FileExists_CallsLauncher()
+    {
+        var tempDir = Path.Combine(
+            Path.GetTempPath(), "firelink-openmo2-" + Guid.NewGuid());
+        var mo2Dir = Path.Combine(tempDir, "MO2");
+        Directory.CreateDirectory(mo2Dir);
+        var mo2Exe = Path.Combine(mo2Dir, "ModOrganizer.exe");
+        File.WriteAllText(mo2Exe, "fake exe");
+
+        try
+        {
+            var (vm, scanner, _, launcher) = Make();
+            scanner.Packs.Add(FakeInstalledPackScanner.MakePack(
+                instancePath: tempDir,
+                manifestPath: Path.Combine(tempDir, "modlist.json")));
+
+            vm.Refresh();
+
+            var item = vm.Items[0];
+            item.OpenMo2Command.Execute(null);
+
+            item.WarningMessage.Should().BeNull();
+            launcher.OpenedPaths.Should().HaveCount(1);
+            launcher.OpenedPaths[0].Should().Be(mo2Exe);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void OpenMo2_LauncherThrows_SetsWarningMessage()
+    {
+        var tempDir = Path.Combine(
+            Path.GetTempPath(), "firelink-openmo2-" + Guid.NewGuid());
+        var mo2Dir = Path.Combine(tempDir, "MO2");
+        Directory.CreateDirectory(mo2Dir);
+        File.WriteAllText(
+            Path.Combine(mo2Dir, "ModOrganizer.exe"), "fake exe");
+
+        try
+        {
+            var (vm, scanner, _, launcher) = Make();
+            launcher.ExceptionToThrow = new InvalidOperationException("nope");
+
+            scanner.Packs.Add(FakeInstalledPackScanner.MakePack(
+                instancePath: tempDir,
+                manifestPath: Path.Combine(tempDir, "modlist.json")));
+
+            vm.Refresh();
+
+            var item = vm.Items[0];
+            item.OpenMo2Command.Execute(null);
+
+            item.WarningMessage.Should().Contain("nope");
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void OpenMo2_Success_ClearsPreviousWarning()
+    {
+        var tempDir = Path.Combine(
+            Path.GetTempPath(), "firelink-openmo2-" + Guid.NewGuid());
+        var mo2Dir = Path.Combine(tempDir, "MO2");
+        Directory.CreateDirectory(mo2Dir);
+        File.WriteAllText(
+            Path.Combine(mo2Dir, "ModOrganizer.exe"), "fake exe");
+
+        try
+        {
+            var (vm, scanner, _, _) = Make();
+            scanner.Packs.Add(FakeInstalledPackScanner.MakePack(
+                instancePath: tempDir,
+                manifestPath: Path.Combine(tempDir, "modlist.json")));
+
+            vm.Refresh();
+
+            var item = vm.Items[0];
+            item.WarningMessage = "old warning";
+
+            item.OpenMo2Command.Execute(null);
+
+            item.WarningMessage.Should().BeNull();
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, recursive: true); } catch { }
+        }
+    }
+
+    // ------------------------------------------------------------------
+    //  UpdateCommand
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task Update_UserPicksFile_RaisesInstallRequested()
+    {
+        var (vm, scanner, picker, _) = Make();
+        picker.FileToReturn = "/downloads/new-modlist.json";
+
+        scanner.Packs.Add(FakeInstalledPackScanner.MakePack(
+            instancePath: "/instances/MyPack",
+            manifestPath: "/instances/MyPack/modlist.json"));
+
+        vm.Refresh();
+
+        (string, string)? received = null;
+        vm.InstallRequested += (m, t) => received = (m, t);
+
+        await vm.Items[0].UpdateCommand.ExecuteAsync(null);
+
+        received.Should().NotBeNull();
+        received!.Value.Item1.Should().Be("/downloads/new-modlist.json");
+        received.Value.Item2.Should().Be("/instances/MyPack");
+    }
+
+    [Fact]
+    public async Task Update_UserCancels_DoesNotRaise()
+    {
+        var (vm, scanner, picker, _) = Make();
+        picker.FileToReturn = null;
+
+        scanner.Packs.Add(FakeInstalledPackScanner.MakePack());
+
+        vm.Refresh();
+
+        var raised = false;
+        vm.InstallRequested += (_, _) => raised = true;
+
+        await vm.Items[0].UpdateCommand.ExecuteAsync(null);
+
+        raised.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Update_ClearsWarningMessage()
+    {
+        var (vm, scanner, picker, _) = Make();
+        picker.FileToReturn = null;
+
+        scanner.Packs.Add(FakeInstalledPackScanner.MakePack());
+
+        vm.Refresh();
+
+        var item = vm.Items[0];
+        item.WarningMessage = "old warning";
+
+        await item.UpdateCommand.ExecuteAsync(null);
+
+        item.WarningMessage.Should().BeNull();
+    }
+}
+
+````
+
+## tests/Firelink.Gui.Shared.Tests/InstalledPackScannerTests.cs
+
+````csharp
+using FluentAssertions;
+using Firelink.Core.Models.Hashing;
+using Firelink.Core.Models.Manifest;
+using Firelink.Core.Models.Manifest.Sources;
+using Firelink.Gui.Shared.Services;
+using Microsoft.Extensions.Logging.Abstractions;
+
+namespace Firelink.Gui.Shared.Tests;
+
+public class InstalledPackScannerTests : IDisposable
+{
+    private readonly string _tempDir;
+    private readonly string _instancesRoot;
+
+    public InstalledPackScannerTests()
+    {
+        _tempDir = Path.Combine(
+            Path.GetTempPath(), "firelink-scan-" + Guid.NewGuid());
+        _instancesRoot = Path.Combine(_tempDir, "Instances");
+        Directory.CreateDirectory(_instancesRoot);
+    }
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_tempDir, recursive: true); } catch { }
+    }
+
+    private InstalledPackScanner MakeScanner() =>
+        new(_instancesRoot, NullLogger<InstalledPackScanner>.Instance);
+
+    // ------------------------------------------------------------------
+    //  Хелперы
+    // ------------------------------------------------------------------
+
+    private static ModlistManifest MakeManifest(
+        string name = "Test Pack",
+        string version = "1.0.0",
+        string game = "skyrimspecialedition",
+        string gameVersion = "1.6.1170",
+        DateTimeOffset? createdAt = null)
+    {
+        return new ModlistManifest
+        {
+            SchemaVersion = "1.0.0",
+            ManifestVersion = version,
+            CreatedAt = createdAt ?? new DateTimeOffset(
+                2026, 9, 20, 12, 0, 0, TimeSpan.Zero),
+            CreatedBy = "firelink-pack/0.1.0",
+            Meta = new ManifestMeta
+            {
+                Name = name,
+                Version = version,
+                Author = "tester",
+                Game = game,
+                GameVersion = gameVersion,
+            },
+            Execution = new ExecutionPolicy(),
+            Mo2 = new Mo2Section
+            {
+                Version = "2.5.2",
+                Profile = "Default",
+                Archive = new ArchiveEntry
+                {
+                    Id = "mo2",
+                    Name = "MO2.7z",
+                    Size = 0,
+                    Hash = new XxHash64Value(0),
+                    Sources = Array.Empty<ArchiveSourceRef>(),
+                },
+                Extensions = Array.Empty<ExtensionEntry>(),
+            },
+            StockGame = new StockGameSection
+            {
+                Extras = Array.Empty<ExtensionEntry>(),
+            },
+            Archives = Array.Empty<ArchiveEntry>(),
+            Mods = Array.Empty<ModEntry>(),
+            Plugins = Array.Empty<PluginEntry>(),
+            Loadorder = Array.Empty<string>(),
+        };
+    }
+
+    private string CreateInstance(string folderName, ModlistManifest manifest)
+    {
+        var instancePath = Path.Combine(_instancesRoot, folderName);
+        Directory.CreateDirectory(instancePath);
+        ManifestJson.Save(
+            Path.Combine(instancePath, "modlist.json"), manifest);
+        return instancePath;
+    }
+
+    // ------------------------------------------------------------------
+    //  Пустые состояния
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void Scan_InstancesRootDoesNotExist_ReturnsEmpty()
+    {
+        Directory.Delete(_instancesRoot, recursive: true);
+
+        var scanner = MakeScanner();
+        var result = scanner.Scan();
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Scan_EmptyInstancesRoot_ReturnsEmpty()
+    {
+        var scanner = MakeScanner();
+        var result = scanner.Scan();
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Scan_FolderWithoutManifest_Skipped()
+    {
+        Directory.CreateDirectory(Path.Combine(_instancesRoot, "EmptyFolder"));
+
+        var scanner = MakeScanner();
+        var result = scanner.Scan();
+
+        result.Should().BeEmpty();
+    }
+
+    // ------------------------------------------------------------------
+    //  Один инстанс
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void Scan_OneInstance_ReturnsInfo()
+    {
+        var instancePath = CreateInstance("MyPack", MakeManifest(
+            name: "My Pack",
+            version: "1.2.3",
+            game: "skyrimspecialedition",
+            gameVersion: "1.6.1170"));
+
+        var scanner = MakeScanner();
+        var result = scanner.Scan();
+
+        result.Should().HaveCount(1);
+        var info = result[0];
+        info.Name.Should().Be("My Pack");
+        info.Version.Should().Be("1.2.3");
+        info.Game.Should().Be("skyrimspecialedition");
+        info.GameVersion.Should().Be("1.6.1170");
+        info.InstancePath.Should().Be(instancePath);
+        info.ManifestPath.Should().Be(
+            Path.Combine(instancePath, "modlist.json"));
+    }
+
+    [Fact]
+    public void Scan_CreatedAt_Propagated()
+    {
+        var created = new DateTimeOffset(
+            2026, 8, 15, 10, 30, 0, TimeSpan.Zero);
+        CreateInstance("MyPack", MakeManifest(createdAt: created));
+
+        var scanner = MakeScanner();
+        var result = scanner.Scan();
+
+        result[0].CreatedAt.Should().Be(created);
+    }
+
+    // ------------------------------------------------------------------
+    //  Несколько инстансов
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void Scan_MultipleInstances_AllReturned()
+    {
+        CreateInstance("PackA", MakeManifest(name: "Pack A"));
+        CreateInstance("PackB", MakeManifest(name: "Pack B"));
+        CreateInstance("PackC", MakeManifest(name: "Pack C"));
+
+        var scanner = MakeScanner();
+        var result = scanner.Scan();
+
+        result.Should().HaveCount(3);
+        result.Select(i => i.Name).Should().Equal("Pack A", "Pack B", "Pack C");
+    }
+
+    [Fact]
+    public void Scan_ResultSortedByNameOrdinal()
+    {
+        CreateInstance("Z", MakeManifest(name: "Zeta"));
+        CreateInstance("A", MakeManifest(name: "Alpha"));
+        CreateInstance("M", MakeManifest(name: "Mu"));
+
+        var scanner = MakeScanner();
+        var result = scanner.Scan();
+
+        result.Select(i => i.Name).Should().Equal("Alpha", "Mu", "Zeta");
+    }
+
+    [Fact]
+    public void Scan_DisplayNameFromManifest_NotFromFolderName()
+    {
+        CreateInstance("wrong-folder-name",
+            MakeManifest(name: "Correct Name"));
+
+        var scanner = MakeScanner();
+        var result = scanner.Scan();
+
+        result.Should().HaveCount(1);
+        result[0].Name.Should().Be("Correct Name");
+        result[0].InstancePath.Should().EndWith("wrong-folder-name");
+    }
+
+    // ------------------------------------------------------------------
+    //  Битые манифесты
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void Scan_MalformedManifest_Skipped()
+    {
+        var instancePath = Path.Combine(_instancesRoot, "Broken");
+        Directory.CreateDirectory(instancePath);
+        File.WriteAllText(
+            Path.Combine(instancePath, "modlist.json"),
+            "{ this is not json }");
+
+        var scanner = MakeScanner();
+        var result = scanner.Scan();
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Scan_MalformedManifest_DoesNotKillValidOnes()
+    {
+        CreateInstance("GoodA", MakeManifest(name: "Good A"));
+
+        var brokenPath = Path.Combine(_instancesRoot, "Broken");
+        Directory.CreateDirectory(brokenPath);
+        File.WriteAllText(
+            Path.Combine(brokenPath, "modlist.json"),
+            "{ garbage }");
+
+        CreateInstance("GoodB", MakeManifest(name: "Good B"));
+
+        var scanner = MakeScanner();
+        var result = scanner.Scan();
+
+        result.Should().HaveCount(2);
+        result.Select(i => i.Name).Should().Equal("Good A", "Good B");
+    }
+
+    [Fact]
+    public void Scan_EmptyManifestFile_Skipped()
+    {
+        var instancePath = Path.Combine(_instancesRoot, "Empty");
+        Directory.CreateDirectory(instancePath);
+        File.WriteAllText(
+            Path.Combine(instancePath, "modlist.json"), "");
+
+        var scanner = MakeScanner();
+        var result = scanner.Scan();
+
+        result.Should().BeEmpty();
+    }
+
+    // ------------------------------------------------------------------
+    //  Смешанный сценарий
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void Scan_MixedInstances_OnlyValidReturned()
+    {
+        CreateInstance("ManifestOnly", MakeManifest(name: "Manifest Only"));
+        Directory.CreateDirectory(Path.Combine(_instancesRoot, "NoManifest"));
+
+        var brokenPath = Path.Combine(_instancesRoot, "Broken");
+        Directory.CreateDirectory(brokenPath);
+        File.WriteAllText(
+            Path.Combine(brokenPath, "modlist.json"), "{ broken }");
+
+        var scanner = MakeScanner();
+        var result = scanner.Scan();
+
+        result.Should().HaveCount(1);
+        result[0].Name.Should().Be("Manifest Only");
+    }
+}
+
+````
+
 ## tests/Firelink.Gui.Shared.Tests/LoadingLockTests.cs
 
 ````csharp
@@ -18356,19 +19844,21 @@ public class LogVMTests
 ## tests/Firelink.Gui.Shared.Tests/MainWindowVMTests.cs
 
 ````csharp
+using FluentAssertions;
 using Firelink.Gui.Shared.Logging;
 using Firelink.Gui.Shared.Navigation;
+using Firelink.Gui.Shared.Services;
 using Firelink.Gui.Shared.Tests.Fakes;
 using Firelink.Gui.Shared.ViewModels;
-using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Firelink.Gui.Shared.Tests;
 
 public class MainWindowVMTests
 {
-    private static ServiceProvider BuildProvider()
+    private static ServiceProvider BuildProvider(
+        FakeInstalledPackScanner? scanner = null)
     {
         var services = new ServiceCollection();
 
@@ -18376,11 +19866,26 @@ public class MainWindowVMTests
         services.AddSingleton<IUiDispatcher, FakeUiDispatcher>();
         services.AddGuiShared();
 
+        // Заменяем инфраструктурные сервисы на fake'и: HomeVM их требует.
+        services.RemoveAll<IInstalledPackScanner>();
+        services.AddSingleton<IInstalledPackScanner>(
+            scanner ?? new FakeInstalledPackScanner());
+
+        services.RemoveAll<IFilePickerService>();
+        services.AddSingleton<IFilePickerService>(new FakeFilePickerService());
+
+        services.RemoveAll<IProcessLauncher>();
+        services.AddSingleton<IProcessLauncher>(new FakeProcessLauncher());
+
         services.AddSingleton<IScreenFactory>(sp => new FakeScreenFactory(sp));
         services.AddSingleton<MainWindowVM>();
 
         return services.BuildServiceProvider();
     }
+
+    // ------------------------------------------------------------------
+    //  Базовое состояние
+    // ------------------------------------------------------------------
 
     [Fact]
     public void Constructor_ActivePane_IsHome()
@@ -18393,16 +19898,49 @@ public class MainWindowVMTests
     }
 
     [Fact]
+    public void Constructor_HomeRefreshCalled()
+    {
+        var scanner = new FakeInstalledPackScanner();
+        scanner.Packs.Add(FakeInstalledPackScanner.MakePack(name: "Initial"));
+
+        using var sp = BuildProvider(scanner);
+        var vm = sp.GetRequiredService<MainWindowVM>();
+
+        vm.Home.Items.Should().HaveCount(1);
+        vm.Home.Items[0].Name.Should().Be("Initial");
+    }
+
+    // ------------------------------------------------------------------
+    //  Навигация
+    // ------------------------------------------------------------------
+
+    [Fact]
     public void NavigateTo_Home_ReturnsSameInstance()
     {
         using var sp = BuildProvider();
         var vm = sp.GetRequiredService<MainWindowVM>();
         var home = vm.Home;
 
-        vm.NavigateTo(ScreenType.Install);
         vm.NavigateTo(ScreenType.Home);
 
         vm.ActivePane.Should().BeSameAs(home);
+    }
+
+    [Fact]
+    public void NavigateTo_Home_RefreshesItems()
+    {
+        var scanner = new FakeInstalledPackScanner();
+        using var sp = BuildProvider(scanner);
+        var vm = sp.GetRequiredService<MainWindowVM>();
+
+        vm.Home.Items.Should().BeEmpty();
+
+        scanner.Packs.Add(FakeInstalledPackScanner.MakePack(name: "New Pack"));
+
+        vm.NavigateTo(ScreenType.Home);
+
+        vm.Home.Items.Should().HaveCount(1);
+        vm.Home.Items[0].Name.Should().Be("New Pack");
     }
 
     [Fact]
@@ -18411,12 +19949,49 @@ public class MainWindowVMTests
         using var sp = BuildProvider();
         var vm = sp.GetRequiredService<MainWindowVM>();
 
-        vm.NavigateTo(ScreenType.Install);
+        vm.NavigateTo(ScreenType.Home);
         var first = vm.ActivePane;
-        vm.NavigateTo(ScreenType.Install);
+        vm.NavigateTo(ScreenType.Home);
         var second = vm.ActivePane;
 
         second.Should().BeSameAs(first);
+    }
+
+    // ------------------------------------------------------------------
+    //  SettingsVM / DevMode
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void Navigation_ExposesSettingsVM_SameInstanceAsDI()
+    {
+        using var sp = BuildProvider();
+        var vm = sp.GetRequiredService<MainWindowVM>();
+        var settings = sp.GetRequiredService<SettingsVM>();
+
+        settings.IsDevMode = true;
+
+        vm.Navigation.Items.Should().HaveCount(6);
+    }
+
+    // ------------------------------------------------------------------
+    //  InstallRequested (Home → Install)
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void InstallRequested_FromHome_DoesNotThrow()
+    {
+        var scanner = new FakeInstalledPackScanner();
+        scanner.Packs.Add(FakeInstalledPackScanner.MakePack());
+
+        using var sp = BuildProvider(scanner);
+        var vm = sp.GetRequiredService<MainWindowVM>();
+
+        var act = () => vm.Home.Items[0].InstallCommand.Execute(null);
+        act.Should().NotThrow();
+
+        // В этом окружении IInstallTarget не реализуется ни одной VM,
+        // так что вызов просто пройдёт вхолостую.
+        vm.ActivePane.Should().BeOfType<HomeVM>();
     }
 }
 
@@ -18433,10 +20008,51 @@ namespace Firelink.Gui.Shared.Tests;
 
 public class NavigationVMTests
 {
-    [Fact]
-    public void Constructor_PopulatesNavigationItems()
+    private static (NavigationVM vm, SettingsVM settings, List<ScreenType> navigated)
+        Make()
     {
-        var vm = new NavigationVM(_ => { });
+        var settings = new SettingsVM();
+        var navigated = new List<ScreenType>();
+        var vm = new NavigationVM(s => navigated.Add(s), settings);
+        return (vm, settings, navigated);
+    }
+
+    // ------------------------------------------------------------------
+    //  DevMode = false (default)
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void Default_ShowsOnlyHomeAndSettings()
+    {
+        var (vm, _, _) = Make();
+
+        vm.Items.Should().HaveCount(2);
+        vm.Items.Select(i => i.Screen).Should().Equal(
+            ScreenType.Home,
+            ScreenType.Settings);
+    }
+
+    [Fact]
+    public void Default_NoNavigationItemsForInstallPackVerifyLogs()
+    {
+        var (vm, _, _) = Make();
+
+        vm.Items.Should().NotContain(i => i.Screen == ScreenType.Install);
+        vm.Items.Should().NotContain(i => i.Screen == ScreenType.Pack);
+        vm.Items.Should().NotContain(i => i.Screen == ScreenType.Verify);
+        vm.Items.Should().NotContain(i => i.Screen == ScreenType.Logs);
+    }
+
+    // ------------------------------------------------------------------
+    //  DevMode = true
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void DevModeOn_ShowsAllSixItems()
+    {
+        var (vm, settings, _) = Make();
+
+        settings.IsDevMode = true;
 
         vm.Items.Should().HaveCount(6);
         vm.Items.Select(i => i.Screen).Should().Equal(
@@ -18449,46 +20065,141 @@ public class NavigationVMTests
     }
 
     [Fact]
-    public void SelectedItem_InvokesCallback()
+    public void DevModeOnThenOff_BackToTwoItems()
     {
-        ScreenType? captured = null;
-        var vm = new NavigationVM(s => captured = s);
+        var (vm, settings, _) = Make();
 
-        vm.SelectedItem = vm.Items[1]; // Install
+        settings.IsDevMode = true;
+        vm.Items.Should().HaveCount(6);
 
-        captured.Should().Be(ScreenType.Install);
+        settings.IsDevMode = false;
+        vm.Items.Should().HaveCount(2);
+        vm.Items.Select(i => i.Screen).Should().Equal(
+            ScreenType.Home,
+            ScreenType.Settings);
+    }
+
+    // ------------------------------------------------------------------
+    //  SelectedItem сохраняется при перестройке
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void DevModeOn_KeepsSelectedHome()
+    {
+        var (vm, settings, _) = Make();
+
+        vm.SelectScreen(ScreenType.Home);
+        settings.IsDevMode = true;
+
+        vm.SelectedItem!.Screen.Should().Be(ScreenType.Home);
     }
 
     [Fact]
-    public void SelectScreen_SetsSelectedItem_WithoutInvokingCallback()
+    public void DevModeOff_FromInstall_SwitchesToHome_AndNavigates()
     {
-        ScreenType? captured = null;
-        var vm = new NavigationVM(s => captured = s);
+        var (vm, settings, navigated) = Make();
+
+        settings.IsDevMode = true;
+        vm.SelectScreen(ScreenType.Install);
+        navigated.Clear();
+
+        settings.IsDevMode = false;
+
+        // SelectedItem переключился на Home.
+        vm.SelectedItem!.Screen.Should().Be(ScreenType.Home);
+
+        // И MainWindowVM уведомлён.
+        navigated.Should().ContainSingle().Which.Should().Be(ScreenType.Home);
+    }
+
+    [Fact]
+    public void DevModeOff_FromSettings_KeepsSettings()
+    {
+        var (vm, settings, navigated) = Make();
+
+        settings.IsDevMode = true;
+        vm.SelectScreen(ScreenType.Settings);
+        navigated.Clear();
+
+        settings.IsDevMode = false;
+
+        vm.SelectedItem!.Screen.Should().Be(ScreenType.Settings);
+
+        // Settings виден и после выключения DevMode — навигации не было.
+        navigated.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void DevModeOff_FromPack_SwitchesToHome()
+    {
+        var (vm, settings, navigated) = Make();
+
+        settings.IsDevMode = true;
+        vm.SelectScreen(ScreenType.Pack);
+        navigated.Clear();
+
+        settings.IsDevMode = false;
+
+        vm.SelectedItem!.Screen.Should().Be(ScreenType.Home);
+        navigated.Should().ContainSingle().Which.Should().Be(ScreenType.Home);
+    }
+
+    // ------------------------------------------------------------------
+    //  SelectScreen
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void SelectScreen_KnownScreen_SetsSelectedItem_WithoutCallback()
+    {
+        var (vm, settings, navigated) = Make();
+        settings.IsDevMode = true;
+
+        // Включение DevMode с невыбранным SelectedItem уведомляет
+        // MainWindowVM о переходе на Home (см. RebuildItems).
+        // Для проверки SelectScreen это шум — обнуляем.
+        navigated.Clear();
 
         vm.SelectScreen(ScreenType.Pack);
 
-        vm.SelectedItem.Should().NotBeNull();
         vm.SelectedItem!.Screen.Should().Be(ScreenType.Pack);
-        captured.Should().BeNull("SelectScreen должен подавлять callback");
+        navigated.Should().BeEmpty("SelectScreen должен подавлять callback");
     }
 
     [Fact]
-    public void SelectScreen_UnknownScreen_DoesNothing()
+    public void SelectScreen_HiddenScreen_DoesNothing()
     {
-        var vm = new NavigationVM(_ => { });
-        vm.SelectScreen((ScreenType)999);
+        var (vm, _, navigated) = Make();
+        // DevMode = false, Install скрыт.
+
+        vm.SelectScreen(ScreenType.Install);
+
         vm.SelectedItem.Should().BeNull();
+        navigated.Should().BeEmpty();
+    }
+
+    // ------------------------------------------------------------------
+    //  Клик пользователя
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void SelectedItemChange_InvokesCallback()
+    {
+        var (vm, _, navigated) = Make();
+        var settingsItem = vm.Items.First(i => i.Screen == ScreenType.Settings);
+
+        vm.SelectedItem = settingsItem;
+
+        navigated.Should().ContainSingle().Which.Should().Be(ScreenType.Settings);
     }
 
     [Fact]
-    public void SelectedItem_Null_DoesNotInvokeCallback()
+    public void SelectedItemNull_DoesNotInvokeCallback()
     {
-        ScreenType? captured = null;
-        var vm = new NavigationVM(s => captured = s);
+        var (vm, _, navigated) = Make();
 
         vm.SelectedItem = null;
 
-        captured.Should().BeNull();
+        navigated.Should().BeEmpty();
     }
 }
 
@@ -18745,6 +20456,10 @@ namespace Firelink.Gui.Shared.Tests;
 
 public class SettingsVMTests
 {
+    // ------------------------------------------------------------------
+    //  About
+    // ------------------------------------------------------------------
+
     [Fact]
     public void ProductName_IsFirelink()
     {
@@ -18783,6 +20498,42 @@ public class SettingsVMTests
         vm.Footer.Should().Contain("AGPL-3.0-or-later");
         vm.Footer.Should().Contain("Copyright (C) 2026 omen");
     }
+
+    // ------------------------------------------------------------------
+    //  DevMode
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void IsDevMode_DefaultsToFalse()
+    {
+        var vm = new SettingsVM();
+        vm.IsDevMode.Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsDevMode_CanBeToggled()
+    {
+        var vm = new SettingsVM();
+
+        vm.IsDevMode = true;
+        vm.IsDevMode.Should().BeTrue();
+
+        vm.IsDevMode = false;
+        vm.IsDevMode.Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsDevMode_RaisesPropertyChanged()
+    {
+        var vm = new SettingsVM();
+        var changed = new List<string?>();
+
+        vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        vm.IsDevMode = true;
+
+        changed.Should().Contain(nameof(SettingsVM.IsDevMode));
+    }
 }
 
 ````
@@ -18811,6 +20562,75 @@ public sealed class FakeFilePickerService : IFilePickerService
     {
         FolderPickCalls++;
         return Task.FromResult(FolderToReturn);
+    }
+}
+
+````
+
+## tests/Firelink.Gui.Shared.Tests/Fakes/FakeInstalledPackScanner.cs
+
+````csharp
+using Firelink.Gui.Shared.Models;
+using Firelink.Gui.Shared.Services;
+
+namespace Firelink.Gui.Shared.Tests.Fakes;
+
+public sealed class FakeInstalledPackScanner : IInstalledPackScanner
+{
+    public List<InstalledPackInfo> Packs { get; } = new();
+
+    public int ScanCallCount { get; private set; }
+
+    public IReadOnlyList<InstalledPackInfo> Scan()
+    {
+        ScanCallCount++;
+        return Packs;
+    }
+
+    public static InstalledPackInfo MakePack(
+        string name = "Test Pack",
+        string version = "1.0.0",
+        string game = "skyrimspecialedition",
+        string gameVersion = "1.6.1170",
+        string? instancePath = null,
+        string? manifestPath = null)
+    {
+        var inst = instancePath ?? $"/test/Instances/{name}";
+        return new InstalledPackInfo
+        {
+            Name = name,
+            Version = version,
+            Game = game,
+            GameVersion = gameVersion,
+            CreatedAt = new DateTimeOffset(
+                2026, 9, 20, 12, 0, 0, TimeSpan.Zero),
+            InstancePath = inst,
+            ManifestPath = manifestPath
+                ?? System.IO.Path.Combine(inst, "modlist.json"),
+        };
+    }
+}
+
+````
+
+## tests/Firelink.Gui.Shared.Tests/Fakes/FakeProcessLauncher.cs
+
+````csharp
+using Firelink.Gui.Shared.Services;
+
+namespace Firelink.Gui.Shared.Tests.Fakes;
+
+public sealed class FakeProcessLauncher : IProcessLauncher
+{
+    public List<string> OpenedPaths { get; } = new();
+    public Exception? ExceptionToThrow { get; set; }
+
+    public void OpenFile(string path)
+    {
+        if (ExceptionToThrow is not null)
+            throw ExceptionToThrow;
+
+        OpenedPaths.Add(path);
     }
 }
 

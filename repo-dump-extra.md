@@ -1,6 +1,6 @@
 # Firelink -- repo dump
 
-**Generated:** 25.09.2026 10:14:02,41
+**Generated:** 25.09.2026 13:02:34,56
 **Root:** D:\Code\repos\Firelink
 
 ---
@@ -704,6 +704,9 @@ The license for original unRAR code has the following restriction:
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Firelink.Gui.Shared.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Firelink.Core\Firelink.Core.csproj" />
   </ItemGroup>
 </Project>
 ````
